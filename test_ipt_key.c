@@ -6,7 +6,7 @@
 #include <arpa/inet.h>       // inet_pton and friends
 #include <string.h>          // strlen
 #include <ctype.h>           // isdigit
-                            
+
 #include "radix.h"           // the radix tree
 #include "iptable.h"         // iptable layered on top of radix.c
 

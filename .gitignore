@@ -2,6 +2,8 @@
 _notes.c
 his/
 tmp/
+run_*
+test_*_mu.h
 
 # Prerequisites
 *.d

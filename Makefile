@@ -62,7 +62,7 @@ $(hfiles): %_mu.h: %.c
 
 $(ofiles): %.o: %.c %_mu.h
 	${CC} ${CFLAGS} -o $@ -c $<
-	@ln -s $@ run_$@
+	@ln -fs $@ run_$@
 
 $(runners): run_%: %.o %_mu.h minunit.h ${PROJ}.o radix.so
 	strip -N main ${PROJ}.o -o ${PROJ}_stripped.o

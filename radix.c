@@ -36,16 +36,12 @@
  * Routines to build and maintain radix trees for routing lookups.
  */
 #include <sys/param.h>
-
-/* pdh: we'll go for userland application */
-#undef _KERNEL
-
+#undef _KERNEL                  // ipt: userland application of radix code
 #ifdef _KERNEL
-
 #include <sys/lock.h>
 #include <sys/mutex.h>
 #include <sys/rmlock.h>
-#include <sys/systm.h>
+#include <sys/systm.h>         // ipt: #define's KASSERT
 #include <sys/malloc.h>
 #include <sys/syslog.h>
 #include "radix.h"
@@ -53,7 +49,6 @@
 #ifdef RADIX_MPATH
 #include <net/radix_mpath.h>
 #endif
-
 #else /* !_KERNEL */
 #include <stdio.h>
 #include <strings.h>
@@ -61,12 +56,10 @@
 #define log(x, arg...)    fprintf(stderr, ## arg)
 #define panic(x)    fprintf(stderr, "PANIC: %s", x), exit(1)
 #define min(a, b) ((a) < (b) ? (a) : (b) )
-/* pdh includes so we can debug some stuff */
-#include <sys/socket.h>
-#include <arpa/inet.h>
-/* pdh: KASSERT not available (in KERNEL includes?) so fake it */
-#include <assert.h>
-#define KASSERT(val, sdm) assert(val)
+#include <sys/socket.h>                 // ipt: XXX temp for debug printf's
+#include <arpa/inet.h>                  // ipt: XXX temp for debug printf's
+#include <assert.h>                     // ipt: to redefine KASSERT
+#define KASSERT(val, sdm) assert(val)  // ipt: fake KASSERT, since its missing
 #include "radix.h"
 #endif /* !_KERNEL */
 
@@ -89,7 +82,6 @@ static char rn_ones[RADIX_MAX_KEY_LEN] = {
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
 };
-
 
 static int
     rn_lexobetter(void *m_arg, void *n_arg);
@@ -156,7 +148,6 @@ static int
  * masks would be 'u_char'. This mismatch require a lot of casts and
  * intermediate variables to adapt types that clutter the code.
  */
-
 
 /*
  * Search a node in the tree matching the key.
@@ -243,16 +234,16 @@ rn_lookup(void *v_arg, void *m_arg, struct radix_head *head)
         x = rn_addmask(m_arg, head->rnh_masks, 1,
             head->rnh_treetop->rn_offset);
         if (x == NULL)
-            return (NULL);
+            return (NULL);            // ipt: unknown mask, so fail
         netmask = x->rn_key;
 
         x = rn_match(v_arg, head);
 
         while (x != NULL && x->rn_mask != netmask) {
-            x = x->rn_dupedkey;
+            x = x->rn_dupedkey;     // ipt: get (duped)key, w/ the right mask
         }
 
-        return (x);
+        return (x);                 // ipt: NULL if right mask was not found
     }
 
     /*
@@ -266,8 +257,8 @@ rn_lookup(void *v_arg, void *m_arg, struct radix_head *head)
     if (LEN(x->rn_key) != LEN(v_arg) || bcmp(x->rn_key, v_arg, LEN(v_arg)))
         return (NULL);
 
-    /* Check if this is not host route */
-    if (x->rn_mask != NULL)
+    /* Check if this is not host route */  // ipt: should be "is a host route"
+    if (x->rn_mask != NULL)                // ipt: a host route has no mask
         return (NULL);
 
     return (x);
@@ -457,7 +448,7 @@ rn_insert(void *v_arg, struct radix_head *head, int *dupentry,
     /* make b an unsigned int */
     unsigned b;
     struct radix_node *p, *tt, *x;
-        /*
+    /*
      * Find first bit at which v and t->rn_key differ
      */
     caddr_t cp2 = t->rn_key + head_off;
@@ -639,6 +630,7 @@ rn_addroute(void *v_arg, void *n_arg, struct radix_head *head,
      * the mask to speed avoiding duplicate references at
      * nodes and possibly save time in calculating indices.
      */
+
     if (netmask)  {
         x = rn_addmask(netmask, head->rnh_masks, 0, top->rn_offset);
         if (x == NULL) {
@@ -648,13 +640,15 @@ rn_addroute(void *v_arg, void *n_arg, struct radix_head *head,
         b = -1 - x->rn_bit;
         netmask = x->rn_key;
     }
+
     /*
      * Deal with duplicated keys: attach node to previous instance
      */
+
     saved_tt = tt = rn_insert(v, head, &keyduplicated, treenodes);
     if (keyduplicated) {
         for (t = tt; tt; t = tt, tt = tt->rn_dupedkey) {
-#undef RADIX_MPATH
+#undef RADIX_MPATH  // ipt: not used by iptable
 #ifdef RADIX_MPATH
             /* permit multipath, if enabled for the family */
             if (rn_mpath_capable(head) && netmask == tt->rn_mask) {
@@ -993,9 +987,9 @@ out:
 }
 
 /*
- * This is the same as rn_walktree() except for the parameters and the
- * exit.
+ * This is the same as rn_walktree() except for the parameters and the exit.
  */
+
 int
 rn_walktree_from(struct radix_head *h, void *a, void *m,
     walktree_f_t *f, void *w)
@@ -1014,6 +1008,7 @@ rn_walktree_from(struct radix_head *h, void *a, void *m,
      * rn_search_m is sort-of-open-coded here. We cannot use the
      * function because we need to keep track of the last node seen.
      */
+
     /* printf("about to search\n"); */
     for (rn = h->rnh_treetop; rn->rn_bit >= 0; ) {
         last = rn;
