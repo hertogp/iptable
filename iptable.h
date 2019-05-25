@@ -83,7 +83,7 @@ int rdx_flush(struct radix_node *, void *);
 
 table_t *tbl_create(void);
 void tbl_destroy(table_t **);
-int tbl_walk(table_t *, void *);
+int tbl_walk(table_t *, walktree_f_t *);
 int tbl_add(table_t *, char *, void *);
 int tbl_del(table_t *, char *);
 entry_t * tbl_lpm(table_t *, char *);

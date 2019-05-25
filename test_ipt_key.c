@@ -105,6 +105,7 @@ test_key_bystr_bad(void)
     // -- ipv4 with bad masks
 
     str = mk_strptr("10.10.10.0/33");
+    printf("str ptr %p\n", str);
     addr = key_bystr(str, &mlen);
     mu_true(addr == NULL);
     free(str);

@@ -10,7 +10,7 @@ runners=$(tests:%=run_%)
 CFLAGS+=	-std=c99 -O2 -g -Wall -Wextra -Werror
 CFLAGS+=	-D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DEFAULT_SOURCE
 CFLAGS+=	-fPIC
-# CFLAGS+=	-pedantic  # will fail on radix.c's log macro and rn_delete()
+CFLAGS+=	-pedantic  # will fail on radix.c's log macro and rn_delete()
 # CFLAGS+=	-Wno-unknown-warning-option  # clang option, not gcc?
 CFLAGS+=	-Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 CFLAGS+=	-Wmissing-declarations -Wredundant-decls -Wnested-externs
@@ -32,7 +32,7 @@ radix.so:
 radix.o:
 	$(CC) $(CFLAGS) -o radix.o -c radix.c
 
-${PROJ}: radix.o radix.so iptable.c ${PROJ}.o
+${PROJ}: radix.o radix.so ${PROJ}.o
 	$(CC) $(CFLAGS) -o ${PROJ}.o -c iptable.c
 	$(CC) $(LDFLAGS) -o ${PROJ} radix.so ${PROJ}.o
 
@@ -41,15 +41,6 @@ clean:
 #
 # MINUNIT
 #
-dbg:
-	@echo "cfiles  " $(cfiles)
-	@echo "hfiles  " $(hfiles)
-	@echo "ofiles  " $(hfiles)
-	@echo "tests   " $(tests)
-	@echo "runners " $(runners)
-	@echo "PROJ    " $(PROJ)
-	@echo "LIBS    " $(LIBS)
-	@echo "OBJS    " $(OBJS)
 
 test: $(runners)
 	@$(foreach runner, $(runners), valgrind --leak-check=yes ./$(runner);)

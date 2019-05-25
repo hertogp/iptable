@@ -282,13 +282,13 @@ tbl_create(void)
 }
 
 int
-tbl_walk(table_t *t, void *f)
+tbl_walk(table_t *t, walktree_f_t *f)
 {
     // run func f() on leafs in IPv4 tree and IPv6 tree
    if (t == NULL) return 0;
 
-   t->head4->rnh_walktree(&t->head4->rh, (walktree_f_t *)f, t->head4);
-   t->head6->rnh_walktree(&t->head6->rh, (walktree_f_t *)f, t->head6);
+   t->head4->rnh_walktree(&t->head4->rh, f, t->head4);
+   t->head6->rnh_walktree(&t->head6->rh, f, t->head6);
 
    return 1;
 }
