@@ -1,9 +1,9 @@
-#include <stdio.h>
-#include <sys/types.h>    // required for u_char
+#include <stdio.h>        // printf
+#include <sys/types.h>    // u_char
 /* #include <sys/socket.h> */
 #include <stddef.h>       // offsetof
 #include <stdlib.h>       // malloc / calloc
-#include <netinet/in.h>   // sockaddr_in
+// #include <netinet/in.h>   // sockaddr_in
 #include <arpa/inet.h>    // inet_pton and friends
 #include <string.h>       // strlen
 #include <ctype.h>        // isdigit

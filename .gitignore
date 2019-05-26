@@ -1,10 +1,8 @@
 # iptable
-_notes.c
+tst/
+bld/
 his/
 tmp/
-run_*
-test_*_mu.h
-ipt
 
 # Prerequisites
 *.d

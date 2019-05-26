@@ -1,62 +1,67 @@
-# Makefile for iptable
+# Makefile for libipt.so
+MAJOR=1
+MINOR=0.1
+VERSION=$(MAJOR).$(MINOR)
+TGT=libipt.so.$(VERSION)
 
-PROJ=ipt
-cfiles=$(sort $(wildcard test_*.c))
-hfiles=$(cfiles:.c=_mu.h)
-ofiles=$(cfiles:.c=.o)
-tests=$(cfiles:.c=)
-runners=$(tests:%=run_%)
+SDIR=src
+UDIR=src/tst
+TDIR=tst
+BDIR=bld
 
-CFLAGS+=	-std=c99 -O2 -g -Wall -Wextra -Werror
-CFLAGS+=	-D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DEFAULT_SOURCE
-CFLAGS+=	-fPIC
-CFLAGS+=	-pedantic  # will fail on radix.c's log macro and rn_delete()
-# CFLAGS+=	-Wno-unknown-warning-option  # clang option, not gcc?
-CFLAGS+=	-Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
-CFLAGS+=	-Wmissing-declarations -Wredundant-decls -Wnested-externs
-CFLAGS+=	-Wshadow -Wcast-qual -Wcast-align -Wwrite-strings
-CFLAGS+=	-Wold-style-definition
-CFLAGS+=	-Wsuggest-attribute=noreturn -Wjump-misses-init
-LDFLAGS=    #-fPIC -shared
+RM=/bin/rm
+SRCS=$(sort $(wildcard src/*.c))
+OBJS=$(SRCS:src/%.c=bld/%.o)
 
-all: ${PROJ} test
+CFLAGS+= -std=c99 -O2 -g -Wall -Wextra -Werror -pedantic -fPIC
+CFLAGS+= -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DEFAULT_SOURCE
+CFLAGS+= -Wno-unknown-warning-option -Wold-style-definition
+CFLAGS+= -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
+CFLAGS+= -Wmissing-declarations -Wredundant-decls -Wnested-externs
+CFLAGS+= -Wshadow -Wcast-qual -Wcast-align -Wwrite-strings
+CFLAGS+= -Wsuggest-attribute=noreturn -Wjump-misses-init
 
-.PHONY: all clean test
+LFLAGS=  -fPIC -shared -Wl,-soname=$(TGT:.$(MINOR)=)
 
-${PROJ}.o: iptable.c
-	$(CC) $(CFLAGS) -c iptable.c -o $@
+.PHONY: test clean
 
-radix.so:
-	$(CC) $(CFLAGS) -o radix.so -c radix.c
+$(BDIR)/%.o: $(SDIR)/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
-radix.o:
-	$(CC) $(CFLAGS) -o radix.o -c radix.c
+# build libipt.so.VERSION & its symlinks
+$(BDIR)/$(TGT): $(OBJS)
+	$(CC) $(LFLAGS) $^ -o $@
+	@ln -sf $(TGT) $(@:.$(VERSION)=)
+	@ln -sf $(TGT) $(@:.$(MINOR)=)
 
-${PROJ}: radix.o radix.so ${PROJ}.o
-	$(CC) $(CFLAGS) -o ${PROJ}.o -c iptable.c
-	$(CC) $(LDFLAGS) -o ${PROJ} radix.so ${PROJ}.o
-
-clean:
-	rm -f *.o *.so stdout.txt ${PROJ} *_mu.h run_test_*
 #
-# MINUNIT
+# MINUT
 #
+MU_C=$(sort $(wildcard src/tst/test_*.c))
+MU_T=$(MU_C:src/tst/%.c=%)
+MU_H=$(MU_T:%=bld/%_mu.h)
+MU_O=$(MU_T:%=bld/%.o)
+MU_R=$(MU_T:%=tst/%)
 
-test: $(runners)
-	@$(foreach runner, $(runners), valgrind --leak-check=yes ./$(runner);)
+# run all unit tests
+test: $(MU_R)
+	@$(foreach runner, $(MU_R), valgrind --leak-check=yes ./$(runner);)
 
-$(tests): %:run_%
+# run a single unit test
+$(MU_T): %: $(TDIR)/%
 	@valgrind --leak-check=yes ./$<
 
-$(hfiles): %_mu.h: %.c
-	./mu_header $<
+# build a unit test's mu-header
+$(MU_H): $(BDIR)/%_mu.h: $(UDIR)/%.c
+	$(SDIR)/mu_header.sh $< $@
 
-$(ofiles): %.o: %.c %_mu.h
-	${CC} ${CFLAGS} -o $@ -c $<
-	@ln -fs $@ run_$@
+# build a unit test's obj file
+$(MU_O): $(BDIR)/%.o: $(UDIR)/%.c $(BDIR)/%_mu.h $(SDIR)/minunit.h
+	$(CC) -I$(BDIR) -I$(SDIR) $(CFLAGS) -o $@ -c $<
 
-$(runners): run_%: %.o %_mu.h minunit.h ${PROJ}.o radix.so
-	strip -N main ${PROJ}.o -o ${PROJ}_stripped.o
-	${CC} ${CFLAGS} $@.o ${PROJ}_stripped.o radix.so -o $@
+# build a unit test runner
+$(MU_R): $(TDIR)/%: $(BDIR)/%.o $(BDIR)/$(TGT)
+	$(CC) -L$(BDIR) -Wl,-rpath,.:$(BDIR) $< -o $@ -lipt
 
-
+clean:
+	@$(RM) -f bld/* tst/*

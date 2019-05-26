@@ -53,8 +53,9 @@
 #include <stdio.h>
 #include <strings.h>
 #include <stdlib.h>
-// #define log(x, arg...)    fprintf(stderr, ## arg) // ipt: no named variadics
-#define log(x, ...)    fprintf(stderr, ##__VA_ARGS__)  // ipt: ANSI-C variant
+// #define log(x, arg...) fprintf(stderr, ## arg)
+// ipt: redefine log() without named variadic (not allowed in ANSI-C)
+#define log(x, ...) fprintf(stderr, ##__VA_ARGS__)
 #define panic(x)    fprintf(stderr, "PANIC: %s", x), exit(1)
 #define min(a, b) ((a) < (b) ? (a) : (b) )
 #include <sys/socket.h>                 // ipt: XXX temp for debug printf's
@@ -955,7 +956,7 @@ on1:
                 }
             if (m)
                 log(LOG_ERR, "rn_delete: Orphaned Mask %p at %p\n",
-                    (void *)m, (void *)x); // ipt: void * for ANSI-C
+                    (void *)m, (void *)x); // ipt: void * for ANSI-C (?)
         }
     }
 
