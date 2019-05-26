@@ -36,7 +36,6 @@ test_key_bystr_good(void)
 
     // ipv4 with mask
     str = mk_strptr("10.10.10.0/24");
-    fprintf(stderr, "str ptr %p\n", str);
     addr = key_bystr(str, &mlen);
     mu_true(mlen == 24);
     mu_true(addr != NULL);

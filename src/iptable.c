@@ -433,9 +433,3 @@ bail:
     if (addr) free(addr);
     return rv;
 }
-
-int
-main(void)
-{
-    printf("no main here\n");
-}
