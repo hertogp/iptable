@@ -29,8 +29,8 @@ LFLAGS=  -fPIC -shared -Wl,-soname=$(TGT:.$(MINOR)=)
 
 # create (sub)dir and marker file .f
 %/.f:
-	mkdir -p $(dir $@)
-	touch $@
+	@mkdir -p $(dir $@)
+	@touch $@
 
 .SECONDEXPANSION:
 
@@ -61,7 +61,7 @@ $(MU_T): %: $(TDIR)/%
 	@valgrind --leak-check=yes ./$<
 
 # build a unit test's mu-header
-$(MU_H): $(BDIR)/%_mu.h: $(UDIR)/%.c
+$(MU_H): $(BDIR)/%_mu.h: $(UDIR)/%.c $$(@D)/.f
 	$(SDIR)/mu_header.sh $< $@
 
 # build a unit test's obj file
@@ -70,7 +70,6 @@ $(MU_O): $(BDIR)/%.o: $(UDIR)/%.c $(BDIR)/%_mu.h $(SDIR)/minunit.h
 
 # build a unit test runner
 $(MU_R): $(TDIR)/%: $(BDIR)/%.o $(BDIR)/$(TGT) $$(@D)/.f
-	@echo "dir $(@D)"
 	$(CC) -L$(BDIR) -Wl,-rpath,.:$(BDIR) $< -o $@ -lipt
 
 clean:
