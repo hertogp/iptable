@@ -8,6 +8,7 @@ SDIR=src
 UDIR=src/tst
 TDIR=tst
 BDIR=bld
+SUBDIRS= $(BDIR) $(TDIR)
 
 RM=/bin/rm
 SRCS=$(sort $(wildcard src/*.c))
@@ -24,8 +25,16 @@ CFLAGS+= -Wsuggest-attribute=noreturn -Wjump-misses-init
 LFLAGS=  -fPIC -shared -Wl,-soname=$(TGT:.$(MINOR)=)
 
 .PHONY: test clean
+.PRECIOUS: %/.f
 
-$(BDIR)/%.o: $(SDIR)/%.c
+# create (sub)dir and marker file .f
+%/.f:
+	mkdir -p $(dir $@)
+	touch $@
+
+.SECONDEXPANSION:
+
+$(BDIR)/%.o: $(SDIR)/%.c $$(@D)/.f
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # build libipt.so.VERSION & its symlinks
@@ -60,7 +69,8 @@ $(MU_O): $(BDIR)/%.o: $(UDIR)/%.c $(BDIR)/%_mu.h $(SDIR)/minunit.h
 	$(CC) -I$(BDIR) -I$(SDIR) $(CFLAGS) -o $@ -c $<
 
 # build a unit test runner
-$(MU_R): $(TDIR)/%: $(BDIR)/%.o $(BDIR)/$(TGT)
+$(MU_R): $(TDIR)/%: $(BDIR)/%.o $(BDIR)/$(TGT) $$(@D)/.f
+	@echo "dir $(@D)"
 	$(CC) -L$(BDIR) -Wl,-rpath,.:$(BDIR) $< -o $@ -lipt
 
 clean:
