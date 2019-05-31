@@ -12,6 +12,10 @@
 // key IPv6 (offset = 0)
 // |uint8_t | uint8_t 16x |  - key len is 17
 
+#ifndef iptable_h
+#define iptable_h
+
+
 typedef uint8_t idx_t;     // actual key = [len byte|4 or 16 key bytes]
 
 typedef struct pfx_t {
@@ -87,3 +91,5 @@ int tbl_walk(table_t *, walktree_f_t *);
 int tbl_add(table_t *, char *, void *);
 int tbl_del(table_t *, char *);
 entry_t * tbl_lpm(table_t *, char *);
+
+#endif
