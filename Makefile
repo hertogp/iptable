@@ -1,8 +1,14 @@
 # Makefile for libipt.so
+
+# LIB specific
+
 MAJOR=1
 MINOR=0.1
 VERSION=$(MAJOR).$(MINOR)
-TARGET=libipt.so.$(VERSION)
+LIB=iptable
+TARGET=lib$(LIB).so.$(VERSION)
+
+# LIB generic
 
 SRC_DIR=src
 INC_DIR=src/include
@@ -25,7 +31,7 @@ CFLAGS+= -Wsuggest-attribute=noreturn -Wjump-misses-init
 
 LFLAGS=  -fPIC -shared -Wl,-soname=$(TARGET:.$(MINOR)=)
 
-.PHONY: test clean
+.PHONY: test clean purge
 .PRECIOUS: %/.f
 
 # create (sub)dir and marker file .f
@@ -36,13 +42,20 @@ LFLAGS=  -fPIC -shared -Wl,-soname=$(TARGET:.$(MINOR)=)
 .SECONDEXPANSION:
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $$(@D)/.f
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -I$(INC_DIR) -c $< -o $@
 
 # build libipt.so.VERSION & its symlinks
 $(BUILD_DIR)/$(TARGET): $(OBJS)
 	$(CC) $(LFLAGS) $^ -o $@
 	@ln -sf $(TARGET) $(@:.$(VERSION)=)
 	@ln -sf $(TARGET) $(@:.$(MINOR)=)
+
+#
+# BSD sources
+#
+
+bsd:
+	@wget -N -P doc/bsd -i doc/bsd.urls
 
 #
 # MINUT
@@ -66,12 +79,16 @@ $(MU_HEADERS): $(BUILD_DIR)/%_mu.h: $(UNIT_DIR)/%.c $$(@D)/.f
 	$(BIN_DIR)/mu_header.sh $< $@
 
 # build a unit test's obj file
-$(MU_OBJECTS): $(BUILD_DIR)/%.o: $(UNIT_DIR)/%.c $(BUILD_DIR)/%_mu.h $(SRC_DIR)/minunit.h
-	$(CC) -I$(BUILD_DIR) -I$(SRC_DIR) $(CFLAGS) -o $@ -c $<
+$(MU_OBJECTS): $(BUILD_DIR)/%.o: $(UNIT_DIR)/%.c $(BUILD_DIR)/%_mu.h $(INC_DIR)/minunit.h
+	$(CC) -I$(BUILD_DIR) -I$(INC_DIR) $(CFLAGS) -o $@ -c $<
 
 # build a unit test runner
 $(MU_RUNNERS): $(TEST_DIR)/%: $(BUILD_DIR)/%.o $(BUILD_DIR)/$(TARGET) $$(@D)/.f
-	$(CC) -L$(BUILD_DIR) -Wl,-rpath,.:$(BUILD_DIR) $< -o $@ -lipt
+	$(CC) -L$(BUILD_DIR) -Wl,-rpath,.:$(BUILD_DIR) $< -o $@ -l$(LIB)
 
 clean:
 	@$(RM) -f $(BUILD_DIR)/* $(TEST_DIR)/*
+
+purge: clean
+	@rm -f $(BUILD_DIR)/.f $(TEST_DIR)/.f
+	@rmdir $(BUILD_DIR) $(TEST_DIR)
