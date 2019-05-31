@@ -35,7 +35,7 @@
 #ifndef _RADIX_H_
 #define _RADIX_H_
 
-/* pdh: usage is meant to be userland code, so undef _KERNEL */
+/* ipt: iptable is userland code, so undef _KERNEL */
 #undef _KERNEL
 
 #ifdef _KERNEL

@@ -1,8 +1,10 @@
 # iptable
-/tst/
-bld/
+/test/
+build/
 his/
 tmp/
+scr/
+_todo.md
 
 # Prerequisites
 *.d
