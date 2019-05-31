@@ -5,6 +5,7 @@ his/
 tmp/
 scr/
 _todo.md
+_notes.c
 
 # Prerequisites
 *.d
