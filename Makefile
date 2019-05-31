@@ -47,30 +47,30 @@ $(BUILD_DIR)/$(TARGET): $(OBJS)
 #
 # MINUT
 #
-MU_C=$(sort $(wildcard $(UNIT_DIR)/test_*.c))
-MU_T=$(MU_C:$(UNIT_DIR)/%.c=%)
-MU_H=$(MU_T:%=$(BUILD_DIR)/%_mu.h)
-MU_O=$(MU_T:%=$(BUILD_DIR)/%.o)
-MU_R=$(MU_T:%=$(TEST_DIR)/%)
+MU_SOURCES=$(sort $(wildcard $(UNIT_DIR)/test_*.c))
+MU_TARGETS=$(MU_SOURCES:$(UNIT_DIR)/%.c=%)
+MU_HEADERS=$(MU_TARGETS:%=$(BUILD_DIR)/%_mu.h)
+MU_OBJECTS=$(MU_TARGETS:%=$(BUILD_DIR)/%.o)
+MU_RUNNERS=$(MU_TARGETS:%=$(TEST_DIR)/%)
 
 # run all unit tests
-test: $(MU_R)
-	@$(foreach runner, $(MU_R), valgrind --leak-check=yes ./$(runner);)
+test: $(MU_RUNNERS)
+	@$(foreach runner, $(MU_RUNNERS), valgrind --leak-check=yes ./$(runner);)
 
 # run a single unit test
-$(MU_T): %: $(TEST_DIR)/%
+$(MU_TARGETS): %: $(TEST_DIR)/%
 	@valgrind --leak-check=yes ./$<
 
 # build a unit test's mu-header
-$(MU_H): $(BUILD_DIR)/%_mu.h: $(UNIT_DIR)/%.c $$(@D)/.f
+$(MU_HEADERS): $(BUILD_DIR)/%_mu.h: $(UNIT_DIR)/%.c $$(@D)/.f
 	$(BIN_DIR)/mu_header.sh $< $@
 
 # build a unit test's obj file
-$(MU_O): $(BUILD_DIR)/%.o: $(UNIT_DIR)/%.c $(BUILD_DIR)/%_mu.h $(SRC_DIR)/minunit.h
+$(MU_OBJECTS): $(BUILD_DIR)/%.o: $(UNIT_DIR)/%.c $(BUILD_DIR)/%_mu.h $(SRC_DIR)/minunit.h
 	$(CC) -I$(BUILD_DIR) -I$(SRC_DIR) $(CFLAGS) -o $@ -c $<
 
 # build a unit test runner
-$(MU_R): $(TEST_DIR)/%: $(BUILD_DIR)/%.o $(BUILD_DIR)/$(TARGET) $$(@D)/.f
+$(MU_RUNNERS): $(TEST_DIR)/%: $(BUILD_DIR)/%.o $(BUILD_DIR)/$(TARGET) $$(@D)/.f
 	$(CC) -L$(BUILD_DIR) -Wl,-rpath,.:$(BUILD_DIR) $< -o $@ -lipt
 
 clean:
