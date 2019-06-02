@@ -13,12 +13,23 @@
 #include "minunit.h"         // the mu_test macros
 #include "test_ipt_tbl_mu.h"   // a generated header file for this test runner
 
+// free_userdata callback
+// In this unit test, our data is a simple int, so entry->value is a pointer
+// to int.
+void purge(void **);
+void purge(void **dta)
+{
+  int *data = *dta;
+  free(data);
+  data = NULL;
+}
+
 void
 test_tbl_setup(void)
 {
     table_t *ipt;
 
-    mu_assert((ipt = tbl_create()));
+    mu_assert((ipt = tbl_create(purge)));
     tbl_destroy(&ipt);
     mu_true(ipt == NULL);
 }
@@ -34,7 +45,7 @@ test_tbl_add_one(void)
     char pfx4[] = "10.10.10.0/24";
     char pfx6[] = "2f:aa:bb::/128";
 
-    ipt = tbl_create();
+    ipt = tbl_create(purge);
     mu_assert(tbl_add(ipt, pfx4, value4));
     mu_assert(tbl_add(ipt, pfx6, value6));
 
@@ -50,7 +61,7 @@ test_tbl_add_good(void)
     table_t *ipt;
     char pfx[IP6_PFXSTRLEN];
 
-    ipt = tbl_create();
+    ipt = tbl_create(purge);
 
     snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.4/32");
     mu_assert(tbl_add(ipt, pfx, NULL));
@@ -85,7 +96,7 @@ test_tbl_del_good(void)
     table_t *ipt;
     char pfx[IP6_PFXSTRLEN];
 
-    ipt = tbl_create();
+    ipt = tbl_create(purge);
 
     // add one, del one
     snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.4/32");
@@ -117,7 +128,7 @@ test_tbl_del_bad(void)
     // some data, each time a prefix is added.
 
     char pfx[IP6_PFXSTRLEN];
-    table_t *ipt = tbl_create();
+    table_t *ipt = tbl_create(purge);
 
     mu_assert(ipt);
 
@@ -158,7 +169,7 @@ test_tbl_lpm_good(void)
 
     char pfx[IP6_PFXSTRLEN];
     entry_t *itm = NULL;
-    table_t *ipt = tbl_create();
+    table_t *ipt = tbl_create(purge);
     int *a = malloc(sizeof(int)), *b = malloc(sizeof(int));
 
     *a = 24;

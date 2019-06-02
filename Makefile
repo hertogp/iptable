@@ -44,7 +44,7 @@ LFLAGS=  -fPIC -shared -Wl,-soname=$(TARGET:.$(MINOR)=)
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $$(@D)/.f
 	$(CC) $(CFLAGS) -I$(INC_DIR) -c $< -o $@
 
-# build libipt.so.VERSION & its symlinks
+# build libiptable.VERSION & its symlinks
 $(BUILD_DIR)/$(TARGET): $(OBJS)
 	$(CC) $(LFLAGS) $^ -o $@
 	@ln -sf $(TARGET) $(@:.$(VERSION)=)
@@ -53,6 +53,10 @@ $(BUILD_DIR)/$(TARGET): $(OBJS)
 #
 # BSD sources
 #
+LUAOBJS = build/iptable.o build/radix.o build/lua_iptable.o
+lua: $(BUILD_DIR)/iptable.o build/radix.o
+	$(CC) $(CFLAGS) -I$(INC_DIR) -c src/lua/lua_iptable.c -o $(BUILD_DIR)/lua_iptable.o
+	$(CC) -fPIC -shared -Wl,-soname=iptable.so $(LUAOBJS) -o $(BUILD_DIR)/iptable.so
 
 bsd:
 	@wget -N -P doc/bsd -i doc/bsd.urls

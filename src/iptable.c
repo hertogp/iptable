@@ -21,6 +21,25 @@ static uint8_t  rn_ones[RDX_MAX_KEYLEN] = {
 };
 */
 
+/* FIXME:
+ * Introduce the use of a user supplied callback function responsible for
+ * freeing the user data.  It may be a compound datastructure of its own with
+ * pointers to memory allocated by the user.  Freeing it here, would cause a
+ * memory leak.  -> *NOT* free(entry->value), but free_userdata(&entry->value)
+ * -> int free_userdata(** void val) {
+ *        mydata *p = (mydata *)*val;
+ *        free(p->blob1);
+ *        free(p->blob2);
+ *        free(p);
+ *        p = NULL;
+ *     }
+ * The tree should be oblivious to the user data pointed to by entry->value.
+ * That memory should be freed by the user via a supplied callback, since the
+ * tree has no idea what that memory looks like: it may contain pointers to
+ * memory allocated elsewhere and free(entry->val) would cause that memory
+ * to be lost forever ...
+*/
+
 // -- KEY funcs
 
 uint8_t *
@@ -236,31 +255,10 @@ key_cmp(void *a, void *b)
     return 0;
 }
 
-// -- radix node operations
-
-int
-rdx_flush(struct radix_node *rn, void *arg)
-{
-    // return 0 on success, 1 on failure (see rnh_walktree)
-
-    // A radix leaf node == entry: {radix_node rn[2], void *value}
-    // - rdx_flush called on LEAF nodes (rn actually points to entry->rn[0])
-    struct entry_t *entry = NULL;
-    struct radix_node_head * rnh = arg;
-
-    if (rn == NULL) return 0;
-    entry = (entry_t *)rnh->rnh_deladdr(rn->rn_key, rn->rn_mask, &rnh->rh);
-    if (entry == NULL) return 0;
-    if(entry->value != NULL) free(entry->value);  // free user data, if any
-    free(entry->rn[0].rn_key);                    // same as rn->rn_key
-    free(entry);
-    return 0;
-}
-
 // -- TABLE funcs
 
 table_t *
-tbl_create(void)
+tbl_create(purge_t fp)
 {
     // create a new iptable w/ 2 radix trees
     table_t *tbl = NULL;
@@ -277,32 +275,54 @@ tbl_create(void)
         free(tbl);
         return NULL;
     }
+    tbl->purge = fp;
 
     return tbl;
 }
 
 int
+rdx_flush(struct radix_node *rn, void *arg)
+{
+    // return 0 on success, 1 on failure (see rnh_walktree)
+
+    // A radix leaf node == entry: {radix_node rn[2], void *value}
+    // - rdx_flush called on LEAF nodes (rn actually points to entry->rn[0])
+    struct entry_t *entry = NULL;
+    struct radix_node_head *rnh = arg;
+    // struct radix_node_head *rnh = arg
+    // purge_t free_value = arg+1
+
+    if (rn == NULL) return 0;
+    entry = (entry_t *)rnh->rnh_deladdr(rn->rn_key, rn->rn_mask, &rnh->rh);
+    if (entry == NULL) return 0;
+    if(entry->value != NULL) free(entry->value);  // FIXME: free user data
+    free(entry->rn[0].rn_key);                    // same as rn->rn_key
+    free(entry);
+    return 0;
+}
+
+int
 tbl_walk(table_t *t, walktree_f_t *f)
 {
-    // run func f() on leafs in IPv4 tree and IPv6 tree
+    // run func f(args) on leafs in IPv4 tree and IPv6 tree
+    // void *args[2] = {t->purge, NULL}
    if (t == NULL) return 0;
 
+   // args[1] = t->head4
    t->head4->rnh_walktree(&t->head4->rh, f, t->head4);
    t->head6->rnh_walktree(&t->head6->rh, f, t->head6);
 
    return 1;
 }
 
-
 void
 tbl_destroy(table_t **t)
 {
     if (t == NULL || *t == NULL) return;  // already freed
 
-    tbl_walk(*t, rdx_flush);  // delete all leaf nodes
+    tbl_walk(*t, rdx_flush);              // delete all leaf nodes
     rn_detachhead((void **)&(*t)->head4);
     rn_detachhead((void **)&(*t)->head6);
-
     free(*t);
     *t = NULL;
 }
@@ -313,8 +333,8 @@ tbl_add(table_t *t, char *s, void *v)
     // A missing mask is taken to mean AF's max mask
     // Always applies mask to addr before adding to the tree
 
-    // If key already exists -> free both s-derived key & mask
-    // otherwise, only free the s-derived mask (tree now 'owns' the key).
+    // If key already exists -> free both search key & mask
+    // otherwise, only free the search mask (tree now 'owns' the key).
     uint8_t *addr = NULL, *mask = NULL;
     int mlen = -1;
     entry_t *entry = NULL;  // is struct { radix_node rn[2], void *value}
@@ -342,7 +362,7 @@ tbl_add(table_t *t, char *s, void *v)
         free(addr);
         free(mask);
         entry = (entry_t *)rn;
-        entry->value = v;
+        entry->value = v; // FIXME: first free value via user callback!
         return 1;
     } else {
         // add new entry
