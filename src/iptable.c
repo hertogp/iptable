@@ -258,7 +258,7 @@ key_cmp(void *a, void *b)
 // -- TABLE funcs
 
 table_t *
-tbl_create(purge_t fp)
+tbl_create(purge_f_t fp)
 {
     // create a new iptable w/ 2 radix trees
     table_t *tbl = NULL;
@@ -288,15 +288,20 @@ rdx_flush(struct radix_node *rn, void *arg)
     // A radix leaf node == entry: {radix_node rn[2], void *value}
     // - rdx_flush called on LEAF nodes (rn actually points to entry->rn[0])
     struct entry_t *entry = NULL;
-    struct radix_node_head *rnh = arg;
-    // struct radix_node_head *rnh = arg
-    // purge_t free_value = arg+1
+    // struct radix_node_head *rnh = arg;
+    purge_t *args = (purge_t *)arg;
+    struct radix_node_head *rnh = args->head;
+    purge_f_t purge = args->purge;
 
+    printf("rdx_flush: rnh @ %p\n", (void *)rnh);
     if (rn == NULL) return 0;
     entry = (entry_t *)rnh->rnh_deladdr(rn->rn_key, rn->rn_mask, &rnh->rh);
     if (entry == NULL) return 0;
-    if(entry->value != NULL) free(entry->value);  // FIXME: free user data
-    free(entry->rn[0].rn_key);                    // same as rn->rn_key
+
+    printf("rdx_flush -1-: entry->value: %p\n", entry->value);
+    if(entry->value != NULL) purge(&entry->value);
+    printf("rdx_flush -2-: entry->value: %p\n", entry->value);
+    free(entry->rn[0].rn_key);
     free(entry);
     return 0;
 }
@@ -305,12 +310,20 @@ int
 tbl_walk(table_t *t, walktree_f_t *f)
 {
     // run func f(args) on leafs in IPv4 tree and IPv6 tree
-    // void *args[2] = {t->purge, NULL}
+    purge_t args;
    if (t == NULL) return 0;
 
-   // args[1] = t->head4
-   t->head4->rnh_walktree(&t->head4->rh, f, t->head4);
-   t->head6->rnh_walktree(&t->head6->rh, f, t->head6);
+   args.purge = t->purge;
+
+   args.head = t->head4;
+   printf("tbl_walk: args.head 4 @ %p\n", (void *)args.head);
+   printf("tbl_walk: t->head4    @ %p\n", (void *)t->head4);
+   t->head4->rnh_walktree(&t->head4->rh, f, &args); // t->head4);
+
+   args.head = t->head6;
+   printf("tbl_walk: args.head 6 @ %p\n", (void *)args.head);
+   printf("tbl_walk: t->head6    @ %p\n", (void *)t->head6);
+   t->head6->rnh_walktree(&t->head6->rh, f, &args); //t->head6);
 
    return 1;
 }
@@ -399,11 +412,14 @@ tbl_del(table_t *t, char *s)
     struct radix_node_head *head = NULL;
     uint8_t *addr = NULL, *mask = NULL;
     int mlen = -1, rv = 0;
-
+    purge_t args;
     if (t == NULL) return 0;
+
+    args.purge = t->purge;
 
     addr = key_bystr(s, &mlen);
     if (addr == NULL) goto bail;
+
     if (KEY_IS_IP6(addr)) {
         head = t->head6;
         mask = key_bylen(AF_INET6, mlen);
@@ -414,11 +430,14 @@ tbl_del(table_t *t, char *s)
 
     if (mask == NULL) goto bail;
     if (! key_masked(addr, mask)) goto bail;
-    rn = head->rnh_lookup(addr, mask, &head->rh); // exact match for pfx
+
+    // delete requires exact lookup
+    rn = head->rnh_lookup(addr, mask, &head->rh);
     if (rn) {
         if (KEY_IS_IP6(addr)) t->count6--;
         else t->count4--;
-        rdx_flush(rn, head);
+        args.head = head;
+        rdx_flush(rn, &args);
         rv = 1; // return value for success
     }
 
@@ -431,7 +450,7 @@ bail:
 entry_t *
 tbl_lpm(table_t *t, char *s)
 {
-    // longest prefix match for address (any /mask is ignored)
+    // longest prefix match for address (a /mask is ignored)
     struct radix_node_head *head = NULL;
     uint8_t *addr = NULL;
     int mlen = -1;

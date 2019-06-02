@@ -3,25 +3,25 @@
 #ifndef iptable_h
 #define iptable_h
 
-typedef uint8_t idx_t;             // actual key = [len byte|4 or 16 key bytes]
-typedef void (*purge_t)(void **);  // purge user data callback function
-
-typedef struct pfx_t {
-    idx_t *sa;             // address
-    idx_t *sm;             // mask
-} pfx_t;
 
 typedef struct entry_t {
     struct radix_node rn[2];          // leaf & internal radix nodes
-    void *value;                      // user data, free'd by purge_t callback
+    void *value;                      // user data, free by purge_f_t callback
 } entry_t;
+
+typedef void (*purge_f_t)(void **);  // user supplied callback to free value
+
+typedef struct purge_t {             // args for rdx_flush
+   purge_f_t purge;                  // the callback to free entry->value
+   struct radix_node_head *head;            // head of tree where rdx_flush operates
+} purge_t;
 
 typedef struct table_t {
     struct radix_node_head *head4;    // IPv4 radix tree
     struct radix_node_head *head6;    // IPv6 radix tree
-    size_t  count4;
-    size_t  count6;
-    purge_t purge;                    // callback to free userdata
+    size_t count4;
+    size_t count6;
+    purge_f_t purge;                    // callback to free userdata
 } table_t;
 
 #define IPT_KEYOFFSET 8       // 8 bit offset to 1st byte of key
@@ -74,7 +74,7 @@ int rdx_flush(struct radix_node *, void *);
 
 // -- tbl funcs
 
-table_t *tbl_create(purge_t);
+table_t *tbl_create(purge_f_t);
 void tbl_destroy(table_t **);
 int tbl_walk(table_t *, walktree_f_t *);
 int tbl_add(table_t *, char *, void *);

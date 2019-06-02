@@ -19,9 +19,10 @@
 void purge(void **);
 void purge(void **dta)
 {
-  int *data = *dta;
-  free(data);
-  data = NULL;
+  printf("purge -1-> %d @ %p\n", *(int *)*dta, *dta);
+  if(*dta) free(*dta);
+  *dta = NULL;
+  printf("purge -2-> %p\n", *dta);
 }
 
 void

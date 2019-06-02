@@ -956,7 +956,7 @@ on1:
                 }
             if (m)
                 log(LOG_ERR, "rn_delete: Orphaned Mask %p at %p\n",
-                    (void *)m, (void *)x); // ipt: void * for ANSI-C (?)
+                    (void *)m, (void *)x); // ipt: void * for ANSI-C
         }
     }
 
