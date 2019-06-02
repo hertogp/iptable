@@ -9,11 +9,12 @@ typedef struct entry_t {
     void *value;                      // user data, free by purge_f_t callback
 } entry_t;
 
-typedef void (*purge_f_t)(void **);  // user supplied callback to free value
+typedef void purge_f_t(void *, void **);      // user supplied callback to free value
 
 typedef struct purge_t {             // args for rdx_flush
-   purge_f_t purge;                  // the callback to free entry->value
    struct radix_node_head *head;            // head of tree where rdx_flush operates
+   purge_f_t *purge;                  // the callback to free entry->value
+   void *args;                  // extra args for the callback
 } purge_t;
 
 typedef struct table_t {
@@ -21,7 +22,7 @@ typedef struct table_t {
     struct radix_node_head *head6;    // IPv6 radix tree
     size_t count4;
     size_t count6;
-    purge_f_t purge;                    // callback to free userdata
+    purge_f_t *purge;                    // callback to free userdata
 } table_t;
 
 #define IPT_KEYOFFSET 8       // 8 bit offset to 1st byte of key
@@ -74,11 +75,12 @@ int rdx_flush(struct radix_node *, void *);
 
 // -- tbl funcs
 
-table_t *tbl_create(purge_f_t);
-void tbl_destroy(table_t **);
-int tbl_walk(table_t *, walktree_f_t *);
-int tbl_add(table_t *, char *, void *);
-int tbl_del(table_t *, char *);
+int tbl_set(table_t *, char *, void *, void *);
+int tbl_del(table_t *, char *, void *);
+int tbl_walk(table_t *, walktree_f_t *, void *);
+table_t *tbl_create(purge_f_t *);
+entry_t * tbl_get(table_t *, char *);
 entry_t * tbl_lpm(table_t *, char *);
+void tbl_destroy(table_t **, void *);
 
 #endif

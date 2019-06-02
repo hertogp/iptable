@@ -21,25 +21,6 @@ static uint8_t  rn_ones[RDX_MAX_KEYLEN] = {
 };
 */
 
-/* FIXME:
- * Introduce the use of a user supplied callback function responsible for
- * freeing the user data.  It may be a compound datastructure of its own with
- * pointers to memory allocated by the user.  Freeing it here, would cause a
- * memory leak.  -> *NOT* free(entry->value), but free_userdata(&entry->value)
- * -> int free_userdata(** void val) {
- *        mydata *p = (mydata *)*val;
- *        free(p->blob1);
- *        free(p->blob2);
- *        free(p);
- *        p = NULL;
- *     }
- * The tree should be oblivious to the user data pointed to by entry->value.
- * That memory should be freed by the user via a supplied callback, since the
- * tree has no idea what that memory looks like: it may contain pointers to
- * memory allocated elsewhere and free(entry->val) would cause that memory
- * to be lost forever ...
-*/
-
 // -- KEY funcs
 
 uint8_t *
@@ -258,7 +239,7 @@ key_cmp(void *a, void *b)
 // -- TABLE funcs
 
 table_t *
-tbl_create(purge_f_t fp)
+tbl_create(purge_f_t *fp)
 {
     // create a new iptable w/ 2 radix trees
     table_t *tbl = NULL;
@@ -281,84 +262,72 @@ tbl_create(purge_f_t fp)
 }
 
 int
-rdx_flush(struct radix_node *rn, void *arg)
+rdx_flush(struct radix_node *rn, void *args)
 {
     // return 0 on success, 1 on failure (see rnh_walktree)
-
-    // A radix leaf node == entry: {radix_node rn[2], void *value}
-    // - rdx_flush called on LEAF nodes (rn actually points to entry->rn[0])
+    // - rdx_flush is called only on  _LEAF_ nodes (rn points to entry->rn[0])
     struct entry_t *entry = NULL;
-    // struct radix_node_head *rnh = arg;
-    purge_t *args = (purge_t *)arg;
-    struct radix_node_head *rnh = args->head;
-    purge_f_t purge = args->purge;
+    purge_t *arg = (purge_t *)args;
+    struct radix_node_head *rnh = arg->head;
 
-    printf("rdx_flush: rnh @ %p\n", (void *)rnh);
     if (rn == NULL) return 0;
     entry = (entry_t *)rnh->rnh_deladdr(rn->rn_key, rn->rn_mask, &rnh->rh);
     if (entry == NULL) return 0;
 
-    printf("rdx_flush -1-: entry->value: %p\n", entry->value);
-    if(entry->value != NULL) purge(&entry->value);
-    printf("rdx_flush -2-: entry->value: %p\n", entry->value);
     free(entry->rn[0].rn_key);
+    if (entry->value != NULL) arg->purge(arg->args, &entry->value);
     free(entry);
+
     return 0;
 }
 
 int
-tbl_walk(table_t *t, walktree_f_t *f)
+tbl_walk(table_t *t, walktree_f_t *f, void *fargs)
 {
-    // run func f(args) on leafs in IPv4 tree and IPv6 tree
-    purge_t args;
-   if (t == NULL) return 0;
-
-   args.purge = t->purge;
-
-   args.head = t->head4;
-   printf("tbl_walk: args.head 4 @ %p\n", (void *)args.head);
-   printf("tbl_walk: t->head4    @ %p\n", (void *)t->head4);
-   t->head4->rnh_walktree(&t->head4->rh, f, &args); // t->head4);
-
-   args.head = t->head6;
-   printf("tbl_walk: args.head 6 @ %p\n", (void *)args.head);
-   printf("tbl_walk: t->head6    @ %p\n", (void *)t->head6);
-   t->head6->rnh_walktree(&t->head6->rh, f, &args); //t->head6);
+    // run f(args, leaf) on leafs in IPv4 tree and IPv6 tree
+    if (t == NULL) return 0;
+    t->head4->rnh_walktree(&t->head4->rh, f, fargs);
+    t->head6->rnh_walktree(&t->head6->rh, f, fargs);
 
    return 1;
 }
 
 void
-tbl_destroy(table_t **t)
+tbl_destroy(table_t **t, void *pargs)
 {
-    if (t == NULL || *t == NULL) return;  // already freed
+    purge_t args;  // args to flush radix nodes & free userdata
 
-    tbl_walk(*t, rdx_flush);              // delete all leaf nodes
+    if (t == NULL || *t == NULL) return;  // nothing to free
+
+    args.purge = (*t)->purge;          // the user callback to free userdata
+    args.args = pargs;                 // context for purge callback
+
+    args.head = (*t)->head4;
+    (*t)->head4->rnh_walktree(&(*t)->head4->rh, rdx_flush, &args);
     rn_detachhead((void **)&(*t)->head4);
+
+    args.head = (*t)->head6;
+    (*t)->head6->rnh_walktree(&(*t)->head6->rh, rdx_flush, &args);
     rn_detachhead((void **)&(*t)->head6);
+
     free(*t);
     *t = NULL;
 }
 
-int
-tbl_add(table_t *t, char *s, void *v)
+entry_t *
+tbl_get(table_t *t, char *s)
 {
-    // A missing mask is taken to mean AF's max mask
-    // Always applies mask to addr before adding to the tree
-
-    // If key already exists -> free both search key & mask
-    // otherwise, only free the search mask (tree now 'owns' the key).
+    // An exact lookup for addr/mask, missing mask is set to AF's max mask
     uint8_t *addr = NULL, *mask = NULL;
     int mlen = -1;
-    entry_t *entry = NULL;  // is struct { radix_node rn[2], void *value}
-    struct radix_node *rn = NULL;
     struct radix_node_head *head = NULL;
+    entry_t *entry = NULL;
 
-    if (t == NULL) return 0;
+    if (t == NULL) return NULL;
 
+    // get head, addr, mask; bail on error
     addr = key_bystr(s, &mlen);
     if (addr == NULL) goto bail;
-
     if (KEY_IS_IP6(addr)) {
         head = t->head6;
         mask = key_bylen(AF_INET6, mlen);
@@ -366,60 +335,88 @@ tbl_add(table_t *t, char *s, void *v)
         head = t->head4;
         mask = key_bylen(AF_INET, mlen);
     } else goto bail;
-
     if (mask == NULL) goto bail;
     if (! key_masked(addr, mask)) goto bail;
-    rn = head->rnh_lookup(addr, mask, &head->rh); // exact match for pfx
-    if (rn) {
+
+    entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match for pfx
+
+bail:
+    if (addr) free(addr);
+    if (mask) free(mask);
+    return entry;
+}
+
+int
+tbl_set(table_t *t, char *s, void *v, void *pargs)
+{
+    // A missing mask is taken to mean AF's max mask
+    // - applies mask before searching/setting the tree
+    uint8_t *addr = NULL, *mask = NULL;
+    int mlen = -1;
+    entry_t *entry = NULL;
+    struct radix_node *rn = NULL;
+    struct radix_node_head *head = NULL;
+
+    if (t == NULL) return 0;
+
+    // get head, addr, mask; bail on error
+    addr = key_bystr(s, &mlen);
+    if (addr == NULL) goto bail;
+    if (KEY_IS_IP6(addr)) {
+        head = t->head6;
+        mask = key_bylen(AF_INET6, mlen);
+    } else if (KEY_IS_IP4(addr)) {
+        head = t->head4;
+        mask = key_bylen(AF_INET, mlen);
+    } else goto bail;
+    if (mask == NULL) goto bail;
+    if (! key_masked(addr, mask)) goto bail;
+
+    entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
+    if (entry) {
         // update existing entry
         free(addr);
         free(mask);
-        entry = (entry_t *)rn;
-        entry->value = v; // FIXME: first free value via user callback!
+        if(entry->value) t->purge(pargs, &entry->value); // free userdata
+        entry->value = v;                                // ptr-> new userdata
         return 1;
+
     } else {
         // add new entry
         if (!(entry = calloc(sizeof(*entry),1)))  // init'd to all zeros
             goto bail;
         entry->value = v;
         rn = head->rnh_addaddr(addr, mask, &head->rh, entry->rn);
-        if (!rn)
-            goto bail;
-
+        if (!rn) goto bail;
+        // update count
         if (KEY_IS_IP6(addr)) t->count6++;
         else t->count4++;
-
-        // alway free the mask, never the key
-        if (mask != NULL) free(mask);
-
-        return (1);
+        free(mask);  // new entry, tree copies key ptr, so donot free key
+        return 1;
     }
 
 bail:
     if (addr) free(addr);
     if (mask) free(mask);
-    if (entry && entry->value) free(entry->value);
+    if (entry && entry->value) t->purge(pargs, &entry->value);
     if (entry) free(entry);
     return 0;
 }
 
 int
-tbl_del(table_t *t, char *s)
+tbl_del(table_t *t, char *s, void *pargs)
 {
     // Deletion requires exact match on prefix
-    // Missing mask is taken to mean AF's max mask
-    struct radix_node *rn = NULL;
+    // - a missing mask is set to AF's max mask
+    entry_t *e;
     struct radix_node_head *head = NULL;
     uint8_t *addr = NULL, *mask = NULL;
     int mlen = -1, rv = 0;
-    purge_t args;
     if (t == NULL) return 0;
 
-    args.purge = t->purge;
-
+    // get head, addr, mask; bail on error
     addr = key_bystr(s, &mlen);
     if (addr == NULL) goto bail;
-
     if (KEY_IS_IP6(addr)) {
         head = t->head6;
         mask = key_bylen(AF_INET6, mlen);
@@ -427,18 +424,16 @@ tbl_del(table_t *t, char *s)
         head = t->head4;
         mask = key_bylen(AF_INET, mlen);
     } else goto bail;
-
     if (mask == NULL) goto bail;
     if (! key_masked(addr, mask)) goto bail;
 
-    // delete requires exact lookup
-    rn = head->rnh_lookup(addr, mask, &head->rh);
-    if (rn) {
-        if (KEY_IS_IP6(addr)) t->count6--;
-        else t->count4--;
-        args.head = head;
-        rdx_flush(rn, &args);
-        rv = 1; // return value for success
+    if ((e = (entry_t *)head->rnh_deladdr(addr, mask, &head->rh))) {
+      if (KEY_IS_IP6(addr)) t->count6--;
+      else t->count4--;
+      free(e->rn[0].rn_key);
+      if(e->value) t->purge(pargs, &e->value);
+      free(e);
+      rv = 1;
     }
 
 bail:
@@ -458,6 +453,7 @@ tbl_lpm(table_t *t, char *s)
 
     if (t == NULL) return 0;
 
+    // get head, addr; bail on error
     addr = key_bystr(s, &mlen);
     if (addr == NULL) goto bail;
     else if (KEY_IS_IP6(addr))

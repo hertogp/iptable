@@ -44,11 +44,38 @@ stackDump (lua_State *L, const char *title)
         if (i<top) printf(" "); /* put a separator */
     }
     printf("]\n"); /* end the listing */
+
+} // --  end stackDump
+
+
+// userdata functions
+
+
+int *mk_data(int);               // its return value is stored as entry->value
+void ud_purge(void *, void **);  // called with &entry->value for cleanup
+
+int *mk_data(int ref)
+{
+  // for storing LUA_REGISTRYINDEX ref's in the radix tree
+  int *p = calloc(1, sizeof(int));
+  *p = ref;
+  return p;
 }
 
-// --  end stackDump
+void
+ud_purge(void *L, void **dta)
+{
+  // unref the userdata and free associated ref memory
+  if (*dta) {
+    luaL_unref((lua_State *)L, LUA_REGISTRYINDEX, *(int *)*dta);
+    free(*dta);
+  }
+  *dta = NULL;
+}
+
 
 // - lua functions
+
 int luaopen_iptable(lua_State *);
 
 // - AUXILIARY funtions
@@ -60,7 +87,7 @@ table_t *checkUserDatum(lua_State *, int);
 static int new(lua_State *);
 static int destroy(lua_State *);
 static int set(lua_State *);
-//static int get(lua_State *);
+static int get(lua_State *);
 static int lpm(lua_State *);
 
 
@@ -77,6 +104,7 @@ static const struct luaL_Reg meths [] = {
     {"__index", lpm},
     {"__newindex", set},
     {"set", set},
+    {"get", get},
     {"destroy", destroy},
     {NULL, NULL}
 };
@@ -105,13 +133,17 @@ checkUserDatum (lua_State *L, int index)
 static int
 new (lua_State *L)
 {
-    printf("ipt->new()\n");
+    // ud is a void** so tbl_destroy(&ud) gets to clear the table and set the
+    // pointer to the table to NULL.  That's not possible if we create a
+    // userdatum as void * (or table_t *), since Lua will then own the memory
+    // used for the pointer and iptable.c's destroy cannot free that memory.
+    // printf("ipt->new()\n");
         // []
     void **ud = lua_newuserdata(L, sizeof(void **));
-    *ud = tbl_create();
-    printf("- **ud @ %p\n", (void *)ud);
-    printf("-  *ud @ %p\n", (void *)*ud);
-    stackDump(L, "0");
+    *ud = tbl_create(ud_purge);
+    // printf("- **ud @ %p\n", (void *)ud);
+    // printf("-  *ud @ %p\n", (void *)*ud);
+    // stackDump(L, "0");
 
     if (*ud == NULL) {
         lua_pushliteral(L, "error creating iptable");
@@ -119,10 +151,10 @@ new (lua_State *L)
     }
 
     luaL_getmetatable(L, LUA_USERDATUM_ID); // [ud M]
-    stackDump(L, "1");
+    // stackDump(L, "1");
 
     lua_setmetatable(L, 1);
-    stackDump(L, "2");
+    // stackDump(L, "2");
     return 1;
 }
 
@@ -130,35 +162,32 @@ static int
 destroy(lua_State *L) {
     // __gc: utterly destroy the table
     table_t *ud = checkUserDatum(L, 1);
-    printf("__gc -> destroy(ud @ %p)\n", (void *)ud);
+    // printf("__gc -> destroy(ud @ %p)\n", (void *)ud);
     stackDump(L, "0");
-    tbl_destroy(&ud);
-    printf("ud ptr is now %p\n", (void *)ud);
-    return 0;  // Lua owns the memory for the pointer -> *ud
+    // tbl_destroy(&table, &purge, &args);
+    tbl_destroy(&ud, L);
+    // printf("ud ptr is now %p\n", (void *)ud);
+    return 0;  // Lua owns the memory for the pointer to-> *ud
 }
 
 static int
 lpm(lua_State *L)
 {
     // __index: longest prefix match -- [ud pfx|name]
-    printf("__index -> lpm() - ");
-    stackDump(L, "0");
+    // printf("lua_State @ %p\n", (void *)L);
     table_t *ud = checkUserDatum(L, 1);
     entry_t *e = NULL;
     const char *s = luaL_checkstring(L, 2);
-    char *pfx = strdup(s);
+    char *pfx = strdup(s); // get around the const of s
 
     if((e = tbl_lpm(ud, pfx)))
-        // found a pfx
         lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
     else {
         // else, not found or not a pfx -> might be func name
+        // printf(">> lpm: not found\n");
         lua_getmetatable(L, 1);   // [ud name M]
-        stackDump(L, "M");
         lua_rotate(L, 2, 1);      // [ud M name]
-        stackDump(L, "M");
-        lua_gettable(L, -2);      // [ud M func]
-        stackDump(L, "return method");
+        lua_gettable(L, -2);      // [ud M func] or [ud M nil]
     }
     free(pfx);
     return 1;
@@ -170,36 +199,45 @@ static int
 set(lua_State *L)
 {
     // __newindex:  --> [ud pfx val]
-    printf("ipt->set()\n");
-    stackDump(L, "0");
+    // printf("lua_State @ %p\n", (void *)L);
     table_t *ud = checkUserDatum(L, 1);
     const char *s = luaL_checkstring(L, 2);
     char *pfx = strdup(s);
-    printf("prefix : %s\n",pfx);
-    printf("ud @ %p\n", (void *)ud);
-    int newref = luaL_ref(L, LUA_REGISTRYINDEX);
-    printf("newref : %d\n", newref);
-    luaL_unref(L, LUA_REGISTRYINDEX, newref);
+
+    entry_t *e = tbl_get(ud, pfx);
+    if (e) {
+      luaL_unref(L, LUA_REGISTRYINDEX, *(int *)e->value);
+      tbl_del(ud, pfx, L);
+    }
+
+    // is val is nil, we should let it be deleted
+    if (!lua_isnil(L, -1)) {
+      int newref = luaL_ref(L, LUA_REGISTRYINDEX);
+      tbl_set(ud, pfx, mk_data(newref), L);
+    }
     free(pfx);
 
     return 0;
 }
 
-/*
 static int
-get(lua_State *L);
+get(lua_State *L)
 {
-    // ipt:get() - specific prefix -- [ud pfx]
-    printf("ipt->get()\n");
-    stackDump(L, "0");
-    table_t *ud = checkUserDatum(L, 1);
-    const char *s = lua_checkstring(L, 2);
-    entry_t *e = tbl_get(ud, s);
-    if(e)
-        lua_rawgeti(L, LUA_REGISTRYINDEX, *e->value);
-    else
-        lua_pushnil(L);
+  // ipt:get() - specific prefix -- [ud pfx]
+  // printf("lua_State @ %p\n", (void *)L);
+  table_t *ud = checkUserDatum(L, 1);
+  const char *s = luaL_checkstring(L, 2);
+  char *pfx = strdup(s);
+  entry_t *e = tbl_get(ud, pfx);
+  if(e)
+    lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
+  else {
+    // printf("get: not found\n");
+    return 0;
+    lua_pushnil(L);
+  }
 
-    return 1;
+  free(pfx);
+
+  return 1;
 }
-*/

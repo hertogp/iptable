@@ -53,8 +53,8 @@ $(BUILD_DIR)/$(TARGET): $(OBJS)
 #
 # BSD sources
 #
-LUAOBJS = build/iptable.o build/radix.o build/lua_iptable.o
-lua: $(BUILD_DIR)/iptable.o build/radix.o
+LUAOBJS = $(BUILD_DIR)/iptable.o $(BUILD_DIR)/radix.o $(BUILD_DIR)/lua_iptable.o
+lua: $(BUILD_DIR)/iptable.o $(BUILD_DIR)/radix.o $(SRC_DIR)/lua/lua_iptable.c
 	$(CC) $(CFLAGS) -I$(INC_DIR) -c src/lua/lua_iptable.c -o $(BUILD_DIR)/lua_iptable.o
 	$(CC) -fPIC -shared -Wl,-soname=iptable.so $(LUAOBJS) -o $(BUILD_DIR)/iptable.so
 

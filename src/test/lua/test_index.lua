@@ -22,20 +22,27 @@
 package.cpath = "./build/?.so;"..package.cpath
 
 iptable = require("iptable");
-print(string.rep("-", 20), "iptable.new\n");
 ipt = iptable.new();
 
-print("\n" ..string.rep("-", 20), "print(ipt[..])\n");
-print("ipt[10.10.10.10] lpm (no mask) ->", ipt["10.10.10.10"]);
+print("ipt = iptable.new()");
+print("ipt[10.10.10.10] -->", ipt["10.10.10.10"]);
 
-print("\n"..string.rep("-", 20), "ipt[10.10.10.10] = 42\n");
-print("automask of /32");
-ipt["10.10.10.10"] = 42;
+print("\nipt[10.10.10.0/24] = 42");
+ipt["10.10.10.0/24"] = 42;
 
+print("ipt[10.10.10.0/25] = 99");
+ipt["10.10.10.0/25"] = 99;
 
-print("\n"..string.rep("-", 20), "ipt[10.10.10.10/24] = 22\n");
-print("explicit mask /24");
-ipt["10.10.10.10/24"] = 42;
+print("\nipt[10.10.10.10] -->", ipt["10.10.10.10"]);
+print("ipt[10.10.10.130] -->", ipt["10.10.10.130"]);
 
+print("\nipt[10.10.10.0/24] = 11");
+ipt["10.10.10.0/24"] = 11;
+print("ipt[10.10.10.130] ->", ipt["10.10.10.130"]);
+
+print("\nipt[10.10.10.0/24] = nil");
+ipt["10.10.10.0/24"] = nil;
+print("ipt[10.10.10.130] -->", ipt["10.10.10.130"]);
+print("ipt[10.10.10.10] -->", ipt["10.10.10.10"]);
 
 print("Done!");
