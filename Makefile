@@ -51,8 +51,17 @@ $(BUILD_DIR)/$(TARGET): $(OBJS)
 	@ln -sf $(TARGET) $(@:.$(MINOR)=)
 
 #
+# busted -> lua unit test_*_spec.lua files
+# - lua unit tests are in src/test/lua
+# - a .busted config file in project root seems to be ignored?
+#
+
+busted: lua
+	@busted .
+#
 # BSD sources
 #
+
 LUAOBJS = $(BUILD_DIR)/iptable.o $(BUILD_DIR)/radix.o $(BUILD_DIR)/lua_iptable.o
 lua: $(BUILD_DIR)/iptable.o $(BUILD_DIR)/radix.o $(SRC_DIR)/lua/lua_iptable.c
 	$(CC) $(CFLAGS) -I$(INC_DIR) -c src/lua/lua_iptable.c -o $(BUILD_DIR)/lua_iptable.o
