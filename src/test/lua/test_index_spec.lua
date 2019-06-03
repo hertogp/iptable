@@ -16,8 +16,9 @@ describe("iptable object interface", function()
     assert.is_truthy(ipt);
 
     it("new table must be empty", function()
-      pending("--> implement ipt.size(v4, v6) first");
-      assert.are_equal(0, ipt.size());
+      local v4, v6 = ipt:sizes();
+      assert.are_equal(0, v4);
+      assert.are_equal(0, v6);
     end)
 
     it("assignment", function()
@@ -25,6 +26,8 @@ describe("iptable object interface", function()
       assert.are_equal(42, ipt["10.10.10.0/24"]);
       assert.are_equal(42, ipt["10.10.10.10/24"]);
       assert.are_equal(42, ipt["10.10.10.10"]);
+      assert.are_equal(1, ipt:sizes());
+      assert.are_equal(0, select(2, ipt:sizes()));
     end)
 
     it("assignment uses exact match", function()

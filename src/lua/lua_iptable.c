@@ -19,14 +19,15 @@
 
 #define LUA_USERDATUM_ID "iptable"
 
+static void stackDump(lua_State *, const char *);
 static void
 stackDump (lua_State *L, const char *title)
 {
     // print out the scalar value or type of args on the stack 
     int i;
-    int top = lua_gettop(L); /* depth of the stack */
+    int top = lua_gettop(L); // depth of the stack
     printf("%20s : [", title);
-    for (i = 1; i <= top; i++) { /* repeat for each level */
+    for (i = 1; i <= top; i++) { // repeat for each level
         int t = lua_type(L, i);
         switch (t)
         {
@@ -41,12 +42,10 @@ stackDump (lua_State *L, const char *title)
             case LUA_TTHREAD: { printf("Thrd(%p)", lua_touserdata(L, i)); break; }
             default: { printf("%s", lua_typename(L, t)); break; }
         }
-        if (i<top) printf(" "); /* put a separator */
+        if (i<top) printf(" "); // put a separator
     }
-    printf("]\n"); /* end the listing */
-
+    printf("]\n"); // end the listing
 } // --  end stackDump
-
 
 // userdata functions
 
@@ -82,13 +81,18 @@ int luaopen_iptable(lua_State *);
 
 table_t *checkUserDatum(lua_State *, int);
 
-// - USERDATA functions
+// - USERDATA module functions
 
 static int new(lua_State *);
+
+// - USERDATA instance methods
+
 static int destroy(lua_State *);
 static int set(lua_State *);
 static int get(lua_State *);
-static int lpm(lua_State *);
+static int _index(lua_State *);
+static int _len(lua_State *);
+static int sizes(lua_State *);
 
 
 // USERDATA function array
@@ -99,17 +103,21 @@ static const struct luaL_Reg funcs [] = {
 };
 
 // USERDATA methods array
+
 static const struct luaL_Reg meths [] = {
     {"__gc", destroy},
-    {"__index", lpm},
+    {"__index", _index},
     {"__newindex", set},
+    {"__len", _len},
     {"set", set},
     {"get", get},
+    {"sizes", sizes},
     {"destroy", destroy},
     {NULL, NULL}
 };
 
-//  LUA_USERDATUM_ID
+// libopen
+
 int luaopen_iptable (lua_State *L)
 {
                                             // []
@@ -121,6 +129,8 @@ int luaopen_iptable (lua_State *L)
 
     return 1;
 }
+
+// helpers
 
 table_t *
 checkUserDatum (lua_State *L, int index)
@@ -134,16 +144,9 @@ static int
 new (lua_State *L)
 {
     // ud is a void** so tbl_destroy(&ud) gets to clear the table and set the
-    // pointer to the table to NULL.  That's not possible if we create a
-    // userdatum as void * (or table_t *), since Lua will then own the memory
-    // used for the pointer and iptable.c's destroy cannot free that memory.
-    // printf("ipt->new()\n");
-        // []
+    // pointer to the table to NULL.
     void **ud = lua_newuserdata(L, sizeof(void **));
-    *ud = tbl_create(ud_purge);
-    // printf("- **ud @ %p\n", (void *)ud);
-    // printf("-  *ud @ %p\n", (void *)*ud);
-    // stackDump(L, "0");
+    *ud = tbl_create(ud_purge);             // ud_purge func to free values
 
     if (*ud == NULL) {
         lua_pushliteral(L, "error creating iptable");
@@ -151,10 +154,8 @@ new (lua_State *L)
     }
 
     luaL_getmetatable(L, LUA_USERDATUM_ID); // [ud M]
-    // stackDump(L, "1");
-
     lua_setmetatable(L, 1);
-    // stackDump(L, "2");
+
     return 1;
 }
 
@@ -162,35 +163,8 @@ static int
 destroy(lua_State *L) {
     // __gc: utterly destroy the table
     table_t *ud = checkUserDatum(L, 1);
-    // printf("__gc -> destroy(ud @ %p)\n", (void *)ud);
-    stackDump(L, "0");
-    // tbl_destroy(&table, &purge, &args);
     tbl_destroy(&ud, L);
-    // printf("ud ptr is now %p\n", (void *)ud);
     return 0;  // Lua owns the memory for the pointer to-> *ud
-}
-
-static int
-lpm(lua_State *L)
-{
-    // __index: longest prefix match -- [ud pfx|name]
-    // printf("lua_State @ %p\n", (void *)L);
-    table_t *ud = checkUserDatum(L, 1);
-    entry_t *e = NULL;
-    const char *s = luaL_checkstring(L, 2);
-    char *pfx = strdup(s); // get around the const of s
-
-    if((e = tbl_lpm(ud, pfx)))
-        lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
-    else {
-        // else, not found or not a pfx -> might be func name
-        // printf(">> lpm: not found\n");
-        lua_getmetatable(L, 1);   // [ud name M]
-        lua_rotate(L, 2, 1);      // [ud M name]
-        lua_gettable(L, -2);      // [ud M func] or [ud M nil]
-    }
-    free(pfx);
-    return 1;
 }
 
 // methods
@@ -198,23 +172,20 @@ lpm(lua_State *L)
 static int
 set(lua_State *L)
 {
-    // __newindex:  --> [ud pfx val]
-    // printf("lua_State @ %p\n", (void *)L);
+    // __newindex() -- [ud pfx val]
+
+    // stackDump(L, "obj->set():");
     table_t *ud = checkUserDatum(L, 1);
     const char *s = luaL_checkstring(L, 2);
-    char *pfx = strdup(s);
+    int ref = LUA_NOREF;
+    char *pfx = strdup(s); // get modifiable copy
 
-    entry_t *e = tbl_get(ud, pfx);
-    if (e) {
-      luaL_unref(L, LUA_REGISTRYINDEX, *(int *)e->value);
-      tbl_del(ud, pfx, L);
-    }
-
-    // is val is nil, we should let it be deleted
-    if (!lua_isnil(L, -1)) {
-      int newref = luaL_ref(L, LUA_REGISTRYINDEX);
-      tbl_set(ud, pfx, mk_data(newref), L);
-    }
+    if (lua_isnil(L, -1))
+       tbl_del(ud, pfx, L);
+     else {
+       ref = luaL_ref(L, LUA_REGISTRYINDEX);
+       tbl_set(ud, pfx, mk_data(ref), L);
+     }
     free(pfx);
 
     return 0;
@@ -223,21 +194,72 @@ set(lua_State *L)
 static int
 get(lua_State *L)
 {
-  // ipt:get() - specific prefix -- [ud pfx]
-  // printf("lua_State @ %p\n", (void *)L);
+  // ipt:get() -- [ud pfx]
+  // FIXME: not needed anymore since ipt[addr/mask] does specific match due to
+  // the presence of the mask?
+
+  // stackDump(L, "obj->get():");
   table_t *ud = checkUserDatum(L, 1);
   const char *s = luaL_checkstring(L, 2);
   char *pfx = strdup(s);
   entry_t *e = tbl_get(ud, pfx);
-  if(e)
-    lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
-  else {
-    // printf("get: not found\n");
-    return 0;
-    lua_pushnil(L);
-  }
-
   free(pfx);
 
+  if(e)
+    lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
+  else
+    return 0;
+
   return 1;
+}
+
+static int
+_index(lua_State *L)
+{
+    // __index() -- [ud pfx] or [ud name]
+
+    // - no mask -> do longest prefix search,
+    // - with mask -> do exact lookup of prefix with mask
+
+    stackDump(L, "__index");
+    table_t *ud = checkUserDatum(L, 1);
+    entry_t *e = NULL;
+    char *pfx;
+    const char *s = luaL_checkstring(L, 2);
+
+    pfx = strdup(s);              // get modifiable copy
+    e = strchr(s, '/') ? tbl_get(ud, pfx) : tbl_lpm(ud, pfx);
+    free(pfx);
+
+    if(e)
+        lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
+    else {
+        // else, not found or not a pfx -> might be func name
+        lua_getmetatable(L, 1);   // [ud name M]
+        lua_rotate(L, 2, 1);      // [ud M name]
+        lua_gettable(L, -2);      // [ud M func] or [ud M nil]
+    }
+
+    return 1;
+}
+
+static int
+_len(lua_State *L)
+{
+    // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
+  table_t *ud = checkUserDatum(L, 1);
+  lua_pushinteger(L, ud->count4 + ud->count6);
+
+  return 1;
+}
+
+static int
+sizes(lua_State *L)
+{
+    // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
+  table_t *ud = checkUserDatum(L, 1);
+  lua_pushinteger(L, ud->count4);
+  lua_pushinteger(L, ud->count6);
+
+  return 2;
 }
