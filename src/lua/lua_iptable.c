@@ -87,32 +87,31 @@ static int new(lua_State *);
 
 // - USERDATA instance methods
 
-static int destroy(lua_State *);
-static int set(lua_State *);
 static int get(lua_State *);
+static int _gc(lua_State *);
 static int _index(lua_State *);
+static int _newindex(lua_State *);
 static int _len(lua_State *);
+static int _tostring(lua_State *);
 static int sizes(lua_State *);
 
 
 // USERDATA function array
 static const struct luaL_Reg funcs [] = {
     {"new", new},
-    {"destroy", destroy},
     {NULL, NULL}
 };
 
 // USERDATA methods array
 
 static const struct luaL_Reg meths [] = {
-    {"__gc", destroy},
+    {"__gc", _gc},
     {"__index", _index},
-    {"__newindex", set},
+    {"__newindex", _newindex},
     {"__len", _len},
-    {"set", set},
+    {"__tostring", _tostring},
     {"get", get},
     {"sizes", sizes},
-    {"destroy", destroy},
     {NULL, NULL}
 };
 
@@ -160,7 +159,7 @@ new (lua_State *L)
 }
 
 static int
-destroy(lua_State *L) {
+_gc(lua_State *L) {
     // __gc: utterly destroy the table
     table_t *ud = checkUserDatum(L, 1);
     tbl_destroy(&ud, L);
@@ -170,11 +169,10 @@ destroy(lua_State *L) {
 // methods
 
 static int
-set(lua_State *L)
+_newindex(lua_State *L)
 {
     // __newindex() -- [ud pfx val]
 
-    // stackDump(L, "obj->set():");
     table_t *ud = checkUserDatum(L, 1);
     const char *s = luaL_checkstring(L, 2);
     int ref = LUA_NOREF;
@@ -249,6 +247,16 @@ _len(lua_State *L)
     // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
   table_t *ud = checkUserDatum(L, 1);
   lua_pushinteger(L, ud->count4 + ud->count6);
+
+  return 1;
+}
+
+static int
+_tostring(lua_State *L)
+{
+    // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
+  table_t *ud = checkUserDatum(L, 1);
+  lua_pushfstring(L, "iptable{ipv4->(%d), ipv6->(%d)}", ud->count4, ud->count6);
 
   return 1;
 }
