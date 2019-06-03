@@ -2,6 +2,7 @@
 
 #include <malloc.h>
 #include <sys/types.h>
+#include <arpa/inet.h>
 
 #include "lua.h"
 #include "lualib.h"
@@ -19,6 +20,7 @@
 
 #define LUA_USERDATUM_ID "iptable"
 
+#ifdef DEBUG
 static void stackDump(lua_State *, const char *);
 static void
 stackDump (lua_State *L, const char *title)
@@ -28,8 +30,7 @@ stackDump (lua_State *L, const char *title)
     int top = lua_gettop(L); // depth of the stack
     printf("%20s : [", title);
     for (i = 1; i <= top; i++) { // repeat for each level
-        int t = lua_type(L, i);
-        switch (t)
+        switch (lua_type(L, i))
         {
             case LUA_TNIL: { printf("nil"); break; }
             case LUA_TBOOLEAN: { printf(lua_toboolean(L, i) ? "true" : "false"); break; }
@@ -45,10 +46,13 @@ stackDump (lua_State *L, const char *title)
         if (i<top) printf(" "); // put a separator
     }
     printf("]\n"); // end the listing
+
 } // --  end stackDump
 
-// userdata functions
+#endif
 
+
+// userdata functions
 
 int *mk_data(int);               // its return value is stored as entry->value
 void ud_purge(void *, void **);  // called with &entry->value for cleanup
@@ -80,6 +84,7 @@ int luaopen_iptable(lua_State *);
 // - AUXILIARY funtions
 
 table_t *checkUserDatum(lua_State *, int);
+static int iter_kv(lua_State *);
 
 // - USERDATA module functions
 
@@ -93,6 +98,7 @@ static int _index(lua_State *);
 static int _newindex(lua_State *);
 static int _len(lua_State *);
 static int _tostring(lua_State *);
+static int _pairs(lua_State *);
 static int sizes(lua_State *);
 
 
@@ -110,6 +116,7 @@ static const struct luaL_Reg meths [] = {
     {"__newindex", _newindex},
     {"__len", _len},
     {"__tostring", _tostring},
+    {"__pairs", _pairs},
     {"get", get},
     {"sizes", sizes},
     {NULL, NULL}
@@ -215,11 +222,9 @@ static int
 _index(lua_State *L)
 {
     // __index() -- [ud pfx] or [ud name]
-
     // - no mask -> do longest prefix search,
     // - with mask -> do exact lookup of prefix with mask
 
-    stackDump(L, "__index");
     table_t *ud = checkUserDatum(L, 1);
     entry_t *e = NULL;
     char *pfx;
@@ -270,4 +275,54 @@ sizes(lua_State *L)
   lua_pushinteger(L, ud->count6);
 
   return 2;
+}
+
+static int
+iter_kv(lua_State *L)
+{
+  // iter_kv() <-- [invariant control_v] == [ud last_prefix] or [ud nil]
+  // - returns next [k v]-pair or nil to stop iteration
+
+  table_t *ud = checkUserDatum(L, 1);
+  struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
+  entry_t *e = NULL;
+  char saddr[IP6_PFXSTRLEN];
+
+  if (rn == NULL || RDX_ISROOT(rn)) return 0; // we're done
+
+  // push k,v onto stack
+  key_tostr(rn->rn_key, saddr);
+  e = (entry_t *)rn;
+  lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask));
+  lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
+
+  // get next node & save it for next time around
+  rn = rdx_next(rn);
+  if (rn == NULL && KEY_IS_IP4(e->rn[0].rn_key))
+    rn = rdx_first(ud->head6);
+  lua_pushlightuserdata(L, rn);
+  lua_replace(L, lua_upvalueindex(1));
+
+  return 2;
+}
+
+static int
+_pairs(lua_State *L)
+{
+  // __pairs(ipt('ipv4')) factory function for iterator (closure) function
+  // stackDump(L, "0");               // [ud]
+
+  table_t *ud = checkUserDatum(L, 1);
+  struct radix_node *rn = rdx_first(ud->head4);
+  if (rn == NULL)
+    rn = rdx_first(ud->head6);
+
+  if (rn == NULL) return 0;
+  // save rn as 1st node
+  lua_pushlightuserdata(L, rn);    // [ud rn]
+  lua_pushcclosure(L, iter_kv, 1); // [ud iter_kv]
+  lua_rotate(L, 1, 1);             // [iter_kv ud]
+  lua_pushnil(L);                  // [f ud nil]
+
+  return 3;                        // [iter_func invariant ctl_var]
 }

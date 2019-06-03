@@ -281,6 +281,49 @@ rdx_flush(struct radix_node *rn, void *args)
     return 0;
 }
 
+struct radix_node *
+rdx_first(struct radix_node_head *rnh)
+{
+    // find first leaf in tree
+    struct radix_node *rn = NULL;
+
+    if (rnh == NULL) return rn;
+
+    rn = rnh->rh.rnh_treetop;
+    while(rn->rn_bit >= 0)
+        rn = rn->rn_left;
+
+    while(RDX_ISRIGHT_CHILD(rn))
+        rn = rn->rn_parent;
+
+    for(rn = rn->rn_parent->rn_right; rn->rn_bit >=0;)
+        rn = rn->rn_left;
+
+    if(RDX_ISROOT(rn)) return NULL;
+
+    return rn;
+}
+
+struct radix_node *
+rdx_next(struct radix_node *rn)
+{
+    // find next leaf, given a leaf
+    if (rn == NULL) return NULL;
+
+    if (rn->rn_dupedkey)
+        return rn->rn_dupedkey;
+
+    while(RDX_ISRIGHT_CHILD(rn))
+        rn = rn->rn_parent;
+
+    for(rn = rn->rn_parent->rn_right; rn->rn_bit >=0;)
+      rn = rn->rn_left;
+
+    if (RDX_ISROOT(rn)) rn = NULL;
+
+    return rn;
+}
+
 int
 tbl_walk(table_t *t, walktree_f_t *f, void *fargs)
 {

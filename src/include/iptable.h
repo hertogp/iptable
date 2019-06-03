@@ -72,6 +72,8 @@ int key_masked(void *, void *);
 // -- rdx funcs
 
 int rdx_flush(struct radix_node *, void *);
+struct radix_node *rdx_first(struct radix_node_head *);
+struct radix_node *rdx_next(struct radix_node *);
 
 // -- tbl funcs
 
