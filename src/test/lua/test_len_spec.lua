@@ -30,7 +30,7 @@ describe("iptable __len: ", function()
       assert.is_equal(1, v6);
 
       local str = string.format("%s", ipt);
-      assert.is_equal("iptable{ipv4->(2), ipv6->(1)}", str);
+      assert.is_equal("iptable{#ipv4=2, #ipv6=1}", str);
     end)
 
     it(" with mask, does exact match", function()

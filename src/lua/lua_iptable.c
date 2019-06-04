@@ -3,6 +3,7 @@
 #include <malloc.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
+#include <string.h>
 
 #include "lua.h"
 #include "lualib.h"
@@ -11,16 +12,8 @@
 #include "radix.h"
 #include "iptable.h"
 
-// tmp debug function stackDump(L, "txt")
-// --------------------------------------------------------------
-#include <stdio.h>
-#include <string.h>
-
-// lua_iptable defines
-
-#define LUA_USERDATUM_ID "iptable"
-
 #ifdef DEBUG
+#include <stdio.h>
 static void stackDump(lua_State *, const char *);
 static void
 stackDump (lua_State *L, const char *title)
@@ -39,18 +32,26 @@ stackDump (lua_State *L, const char *title)
             case LUA_TSTRING: { printf("'%s'", lua_tostring(L, i)); break; }
             case LUA_TTABLE: { printf("{}"); break; }
             case LUA_TFUNCTION: { printf("f@%p", lua_touserdata(L, i)); break; }
-            case LUA_TUSERDATA: { printf("ud(%p)", lua_touserdata(L, i)); break; }
-            case LUA_TTHREAD: { printf("Thrd(%p)", lua_touserdata(L, i)); break; }
-            default: { printf("%s", lua_typename(L, t)); break; }
+            case LUA_TUSERDATA: { printf("ud%p", lua_touserdata(L, i)); break; }
+            case LUA_TTHREAD: { printf("T%p", lua_touserdata(L, i)); break; }
+            default: { printf("%s", lua_typename(L, i)); break; }
         }
         if (i<top) printf(" "); // put a separator
     }
     printf("]\n"); // end the listing
 
 } // --  end stackDump
+#define _DEBUG_ 1
+#define DBG(stmt) do {if(_DEBUG_) { stmt; } } while (0)
+#else
+#define _DEBUG_ 0
+#define DBG(stmt) {}
+#endif // DEBUG
 
-#endif
 
+// lua_iptable defines
+
+#define LUA_USERDATUM_ID "iptable"
 
 // userdata functions
 
@@ -225,6 +226,8 @@ _index(lua_State *L)
     // - no mask -> do longest prefix search,
     // - with mask -> do exact lookup of prefix with mask
 
+    DBG(printf("__index():\n"));
+    DBG(stackDump(L, "__index() ."));
     table_t *ud = checkUserDatum(L, 1);
     entry_t *e = NULL;
     char *pfx;
@@ -234,13 +237,18 @@ _index(lua_State *L)
     e = strchr(s, '/') ? tbl_get(ud, pfx) : tbl_lpm(ud, pfx);
     free(pfx);
 
-    if(e)
+    if(e) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
-    else {
+        DBG(stackDump(L, "val by ref +"));
+    } else {
         // else, not found or not a pfx -> might be func name
         lua_getmetatable(L, 1);   // [ud name M]
+        DBG(stackDump(L, "metatable +"));
         lua_rotate(L, 2, 1);      // [ud M name]
+        DBG(stackDump(L, "swap top ."));
         lua_gettable(L, -2);      // [ud M func] or [ud M nil]
+        DBG(stackDump(L, "mt value -+"));
+
     }
 
     return 1;
@@ -261,7 +269,7 @@ _tostring(lua_State *L)
 {
     // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
   table_t *ud = checkUserDatum(L, 1);
-  lua_pushfstring(L, "iptable{ipv4->(%d), ipv6->(%d)}", ud->count4, ud->count6);
+  lua_pushfstring(L, "iptable{#ipv4=%d, #ipv6=%d}", ud->count4, ud->count6);
 
   return 1;
 }
@@ -270,18 +278,24 @@ static int
 sizes(lua_State *L)
 {
     // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
+  DBG(printf("size()():\n"));
+  DBG(stackDump(L, "stack ."));
   table_t *ud = checkUserDatum(L, 1);
-  lua_pushinteger(L, ud->count4);
-  lua_pushinteger(L, ud->count6);
+  lua_pushinteger(L, ud->count4);         // [ud count4]
+  DBG(stackDump(L, "count4 ."));
+  lua_pushinteger(L, ud->count6);         // [ud count4 count6]
+  DBG(stackDump(L, "count6 ."));
 
-  return 2;
+  return 2;                               // [.., count4, count6]
 }
 
 static int
 iter_kv(lua_State *L)
 {
-  // iter_kv() <-- [invariant control_v] == [ud last_prefix] or [ud nil]
+  // iter_kv() <-- [ud k] (key k is nil if first call)
   // - returns next [k v]-pair or nil to stop iteration
+  DBG(printf("iter_kv():\n"));
+  DBG(stackDump(L, "stack ."));
 
   table_t *ud = checkUserDatum(L, 1);
   struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
@@ -293,24 +307,31 @@ iter_kv(lua_State *L)
   // push k,v onto stack
   key_tostr(rn->rn_key, saddr);
   e = (entry_t *)rn;
-  lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask));
-  lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
+  lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [ud k k']
+  DBG(stackDump(L, "key +"));
+  lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value); // [ud k k' v']
+  DBG(stackDump(L, "value +"));
 
   // get next node & save it for next time around
   rn = rdx_next(rn);
   if (rn == NULL && KEY_IS_IP4(e->rn[0].rn_key))
     rn = rdx_first(ud->head6);
-  lua_pushlightuserdata(L, rn);
-  lua_replace(L, lua_upvalueindex(1));
+  lua_pushlightuserdata(L, rn);                       // [ud k k' v' lud]
+  DBG(stackDump(L, "next radix node +"));
+  lua_replace(L, lua_upvalueindex(1));                // [ud k k' v']
+  DBG(stackDump(L, "set upvalue(1) -"));
 
-  return 2;
+  return 2;                                           // [.., k', v']
 }
+
 
 static int
 _pairs(lua_State *L)
 {
-  // __pairs(ipt('ipv4')) factory function for iterator (closure) function
-  // stackDump(L, "0");               // [ud]
+  // __pairs(ipt('ipv4')) <-- [ud]
+  // factory function for iterator (closure) function
+  DBG(printf("__pairs():\n"));
+  DBG( stackDump(L, "stack ."));
 
   table_t *ud = checkUserDatum(L, 1);
   struct radix_node *rn = rdx_first(ud->head4);
@@ -319,10 +340,14 @@ _pairs(lua_State *L)
 
   if (rn == NULL) return 0;
   // save rn as 1st node
-  lua_pushlightuserdata(L, rn);    // [ud rn]
-  lua_pushcclosure(L, iter_kv, 1); // [ud iter_kv]
-  lua_rotate(L, 1, 1);             // [iter_kv ud]
-  lua_pushnil(L);                  // [f ud nil]
+  lua_pushlightuserdata(L, rn);        // [ud lud]
+  DBG(stackDump(L, "1st leaf +"));
+  lua_pushcclosure(L, iter_kv, 1);     // [ud f]
+  DBG(stackDump(L, "iter_f (1 arg) +-"));
+  lua_rotate(L, 1, 1);                 // [f ud]
+  DBG(stackDump(L, "swap ."));
+  lua_pushnil(L);                      // [f ud nil]
+  DBG(stackDump(L, "ctl_var +"));
 
-  return 3;                        // [iter_func invariant ctl_var]
+  return 3;                        // [iter_f invariant ctl_var]
 }

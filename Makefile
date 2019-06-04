@@ -1,6 +1,6 @@
 # Makefile for libipt.so
 
-# iptable LIB name and version 1, MINOR set below
+# LIB iptable version 1, MINOR set below
 
 MINOR=0.1
 VERSION=1.$(MINOR)
@@ -30,6 +30,13 @@ CFLAGS+= -Wsuggest-attribute=noreturn -Wjump-misses-init
 
 LFLAGS=  -fPIC -shared -Wl,-soname=$(TARGET:.$(MINOR)=)
 
+# make <tgt> DEBUG=1
+ifeq (${DEBUG}, 1)
+  DFLAGS=-DDEBUG
+else
+  DFLAGS=
+endif
+
 .PHONY: test clean purge
 .PRECIOUS: %/.f
 
@@ -41,7 +48,7 @@ LFLAGS=  -fPIC -shared -Wl,-soname=$(TARGET:.$(MINOR)=)
 .SECONDEXPANSION:
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $$(@D)/.f
-	$(CC) $(CFLAGS) -I$(INC_DIR) -c $< -o $@
+	$(CC) $(DFLAGS) $(CFLAGS) -I$(INC_DIR) -c $< -o $@
 
 # build libiptable.VERSION & its symlinks
 $(BUILD_DIR)/$(TARGET): $(OBJS)
@@ -49,13 +56,6 @@ $(BUILD_DIR)/$(TARGET): $(OBJS)
 	@ln -sf $(TARGET) $(@:.$(VERSION)=)
 	@ln -sf $(TARGET) $(@:.$(MINOR)=)
 
-# dbg, invoke make <tgt> DEBUG=1
-
-ifeq (${DEBUG}, 1)
-  DBG=11
-else
-  DBG=12
-endif
 
 dbg:
 	@echo "Debug is ${DEBUG}, and DBG is $(DBG); see?"
@@ -65,7 +65,7 @@ dbg:
 # - a .busted config file in project root seems to be ignored?
 #
 
-busted: lua
+busted:
 	@busted .
 #
 # BSD sources
@@ -73,7 +73,7 @@ busted: lua
 
 LUAOBJS = $(BUILD_DIR)/iptable.o $(BUILD_DIR)/radix.o $(BUILD_DIR)/lua_iptable.o
 lua: $(BUILD_DIR)/iptable.o $(BUILD_DIR)/radix.o $(SRC_DIR)/lua/lua_iptable.c
-	$(CC) $(CFLAGS) -I$(INC_DIR) -c src/lua/lua_iptable.c -o $(BUILD_DIR)/lua_iptable.o
+	$(CC) $(DFLAGS) $(CFLAGS) -I$(INC_DIR) -c src/lua/lua_iptable.c -o $(BUILD_DIR)/lua_iptable.o
 	$(CC) -fPIC -shared -Wl,-soname=iptable.so $(LUAOBJS) -o $(BUILD_DIR)/iptable.so
 
 bsd:
