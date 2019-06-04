@@ -1,10 +1,9 @@
 # Makefile for libipt.so
 
-# LIB specific
+# iptable LIB name and version 1, MINOR set below
 
-MAJOR=1
 MINOR=0.1
-VERSION=$(MAJOR).$(MINOR)
+VERSION=1.$(MINOR)
 LIB=iptable
 TARGET=lib$(LIB).so.$(VERSION)
 
@@ -50,6 +49,16 @@ $(BUILD_DIR)/$(TARGET): $(OBJS)
 	@ln -sf $(TARGET) $(@:.$(VERSION)=)
 	@ln -sf $(TARGET) $(@:.$(MINOR)=)
 
+# dbg, invoke make <tgt> DEBUG=1
+
+ifeq (${DEBUG}, 1)
+  DBG=11
+else
+  DBG=12
+endif
+
+dbg:
+	@echo "Debug is ${DEBUG}, and DBG is $(DBG); see?"
 #
 # busted -> lua unit test_*_spec.lua files
 # - lua unit tests are in src/test/lua
