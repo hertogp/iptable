@@ -1,11 +1,10 @@
 # Makefile for iptable for C or Lua
-# ---------------------|---------------------
+#
 # Lua                  | C
 # ---------------------|---------------------
-# make                 | make CLIB=1
-# make test            | make test CLIB=1
+# make                 | make         CLIB=1
+# make test            | make test    CLIB=1
 # make install         | make install CLIB=1
-
 
 RM=/bin/rm
 
@@ -20,7 +19,7 @@ D_TEST=test
 D_BUILD=build
 
 #
-# LIB iptable version 1, MINOR set below
+# LIB iptable version 1.0.x
 #
 MINOR=0.1
 VERSION=1.$(MINOR)
@@ -62,10 +61,7 @@ endif
 
 .SECONDEXPANSION:
 
-#
-# Default target
-#
-# shared object file & its symlinks
+# Default target: shared object file & its symlinks (if CLIB)
 $(D_BUILD)/$(TARGET): $(OBJS)
 	$(CC) $(LFLAGS) $^ -o $@
 ifdef CLIB
@@ -77,17 +73,12 @@ endif
 $(D_BUILD)/%.o: $(D_SRC)/%.c $$(@D)/.f
 	$(CC) $(DFLAGS) $(CFLAGS) -I$(D_INCL) -c $< -o $@
 
-$(LIB): $(OBJS)
-	@echo "making $(@)"
-	$(CC) -fPIC -shared -Wl,-soname=$(LIB).so $^ -o $(D_BUILD)/$(LIB).so
-
 clean:
 	@$(RM) -f $(D_BUILD)/* $(D_TEST)/*
 
 purge: clean
 	@rm -f $(D_BUILD)/.f $(D_TEST)/.f
 	@rmdir $(D_BUILD) $(D_TEST)
-
 
 dbg:
 	@echo
@@ -111,15 +102,8 @@ dbg:
 	@echo " MU_RUNNERS : $(MU_RUNNERS)"
 	@echo
 
-
 #
-# busted -> lua unit test_*_spec.lua files
-# - lua unit tests are in src/test/lua
-# - a .busted config file in project root seems to be ignored?
-#
-
-#
-# BSD sources - refresh/retrieve
+# BSD sources - update
 #
 bsd:
 	@wget -N -P doc/bsd -i doc/bsd.urls
