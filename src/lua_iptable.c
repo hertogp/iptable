@@ -21,7 +21,7 @@ stackDump (lua_State *L, const char *title)
     // print out the scalar value or type of args on the stack 
     int i;
     int top = lua_gettop(L); // depth of the stack
-    printf("%20s : [", title);
+    printf("%30s : [", title);
     for (i = 1; i <= top; i++) { // repeat for each level
         switch (lua_type(L, i))
         {
