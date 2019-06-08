@@ -11,54 +11,19 @@
 
 #include "radix.h"
 #include "iptable.h"
-
-#ifdef DEBUG
-#include <stdio.h>
-static void stackDump(lua_State *, const char *);
-static void
-stackDump (lua_State *L, const char *title)
-{
-    // print out the scalar value or type of args on the stack 
-    int i;
-    int top = lua_gettop(L); // depth of the stack
-    printf("%30s : [", title);
-    for (i = 1; i <= top; i++) { // repeat for each level
-        switch (lua_type(L, i))
-        {
-            case LUA_TNIL: { printf("nil"); break; }
-            case LUA_TBOOLEAN: { printf(lua_toboolean(L, i) ? "true" : "false"); break; }
-            case LUA_TLIGHTUSERDATA: { printf("lud@%p", lua_touserdata(L, i)); break; }
-            case LUA_TNUMBER: { printf("%g", lua_tonumber(L, i)); break; }
-            case LUA_TSTRING: { printf("'%s'", lua_tostring(L, i)); break; }
-            case LUA_TTABLE: { printf("{}"); break; }
-            case LUA_TFUNCTION: { printf("f@%p", lua_touserdata(L, i)); break; }
-            case LUA_TUSERDATA: { printf("ud%p", lua_touserdata(L, i)); break; }
-            case LUA_TTHREAD: { printf("T%p", lua_touserdata(L, i)); break; }
-            default: { printf("%s", lua_typename(L, i)); break; }
-        }
-        if (i<top) printf(" "); // put a separator
-    }
-    printf("]\n"); // end the listing
-
-} // --  end stackDump
-#define _DEBUG_ 1
-#define DBG(stmt) do {if(_DEBUG_) { stmt; } } while (0)
-#else
-#define _DEBUG_ 0
-#define DBG(stmt) {}
-#endif // DEBUG
+#include "debug.h"
 
 
 // lua_iptable defines
 
-#define LUA_USERDATUM_ID "iptable"
+#define LUA_IPTABLE_ID "iptable"
 
 // userdata functions
 
-int *mk_data(int);               // its return value is stored as entry->value
-void ud_purge(void *, void **);  // called with &entry->value for cleanup
+int *ud_create(int);               // userdata stored as entry->value
+void ud_delete(void *, void **);   // ud_delete(L, &ud)
 
-int *mk_data(int ref)
+int *ud_create(int ref)
 {
   // for storing LUA_REGISTRYINDEX ref's in the radix tree
   int *p = calloc(1, sizeof(int));
@@ -67,7 +32,7 @@ int *mk_data(int ref)
 }
 
 void
-ud_purge(void *L, void **dta)
+ud_delete(void *L, void **dta)
 {
   // unref the userdata and free associated ref memory
   if (*dta) {
@@ -87,11 +52,11 @@ int luaopen_iptable(lua_State *);
 table_t *checkUserDatum(lua_State *, int);
 static int iter_kv(lua_State *);
 
-// - USERDATA module functions
+// - iptable module functions
 
 static int new(lua_State *);
 
-// - USERDATA instance methods
+// - (ip)table instance methods
 
 static int get(lua_State *);
 static int _gc(lua_State *);
@@ -103,13 +68,13 @@ static int _pairs(lua_State *);
 static int sizes(lua_State *);
 
 
-// USERDATA function array
+// - iptable function array
 static const struct luaL_Reg funcs [] = {
     {"new", new},
     {NULL, NULL}
 };
 
-// USERDATA methods array
+// - iptable methods array
 
 static const struct luaL_Reg meths [] = {
     {"__gc", _gc},
@@ -127,12 +92,37 @@ static const struct luaL_Reg meths [] = {
 
 int luaopen_iptable (lua_State *L)
 {
-                                            // []
-    luaL_newmetatable(L, LUA_USERDATUM_ID);  // [ {} ]
-    lua_pushvalue(L, -1);                   // [ {}, {} ]
-    lua_setfield(L, -2, "__index");         // [ {} ]
-    luaL_setfuncs(L, meths, 0);             // [ {+meths} ]
-    luaL_newlib(L, funcs);                  // [ {+meths} {+funcs} ]
+    // ['iptable', '<path>/iptable.so' ]
+    dbg_stack("stack .");
+
+    // get & register ipt's metatable
+    luaL_newmetatable(L, LUA_IPTABLE_ID);  // [.., {} ]
+    dbg_stack("new mt +");
+
+    // duplicate the (meta)table
+    lua_pushvalue(L, -1);                   // [.., {}, {} ]
+    dbg_stack("duplicate +");
+
+
+    // set prototypical inheritance
+    lua_setfield(L, -2, "__index");         // [.., {} ]
+    dbg_stack("set as __index");
+
+    // set object methods, no upvalues (0)
+    luaL_setfuncs(L, meths, 0);             // [.., {+meths} ]
+    dbg_stack("_setfuncs");
+    luaL_newlib(L, funcs);                  // [.., {+meths} {+funcs} ]
+    dbg_stack("_newlib");
+
+    lua_pushinteger(L, AF_INET);
+    dbg_stack("value");
+    lua_setfield(L, -2, "AF_INET");
+    dbg_stack("setfield -2");
+
+    lua_pushinteger(L, AF_INET6);
+    dbg_stack("value");
+    lua_setfield(L, -2, "AF_INET6");
+    dbg_stack("setfield -2");
 
     return 1;
 }
@@ -142,7 +132,7 @@ int luaopen_iptable (lua_State *L)
 table_t *
 checkUserDatum (lua_State *L, int index)
 {
-    void **ud = luaL_checkudata(L, index, LUA_USERDATUM_ID);
+    void **ud = luaL_checkudata(L, index, LUA_IPTABLE_ID);
     luaL_argcheck(L, ud != NULL, index, "`iptable' expected");
     return (table_t *)*ud;
 }
@@ -150,17 +140,16 @@ checkUserDatum (lua_State *L, int index)
 static int
 new (lua_State *L)
 {
-    // ud is a void** so tbl_destroy(&ud) gets to clear the table and set the
-    // pointer to the table to NULL.
+    // void** -> tbl_destroy(&ud) sets ud=NULL when done clearing it
     void **ud = lua_newuserdata(L, sizeof(void **));
-    *ud = tbl_create(ud_purge);             // ud_purge func to free values
+    *ud = tbl_create(ud_delete);             // ud_delete func to free values
 
     if (*ud == NULL) {
         lua_pushliteral(L, "error creating iptable");
         lua_error(L);
     }
 
-    luaL_getmetatable(L, LUA_USERDATUM_ID); // [ud M]
+    luaL_getmetatable(L, LUA_IPTABLE_ID); // [ud M]
     lua_setmetatable(L, 1);
 
     return 1;
@@ -190,7 +179,7 @@ _newindex(lua_State *L)
        tbl_del(ud, pfx, L);
      else {
        ref = luaL_ref(L, LUA_REGISTRYINDEX);
-       tbl_set(ud, pfx, mk_data(ref), L);
+       tbl_set(ud, pfx, ud_create(ref), L);
      }
     free(pfx);
 
@@ -226,8 +215,7 @@ _index(lua_State *L)
     // - no mask -> do longest prefix search,
     // - with mask -> do exact lookup of prefix with mask
 
-    DBG(printf("__index():\n"));
-    DBG(stackDump(L, "__index() ."));
+    dbg_stack("__index() .");
     table_t *ud = checkUserDatum(L, 1);
     entry_t *e = NULL;
     char *pfx;
@@ -239,15 +227,17 @@ _index(lua_State *L)
 
     if(e) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
-        DBG(stackDump(L, "val by ref +"));
+        dbg_stack("val by ref +");
     } else {
         // else, not found or not a pfx -> might be func name
         lua_getmetatable(L, 1);   // [ud name M]
-        DBG(stackDump(L, "metatable +"));
+        dbg_stack("metatable +");
+
         lua_rotate(L, 2, 1);      // [ud M name]
-        DBG(stackDump(L, "swap top ."));
+        dbg_stack("swap top .");
+
         lua_gettable(L, -2);      // [ud M func] or [ud M nil]
-        DBG(stackDump(L, "mt value -+"));
+        dbg_stack("mt value -+");
 
     }
 
@@ -257,7 +247,7 @@ _index(lua_State *L)
 static int
 _len(lua_State *L)
 {
-    // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
+    // #ipt -- [ud]  -- return sum of count4 and count6
   table_t *ud = checkUserDatum(L, 1);
   lua_pushinteger(L, ud->count4 + ud->count6);
 
@@ -267,7 +257,7 @@ _len(lua_State *L)
 static int
 _tostring(lua_State *L)
 {
-    // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
+    // as string: iptable{#ipv4=.., #ipv6=..}
   table_t *ud = checkUserDatum(L, 1);
   lua_pushfstring(L, "iptable{#ipv4=%d, #ipv6=%d}", ud->count4, ud->count6);
 
@@ -277,14 +267,15 @@ _tostring(lua_State *L)
 static int
 sizes(lua_State *L)
 {
-    // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
-  DBG(printf("size()():\n"));
-  DBG(stackDump(L, "stack ."));
+  // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
   table_t *ud = checkUserDatum(L, 1);
+  dbg_stack("stack .");
+
   lua_pushinteger(L, ud->count4);         // [ud count4]
-  DBG(stackDump(L, "count4 ."));
+  dbg_stack("count4 +");
+
   lua_pushinteger(L, ud->count6);         // [ud count4 count6]
-  DBG(stackDump(L, "count6 ."));
+  dbg_stack("count6 +");
 
   return 2;                               // [.., count4, count6]
 }
@@ -294,8 +285,7 @@ iter_kv(lua_State *L)
 {
   // iter_kv() <-- [ud k] (key k is nil if first call)
   // - returns next [k v]-pair or nil to stop iteration
-  DBG(printf("iter_kv():\n"));
-  DBG(stackDump(L, "stack ."));
+  dbg_stack("stack .");
 
   table_t *ud = checkUserDatum(L, 1);
   struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
@@ -307,19 +297,23 @@ iter_kv(lua_State *L)
   // push k,v onto stack
   key_tostr(rn->rn_key, saddr);
   e = (entry_t *)rn;
+
   lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [ud k k']
-  DBG(stackDump(L, "key +"));
+  dbg_stack("key +");
+
   lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value); // [ud k k' v']
-  DBG(stackDump(L, "value +"));
+  dbg_stack("value +");
 
   // get next node & save it for next time around
   rn = rdx_next(rn);
   if (rn == NULL && KEY_IS_IP4(e->rn[0].rn_key))
     rn = rdx_first(ud->head6);
+
   lua_pushlightuserdata(L, rn);                       // [ud k k' v' lud]
-  DBG(stackDump(L, "next radix node +"));
+  dbg_stack("next radix node +");
+
   lua_replace(L, lua_upvalueindex(1));                // [ud k k' v']
-  DBG(stackDump(L, "set upvalue(1) -"));
+  dbg_stack("set upvalue(1) -");
 
   return 2;                                           // [.., k', v']
 }
@@ -330,8 +324,7 @@ _pairs(lua_State *L)
 {
   // __pairs(ipt('ipv4')) <-- [ud]
   // factory function for iterator (closure) function
-  DBG(printf("__pairs():\n"));
-  DBG( stackDump(L, "stack ."));
+  dbg_stack("stack .");
 
   table_t *ud = checkUserDatum(L, 1);
   struct radix_node *rn = rdx_first(ud->head4);
@@ -340,14 +333,17 @@ _pairs(lua_State *L)
 
   if (rn == NULL) return 0;
   // save rn as 1st node
-  lua_pushlightuserdata(L, rn);        // [ud lud]
-  DBG(stackDump(L, "1st leaf +"));
-  lua_pushcclosure(L, iter_kv, 1);     // [ud f]
-  DBG(stackDump(L, "iter_f (1 arg) +-"));
-  lua_rotate(L, 1, 1);                 // [f ud]
-  DBG(stackDump(L, "swap ."));
-  lua_pushnil(L);                      // [f ud nil]
-  DBG(stackDump(L, "ctl_var +"));
+  lua_pushlightuserdata(L, rn);        // [ud lud], rn is 1st node
+  dbg_stack("1st leaf +");
 
-  return 3;                        // [iter_f invariant ctl_var]
+  lua_pushcclosure(L, iter_kv, 1);     // [ud f], rn as upvalue(1)
+  dbg_stack("iter_f (1 arg) +-");
+
+  lua_rotate(L, 1, 1);                 // [f ud]
+  dbg_stack("swap .");
+
+  lua_pushnil(L);                      // [f ud nil]
+  dbg_stack("ctl var +");
+
+  return 3;                           // [iter_f invariant ctl_var]
 }
