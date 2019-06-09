@@ -21,17 +21,20 @@ static uint8_t  rn_ones[RDX_MAX_KEYLEN] = {
 };
 */
 
+// -- helpers
+
 // -- KEY funcs
 
 uint8_t *
-key_bystr(char *s, int *mlen)
+key_bystr(char *s, int *mlen, int *af)
 {
-    // on success, sets mlen & returns a ptr to key
+    // on success, sets mlen, af & returns a ptr to key
     // - mlen = -1 when no prefix length was supplied
     // on failure returns NULL and mlen is undefined
 
     uint8_t *addr;                                // the address as key ptr
     *mlen = -1;                                   // the mask as length
+    *af = AF_UNSPEC;
 
     int a, b, c, d, n;
     char *slash;
@@ -55,6 +58,7 @@ key_bystr(char *s, int *mlen)
         if (slash) *slash = '\0';                 // just for inet_pton
         inet_pton(AF_INET6, s, IPT_KEYPTR(addr));
         if (slash) *slash = '/';                  // restore s
+        *af = AF_INET6;
         return addr;
 
     } else {
@@ -86,6 +90,7 @@ key_bystr(char *s, int *mlen)
         *(addr+3) = c;
         *(addr+4) = d;
         /* inet_pton(AF_INET, buf, IPT_KEYPTR(addr)); */
+        *af = AF_INET;
         return addr;
     }
 
@@ -362,22 +367,20 @@ tbl_get(table_t *t, char *s)
 {
     // An exact lookup for addr/mask, missing mask is set to AF's max mask
     uint8_t *addr = NULL, *mask = NULL;
-    int mlen = -1;
+    int mlen = -1, af = AF_UNSPEC;
     struct radix_node_head *head = NULL;
     entry_t *entry = NULL;
 
     if (t == NULL) return NULL;
 
-    // get head, addr, mask; bail on error
-    addr = key_bystr(s, &mlen);
+    // get head, af, addr, mask, or bail on error
+    addr = key_bystr(s, &mlen, &af);
     if (addr == NULL) goto bail;
-    if (KEY_IS_IP6(addr)) {
-        head = t->head6;
-        mask = key_bylen(AF_INET6, mlen);
-    } else if (KEY_IS_IP4(addr)) {
-        head = t->head4;
-        mask = key_bylen(AF_INET, mlen);
-    } else goto bail;
+    if (KEY_IS_IP6(addr)) head = t->head6;
+    else if (KEY_IS_IP4(addr)) head = t->head4;
+    else goto bail;
+    mask = key_bylen(af, mlen);
+
     if (mask == NULL) goto bail;
     if (! key_masked(addr, mask)) goto bail;
 
@@ -395,23 +398,20 @@ tbl_set(table_t *t, char *s, void *v, void *pargs)
     // A missing mask is taken to mean AF's max mask
     // - applies mask before searching/setting the tree
     uint8_t *addr = NULL, *mask = NULL;
-    int mlen = -1;
+    int mlen = -1, af = AF_UNSPEC;
     entry_t *entry = NULL;
     struct radix_node *rn = NULL;
     struct radix_node_head *head = NULL;
 
     if (t == NULL) return 0;
 
-    // get head, addr, mask; bail on error
-    addr = key_bystr(s, &mlen);
+    // get head, af, addr, mask, or bail on error
+    addr = key_bystr(s, &mlen, &af);
     if (addr == NULL) goto bail;
-    if (KEY_IS_IP6(addr)) {
-        head = t->head6;
-        mask = key_bylen(AF_INET6, mlen);
-    } else if (KEY_IS_IP4(addr)) {
-        head = t->head4;
-        mask = key_bylen(AF_INET, mlen);
-    } else goto bail;
+    if (KEY_IS_IP6(addr)) head = t->head6;
+    else if (KEY_IS_IP4(addr)) head = t->head4;
+    else goto bail;
+    mask = key_bylen(af, mlen);
     if (mask == NULL) goto bail;
     if (! key_masked(addr, mask)) goto bail;
 
@@ -454,19 +454,16 @@ tbl_del(table_t *t, char *s, void *pargs)
     entry_t *e;
     struct radix_node_head *head = NULL;
     uint8_t *addr = NULL, *mask = NULL;
-    int mlen = -1, rv = 0;
+    int mlen = -1, rv = 0, af = AF_UNSPEC;
     if (t == NULL) return 0;
 
-    // get head, addr, mask; bail on error
-    addr = key_bystr(s, &mlen);
+    // get head, af, addr, mask, or bail on error
+    addr = key_bystr(s, &mlen, &af);
     if (addr == NULL) goto bail;
-    if (KEY_IS_IP6(addr)) {
-        head = t->head6;
-        mask = key_bylen(AF_INET6, mlen);
-    } else if (KEY_IS_IP4(addr)) {
-        head = t->head4;
-        mask = key_bylen(AF_INET, mlen);
-    } else goto bail;
+    if (KEY_IS_IP6(addr)) head = t->head6;
+    else if (KEY_IS_IP4(addr)) head = t->head4;
+    else goto bail;
+    mask = key_bylen(af, mlen);
     if (mask == NULL) goto bail;
     if (! key_masked(addr, mask)) goto bail;
 
@@ -491,18 +488,15 @@ tbl_lpm(table_t *t, char *s)
     // longest prefix match for address (a /mask is ignored)
     struct radix_node_head *head = NULL;
     uint8_t *addr = NULL;
-    int mlen = -1;
+    int mlen = -1, af = AF_UNSPEC;
     entry_t *rv = NULL;
 
     if (t == NULL) return 0;
 
-    // get head, addr; bail on error
-    addr = key_bystr(s, &mlen);
+    addr = key_bystr(s, &mlen, &af);
     if (addr == NULL) goto bail;
-    else if (KEY_IS_IP6(addr))
-        head = t->head6;
-    else if (KEY_IS_IP4(addr))
-        head = t->head4;
+    if (KEY_IS_IP6(addr)) head = t->head6;
+    else if (KEY_IS_IP4(addr)) head = t->head4;
     else goto bail;
 
     rv = (entry_t *)head->rnh_matchaddr(addr, &head->rh);

@@ -60,7 +60,7 @@ typedef struct table_t {
 
 // -- key funcs
 
-uint8_t *key_bystr(char *, int *);
+uint8_t *key_bystr(char *, int *, int *);
 uint8_t *key_bylen(int, int);
 const char *key_tostr(void *, char *);
 int key_tolen(void *);

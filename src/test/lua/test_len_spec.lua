@@ -25,7 +25,7 @@ describe("iptable __len: ", function()
       ipt["2f::/64"] = 64;
       assert.is_equal(3, #ipt);
 
-      local v4, v6 = ipt:sizes();
+      local v4, v6 = ipt:counts();
       assert.is_equal(2, v4);
       assert.is_equal(1, v6);
 

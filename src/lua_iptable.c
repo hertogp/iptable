@@ -54,7 +54,8 @@ static int iter_kv(lua_State *);
 
 // - iptable module functions
 
-static int new(lua_State *);
+static int ipt_new(lua_State *);
+static int ipt_tobin(lua_State *);
 
 // - (ip)table instance methods
 
@@ -65,12 +66,13 @@ static int _newindex(lua_State *);
 static int _len(lua_State *);
 static int _tostring(lua_State *);
 static int _pairs(lua_State *);
-static int sizes(lua_State *);
+static int counts(lua_State *);
 
 
 // - iptable function array
 static const struct luaL_Reg funcs [] = {
-    {"new", new},
+    {"new", ipt_new},
+    {"tobin", ipt_tobin},
     {NULL, NULL}
 };
 
@@ -84,7 +86,7 @@ static const struct luaL_Reg meths [] = {
     {"__tostring", _tostring},
     {"__pairs", _pairs},
     {"get", get},
-    {"sizes", sizes},
+    {"counts", counts},
     {NULL, NULL}
 };
 
@@ -137,8 +139,10 @@ checkUserDatum (lua_State *L, int index)
     return (table_t *)*ud;
 }
 
+// iptable module functions
+
 static int
-new (lua_State *L)
+ipt_new(lua_State *L)
 {
     // void** -> tbl_destroy(&ud) sets ud=NULL when done clearing it
     void **ud = lua_newuserdata(L, sizeof(void **));
@@ -156,6 +160,30 @@ new (lua_State *L)
 }
 
 static int
+ipt_tobin(lua_State *L)
+{
+  // str_tokey() <-- [str]
+  dbg_stack("stack .");
+
+  int af, mlen;
+  char *buf = strdup(luaL_checkstring(L,1)); // modifiable copy
+  uint8_t *addr = key_bystr(buf, &mlen, &af);
+  free(buf);
+
+  if (addr == NULL) return 0;
+
+  lua_pushlstring(L, (const char *)addr, IPT_KEYLEN(addr));
+  free(addr);  // Lua makes its own copy
+  lua_pushinteger(L, mlen);
+  lua_pushinteger(L, af);
+  dbg_stack("results +");
+
+  return 3;
+}
+
+// iptable instance methods
+
+static int
 _gc(lua_State *L) {
     // __gc: utterly destroy the table
     table_t *ud = checkUserDatum(L, 1);
@@ -163,17 +191,14 @@ _gc(lua_State *L) {
     return 0;  // Lua owns the memory for the pointer to-> *ud
 }
 
-// methods
-
 static int
 _newindex(lua_State *L)
 {
     // __newindex() -- [ud pfx val]
 
     table_t *ud = checkUserDatum(L, 1);
-    const char *s = luaL_checkstring(L, 2);
     int ref = LUA_NOREF;
-    char *pfx = strdup(s); // get modifiable copy
+    char *pfx = strdup(luaL_checkstring(L,2)); // modifiable copy
 
     if (lua_isnil(L, -1))
        tbl_del(ud, pfx, L);
@@ -193,10 +218,9 @@ get(lua_State *L)
   // FIXME: not needed anymore since ipt[addr/mask] does specific match due to
   // the presence of the mask?
 
-  // stackDump(L, "obj->get():");
   table_t *ud = checkUserDatum(L, 1);
-  const char *s = luaL_checkstring(L, 2);
-  char *pfx = strdup(s);
+  // const char *s = luaL_checkstring(L, 2);
+  char *pfx = strdup(luaL_checkstring(L,2));
   entry_t *e = tbl_get(ud, pfx);
   free(pfx);
 
@@ -230,15 +254,17 @@ _index(lua_State *L)
         dbg_stack("val by ref +");
     } else {
         // else, not found or not a pfx -> might be func name
-        lua_getmetatable(L, 1);   // [ud name M]
-        dbg_stack("metatable +");
+        // NOTE: if checkstring(L,2) == NULL then getmetafield -> LUA_TNIL
+        if (luaL_getmetafield(L, 1, luaL_checkstring(L,2)) == LUA_TNIL)
+           return 0;
+        dbg_stack("metatable lookup +");
 
-        lua_rotate(L, 2, 1);      // [ud M name]
-        dbg_stack("swap top .");
-
-        lua_gettable(L, -2);      // [ud M func] or [ud M nil]
-        dbg_stack("mt value -+");
-
+        /* lua_getmetatable(L, 1);   // [ud name M] */
+        /* dbg_stack("metatable +"); */
+        /* lua_rotate(L, 2, 1);      // [ud M name] */
+        /* dbg_stack("swap top ."); */
+        /* lua_gettable(L, -2);      // [ud M func] or [ud M nil] */
+        /* dbg_stack("mt value -+"); */
     }
 
     return 1;
@@ -265,7 +291,7 @@ _tostring(lua_State *L)
 }
 
 static int
-sizes(lua_State *L)
+counts(lua_State *L)
 {
   // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
   table_t *ud = checkUserDatum(L, 1);
