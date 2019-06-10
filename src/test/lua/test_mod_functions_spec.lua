@@ -7,7 +7,7 @@
 
 package.cpath = "./build/?.so;"..package.cpath
 
-function key_str(buf)
+function bin2str(buf)
   local s = ""
   local len = buf:byte(1)
   for i=1, len, 1 do
@@ -17,13 +17,11 @@ function key_str(buf)
   return s;
 end
 
-describe("iptable module functions: ", function()
+describe("iptable.tobin(): ", function()
 
-  expose("tobin(): ", function()
+  expose("ipt: ", function()
     iptable = require("iptable");
     assert.is_truthy(iptable);
-    ipt = iptable.new();
-    assert.is_truthy(ipt);
 
     it("no mask -> mlen=-1", function()
       addr, mlen, af = iptable.tobin("10.10.10.10");
@@ -36,14 +34,14 @@ describe("iptable module functions: ", function()
       addr, mlen, af = iptable.tobin("10.10.10.10/32");
       assert.are_equal(iptable.AF_INET, af);
       assert.are_equal(32, mlen);
-      assert.are_equal("05:0a:0a:0a:0a", key_str(addr));
+      assert.are_equal("05:0a:0a:0a:0a", bin2str(addr));
     end)
 
     it("zero mask (/0) -> mlen=0", function()
       addr, mlen, af = iptable.tobin("10.11.12.13/0");
       assert.are_equal(iptable.AF_INET, af);
       assert.are_equal(0, mlen);
-      assert.are_equal("05:0a:0b:0c:0d", key_str(addr));
+      assert.are_equal("05:0a:0b:0c:0d", bin2str(addr));
     end)
 
     it("bad mask (<0) -> yields nil values", function()
@@ -62,7 +60,6 @@ describe("iptable module functions: ", function()
 
     it("no mask -> mlen=-1", function()
       addr, mlen, af = iptable.tobin("2f:aa:bb::");
-      print("\nipv6 key "..key_str(addr));
       assert.are_equal(iptable.AF_INET6, af);
       assert.are_equal(-1, mlen);  -- -1 means no mask
       assert.are_equal(17, #addr);
@@ -72,14 +69,14 @@ describe("iptable module functions: ", function()
       addr, mlen, af = iptable.tobin("2f:aa:bb::/128");
       assert.are_equal(iptable.AF_INET6, af);
       assert.are_equal(128, mlen);
-      assert.are_equal("11:00:2f:00:aa:00:bb:00:00:00:00:00:00:00:00:00:00", key_str(addr));
+      assert.are_equal("11:00:2f:00:aa:00:bb:00:00:00:00:00:00:00:00:00:00", bin2str(addr));
     end)
 
     it("zero mask (/0) -> mlen=0", function()
       addr, mlen, af = iptable.tobin("002f:00aa:00bb::/0");
       assert.are_equal(iptable.AF_INET6, af);
       assert.are_equal(0, mlen);
-      assert.are_equal("11:00:2f:00:aa:00:bb:00:00:00:00:00:00:00:00:00:00", key_str(addr));
+      assert.are_equal("11:00:2f:00:aa:00:bb:00:00:00:00:00:00:00:00:00:00", bin2str(addr));
     end)
 
     it("bad mask (<0) -> yields nil values", function()
@@ -95,5 +92,376 @@ describe("iptable module functions: ", function()
       assert.are_equal(nil, mlen);
       assert.are_equal(nil, addr);
     end)
+
+    it("handles empty string arg", function()
+      addr, mlen, af = iptable.tobin("");
+      assert.are_equal(nil, addr);
+    end)
+
+    it("handles nil arg", function()
+      addr, mlen, af = iptable.tobin(nil);
+      assert.are_equal(nil, addr);
+    end)
+
+    it("handles no arg", function()
+      addr, mlen, af = iptable.tobin();
+      assert.are_equal(nil, addr);
+    end)
+
+    it("handles table arg", function()
+      addr, mlen, af = iptable.tobin({});
+      assert.are_equal(nil, addr);
+    end)
+
+    it("handles binary arg", function()
+      addr, mlen, af = iptable.tobin("10.10.10.10");
+      assert.are_equal(5, #addr);
+      addr, mlen, af = iptable.tobin(addr);
+      assert.are_equal(nil, addr);
+    end)
+
+  end)
+end)
+
+describe("iptable.tostr(): ", function()
+
+  expose("module: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+
+    it("host address", function()
+      local ip = "10.10.10.10";
+      addr, mlen, af = iptable.tobin(ip);
+      str = iptable.tostr(addr);
+      assert.are_equal(ip, str);
+    end)
+
+    it("handles empty string arg", function()
+      str = iptable.tostr("");
+      assert.are_equal(nil, str);
+    end)
+
+    it("handles no arg", function()
+      str = iptable.tostr();
+      assert.are_equal(nil, str);
+    end)
+
+    it("handles nil arg", function()
+      str = iptable.tostr(nil);
+      assert.are_equal(nil, str);
+    end)
+
+    it("handles non-string arg", function()
+      str = iptable.tostr(false);
+      assert.are_equal(nil, str);
+
+      str = iptable.tostr({});
+      assert.are_equal(nil, str);
+    end)
+
+    it("handles mangled binaries", function()
+      -- LEN-byte (1st one) should equal total length of the binary string
+      str = iptable.tostr('\x04\x0a\x0a\x0a\x0a');
+      assert.are_equal(nil, str);
+    end)
+
+  end)
+end)
+
+describe("iptable.tolen(): ", function()
+
+  expose("module: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+
+    it("calulates the minimum", function()
+      local mask = "255.0.0.0";
+      addr, mlen, af = iptable.tobin(mask);
+      local mlen = iptable.tolen(addr);
+      assert.are_equal(8, mlen);
+    end)
+
+    it("handles empty string arg", function()
+      local mlen = iptable.tolen("");
+      assert.are_equal(nil, mlen);
+    end)
+
+    it("handles no arg", function()
+      local mlen = iptable.tolen();
+      assert.are_equal(nil, mlen);
+    end)
+
+    it("handles nil arg", function()
+      local mlen = iptable.tolen(nil);
+      assert.are_equal(nil, mlen);
+    end)
+
+    it("handles non-string arg", function()
+      local mlen = iptable.tolen(false);
+      assert.are_equal(nil, mlen);
+
+      mlen = iptable.tolen({});
+      assert.are_equal(nil, mlen);
+    end)
+
+    -- LEN-byte of a mask binary may denotes the nr of non-zero bytes in the
+    -- array rather than its total length (radix tree subtlety)
+    -- So LEN=0 -> all bytes in the array (incl LEN) are zero.
+    -- LEN=1 -> only LEN byte is non-zero -> doesn't check any mask bytes
+    -- LEN=2 -> only first mask byte is non-zero
+    -- LEN=3 -> only first two mask bytes are non-zero, ... etc...
+    it("honors mask's LEN as #non-zero bytes (not array length)", function()
+      local mlen = iptable.tolen('\x00\xff\xff\xf0\x00');
+      assert.are_equal(0, mlen);  -- honor LEN=0
+    end)
+    it("honors mask's LEN as #non-zero bytes (not array length)", function()
+      local mlen = iptable.tolen('\x01\xff\xff\xf0\x00');
+      assert.are_equal(0, mlen);  -- honor LEN=1
+    end)
+    it("honors mask's LEN as #non-zero bytes (not array length)", function()
+      local mlen = iptable.tolen('\x02\xff\xff\xf0\x00');
+      assert.are_equal(8, mlen);  -- honor LEN=2
+    end)
+    it("honors mask's LEN as #non-zero bytes (not array length)", function()
+      local mlen = iptable.tolen('\x03\xff\xff\xf0\x00');
+      assert.are_equal(16, mlen);  -- honor LEN=3
+    end)
+    it("honors mask's LEN as #non-zero bytes (not array length)", function()
+      local mlen = iptable.tolen('\x04\xff\xff\xf0\x00');
+      assert.are_equal(20, mlen);  -- honor LEN=4
+    end)
+    it("honors mask's LEN as #non-zero bytes (not array length)", function()
+      local mlen = iptable.tolen('\x05\xff\xff\xf0\x00');
+      assert.are_equal(20, mlen);  -- honor LEN=5
+    end)
+
+  end)
+end)
+
+describe("iptable.newtork(): ", function()
+
+  expose("ipt: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+
+    it("no mask -> network is itself", function()
+      netw, mlen, af = iptable.network("10.10.10.10");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(-1, mlen);  -- -1 means no mask was provided
+      assert.are_equal("10.10.10.10", netw);
+    end)
+
+    it("max mask -> network is itself", function()
+      netw, mlen, af = iptable.network("10.10.10.10/32");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(32, mlen);  -- -1 means no mask was provided
+      assert.are_equal("10.10.10.10", netw);
+    end)
+
+    it("zero mask -> network is all zeros", function()
+      netw, mlen, af = iptable.network("10.10.10.10/0");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(0, mlen);  -- -1 means no mask was provided
+      assert.are_equal("0.0.0.0", netw);
+    end)
+
+    it("normal mask -> network address", function()
+      netw, mlen, af = iptable.network("10.10.10.10/8");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(8, mlen);  -- -1 means no mask was provided
+      assert.are_equal("10.0.0.0", netw);
+    end)
+
+    it("normal mask -> network address", function()
+      netw, mlen, af = iptable.network("10.10.10.10/30");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(30, mlen);  -- -1 means no mask was provided
+      assert.are_equal("10.10.10.8", netw);
+    end)
+
+    it("yields nils when args absent", function()
+      netw, mlen, af = iptable.network();
+      assert.are_equal(nil, af);
+      assert.are_equal(nil, mlen);  -- -1 means no mask was provided
+      assert.are_equal(nil, netw);
+    end)
+
+    it("yields nils when args non-string", function()
+      netw, mlen, af = iptable.network(true);
+      assert.are_equal(nil, af);
+      assert.are_equal(nil, mlen);  -- -1 means no mask was provided
+      assert.are_equal(nil, netw);
+    end)
+
+    it("yields nils for illegal prefixes", function()
+      netw, mlen, af = iptable.network("10.10.10.10/-1");
+      assert.are_equal(nil, af);
+      assert.are_equal(nil, mlen);  -- -1 means no mask was provided
+      assert.are_equal(nil, netw);
+    end)
+
+    it("yields nils for illegal prefixes", function()
+      netw, mlen, af = iptable.network("10.10.10.10/33");
+      assert.are_equal(nil, af);
+      assert.are_equal(nil, mlen);  -- -1 means no mask was provided
+      assert.are_equal(nil, netw);
+    end)
+
+
+  end)
+end)
+
+describe("iptable.broadcast(): ", function()
+
+  expose("ipt: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+
+    it("no mask -> broadcast is itself", function()
+      addr, mlen, af = iptable.broadcast("10.10.10.10");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(-1, mlen);  -- -1 means no mask was provided
+      assert.are_equal("10.10.10.10", addr);
+    end)
+
+    it("max mask -> broadcast is itself", function()
+      addr, mlen, af = iptable.broadcast("10.10.10.10/32");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(32, mlen);
+      assert.are_equal("10.10.10.10", addr);
+    end)
+
+    it("zero mask -> broadcast is all broadcast", function()
+      addr, mlen, af = iptable.broadcast("10.10.10.10/0");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(0, mlen);
+      assert.are_equal("255.255.255.255", addr);
+    end)
+
+    it("normal mask -> broadcast is subnet broadcast", function()
+      addr, mlen, af = iptable.broadcast("10.10.10.10/30");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(30, mlen);
+      assert.are_equal("10.10.10.11", addr);
+    end)
+
+    it("normal mask -> broadcast is subnet broadcast", function()
+      addr, mlen, af = iptable.broadcast("10.10.10.10/8");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(8, mlen);
+      assert.are_equal("10.255.255.255", addr);
+    end)
+
+    it("normal mask -> broadcast is subnet broadcast", function()
+      addr, mlen, af = iptable.broadcast("10.11.12.13/27");
+      assert.are_equal(iptable.AF_INET, af);
+      assert.are_equal(27, mlen);
+      assert.are_equal("10.11.12.31", addr);
+    end)
+
+    it("yields nils on non-string args", function()
+      addr, mlen, af = iptable.broadcast(true);
+      assert.are_equal(nil, af);
+      assert.are_equal(nil, mlen);
+      assert.are_equal(nil, addr);
+    end)
+
+    it("yields nils on non-string args", function()
+      addr, mlen, af = iptable.broadcast({});
+      assert.are_equal(nil, af);
+      assert.are_equal(nil, mlen);
+      assert.are_equal(nil, addr);
+    end)
+
+    it("yields nils on non-string args", function()
+      addr, mlen, af = iptable.broadcast(nil);
+      assert.are_equal(nil, af);
+      assert.are_equal(nil, mlen);
+      assert.are_equal(nil, addr);
+    end)
+
+    it("yields nils on absent args", function()
+      addr, mlen, af = iptable.broadcast();
+      assert.are_equal(nil, af);
+      assert.are_equal(nil, mlen);
+      assert.are_equal(nil, addr);
+    end)
+
+  end)
+end)
+
+
+describe("iptable.hosts(): ", function()
+
+  expose("ipt: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+
+    -- unless specified, inclusive is false
+    -- so no network/broadcast addresses are included.
+    it("no mask, non-inclusive -> iteration yields 0 hosts", function()
+      cnt = 0;
+      for host in iptable.hosts("10.10.10.10") do
+        cnt = cnt + 1;
+      end
+      assert.are_equal(0, cnt);
+    end)
+
+    it("no mask, inclusive -> iteration yields 1 hosts", function()
+      cnt = 0;
+      for host in iptable.hosts("10.10.10.10", true) do
+        cnt = cnt + 1;
+      end
+      assert.are_equal(1, cnt);
+    end)
+
+    it("max mask, non-inclusive -> iteration yields 0 hosts", function()
+      cnt = 0;
+      for host in iptable.hosts("10.10.10.10/32") do
+        cnt = cnt + 1;
+      end
+      assert.are_equal(0, cnt);
+    end)
+
+    it("max mask, inclusive -> iteration yields 1 host", function()
+      cnt = 0;
+      for host in iptable.hosts("10.10.10.10/32", true) do
+        cnt = cnt + 1;
+      end
+      assert.are_equal(1, cnt);
+    end)
+
+    it("max network, inclusive -> iteration stops at all broadcast", function()
+      cnt = 0;
+      for host in iptable.hosts("255.255.255.252/30", true) do
+        cnt = cnt + 1;
+      end
+      assert.are_equal(4, cnt);
+    end)
+
+    it("max network, non-inclusive -> iterates hostid's only ", function()
+      cnt = 0;
+      for host in iptable.hosts("255.255.255.252/30", false) do
+        cnt = cnt + 1;
+      end
+      assert.are_equal(2, cnt);
+    end)
+
+    it("some network, non-inclusive -> iterates hostid's only ", function()
+      cnt = 0;
+      for host in iptable.hosts("10.11.12.13/24", false) do
+        cnt = cnt + 1;
+      end
+      assert.are_equal(254, cnt);
+    end)
+
+    it("some network, inclusive -> iterates all ip's", function()
+      cnt = 0;
+      for host in iptable.hosts("10.11.12.13/24", true) do
+        cnt = cnt + 1;
+      end
+      assert.are_equal(256, cnt);
+    end)
+
   end)
 end)

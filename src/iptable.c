@@ -32,7 +32,7 @@ key_bystr(char *s, int *mlen, int *af)
     // - mlen = -1 when no prefix length was supplied
     // on failure returns NULL and mlen is undefined
 
-    uint8_t *addr;                                // the address as key ptr
+    uint8_t *addr = NULL;                         // the address as key ptr
     *mlen = -1;                                   // the mask as length
     *af = AF_UNSPEC;
 
@@ -42,6 +42,7 @@ key_bystr(char *s, int *mlen, int *af)
 
     if (s == NULL) return NULL;                   // need prefix string
     if (strlen(s) > IP6_PFXSTRLEN) return NULL;   // invalid string length
+    if (strlen(s) < 1) return NULL;               // invalid string length
 
     slash = strchr(s, '/');                       // pick up mask, if any
     if (slash) {
@@ -146,7 +147,7 @@ int key_tolen(void *key)
     for(; --size > 0 && *cp == 0xff; cnt += 8, cp++)
         ;
 
-    if (size == 0) return cnt;               // got them all
+    if (size <= 0) return cnt;               // got them all
 
     // count 1-bits from MSB to LSB stopping at first 0-bit
     for (uint8_t m=0x80; m > 0 && *cp & m; m = m >> 1, cnt++)
@@ -159,6 +160,7 @@ const char *
 key_tostr(void *k, char *s)
 {
     // uses void *k so rn-keys (char *) are handled as well
+    // user supplied buffer s must be large enough to hold an IPv6 prefix
     uint8_t *key = k;
 
     if (s == NULL || k == NULL) return NULL;
@@ -200,7 +202,23 @@ key_decr(void *key)
 }
 
 int
-key_masked(void *key, void *mask)
+key_invert(void *key)
+{
+  // invert a key, usefull for a mask.  LEN-byte does not change, so that
+  // disrupts the idea that, for a mask, the LEN-byte indicates the number of
+  // non-zero's bytes in the array, counting from the left.
+  uint8_t *k = key;
+  int klen;
+
+  if (k == NULL) return 0;
+  klen = IPT_KEYLEN(k);
+  while(--klen > 0 && k++) *k = ~*k;
+
+  return 1;
+}
+
+int
+key_network(void *key, void *mask)
 {
     // apply mask to key, 1 on success, 0 on failure
     // - a mask's length may indicate the num of non-zero bytes instead of the
@@ -224,6 +242,30 @@ key_masked(void *key, void *mask)
 }
 
 int
+key_broadcast(void *key, void *mask)
+{
+    // apply (xor) inv.mask to key, 1 on success, 0 on failure
+    // - a mask's length may indicate the num of non-zero bytes instead of the
+    //   entire length of the mask byte array.  Such 'missing' bytes are taken
+    //   to be 0xff (some radix tree masks seem to do this).
+    int klen, mlen;
+    uint8_t *k = key, *m = mask;
+
+    // sanity check
+    if (k == NULL || m == NULL) return 0;
+    klen = IPT_KEYLEN(k);
+    mlen = IPT_KEYLEN(m);
+    k = IPT_KEYPTR(k);      // skip LEN byte
+    m = IPT_KEYPTR(m);      // skip LEN byte
+
+    if (klen < mlen) return 0;  // donot overrun key
+    for(mlen--; --klen; mlen--)
+        *(k++) |= mlen > 0 ? ~*(m++) : 0xff;
+
+    return 1;
+}
+
+int
 key_cmp(void *a, void *b)
 {
     // -1 if a<b, 0 if a==b, 1 if a>b, -2 on errors
@@ -233,7 +275,7 @@ key_cmp(void *a, void *b)
     keylen = IPT_KEYLEN(aa);
     if (keylen != IPT_KEYLEN(bb)) return -2;       // different AF_families
 
-    while(--keylen > 0 && (*aa++ == *bb++))        // includes len byte in cmp
+    for(; --keylen > 0 && *aa==*bb; aa++, bb++)
         ;
 
     if (*aa < *bb) return -1;
@@ -382,7 +424,7 @@ tbl_get(table_t *t, char *s)
     mask = key_bylen(af, mlen);
 
     if (mask == NULL) goto bail;
-    if (! key_masked(addr, mask)) goto bail;
+    if (! key_network(addr, mask)) goto bail;
 
     entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match for pfx
 
@@ -413,7 +455,7 @@ tbl_set(table_t *t, char *s, void *v, void *pargs)
     else goto bail;
     mask = key_bylen(af, mlen);
     if (mask == NULL) goto bail;
-    if (! key_masked(addr, mask)) goto bail;
+    if (! key_network(addr, mask)) goto bail;
 
     entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
     if (entry) {
@@ -465,7 +507,7 @@ tbl_del(table_t *t, char *s, void *pargs)
     else goto bail;
     mask = key_bylen(af, mlen);
     if (mask == NULL) goto bail;
-    if (! key_masked(addr, mask)) goto bail;
+    if (! key_network(addr, mask)) goto bail;
 
     if ((e = (entry_t *)head->rnh_deladdr(addr, mask, &head->rh))) {
       if (KEY_IS_IP6(addr)) t->count6--;

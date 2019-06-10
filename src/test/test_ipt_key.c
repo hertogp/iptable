@@ -430,6 +430,70 @@ test_key_tolen_good(void)
     mlen = key_tolen(addr);
     mu_eq(0, mlen, "%i");
 
+    // rn->mask may have LEN set to nr of non-zero bytes
+    // in the array, which includes the LEN byte itself.
+    // The tests below check this behaviour for key_tolen
+
+    // count only the non-zero bytes?
+    // LEN = 0 bytes
+    *(addr+0) = 0x00;  // LEN=0 -> consider zero mask bytes (even LEN is 0)
+    *(addr+1) = 0xff;
+    *(addr+2) = 0xff;
+    *(addr+3) = 0xff;
+    *(addr+4) = 0xff;
+    mlen = key_tolen(addr);
+    mu_eq(0, mlen, "%i");
+
+    // count only the non-zero bytes?
+    // LEN = 1 byte
+    *(addr+0) = 0x01;  // LEN=1 -> consider zero mask bytes (only LEN not 0)
+    *(addr+1) = 0xff;
+    *(addr+2) = 0xff;
+    *(addr+3) = 0xff;
+    *(addr+4) = 0xff;
+    mlen = key_tolen(addr);
+    mu_eq(0, mlen, "%i");
+
+    // count only the non-zero bytes?
+    // LEN = 2 bytes
+    *(addr+0) = 0x02; // LEN=2 -> consider first mask byte only
+    *(addr+1) = 0xff;
+    *(addr+2) = 0xff;
+    *(addr+3) = 0xff;
+    *(addr+4) = 0xff;
+    mlen = key_tolen(addr);
+    mu_eq(8, mlen, "%i");
+
+    // count only the non-zero bytes?
+    // LEN = 2 bytes
+    *(addr+0) = 0x03; // LEN=3 -> consider first two mask bytes
+    *(addr+1) = 0xff;
+    *(addr+2) = 0xff;
+    *(addr+3) = 0xff;
+    *(addr+4) = 0xff;
+    mlen = key_tolen(addr);
+    mu_eq(16, mlen, "%i");
+
+    // count only the non-zero bytes?
+    // LEN = 4 bytes
+    *(addr+0) = 0x04; // LEN=4 -> consider first 3 mask bytes
+    *(addr+1) = 0xff;
+    *(addr+2) = 0xff;
+    *(addr+3) = 0xff;
+    *(addr+4) = 0xff;
+    mlen = key_tolen(addr);
+    mu_eq(24, mlen, "%i");
+
+    // count only the non-zero bytes?
+    // LEN = 5 bytes
+    *(addr+0) = 0x05;  // LEN=5 -> consider first 4 mask bytes
+    *(addr+1) = 0xff;
+    *(addr+2) = 0xff;
+    *(addr+3) = 0xff;
+    *(addr+4) = 0xff;
+    mlen = key_tolen(addr);
+    mu_eq(32, mlen, "%i");
+
     free(addr);
 }
 
@@ -661,6 +725,18 @@ test_key_cmp_ipv4_good(void)
     *a = *b = IP4_KEYLEN;
     mu_true(key_cmp(a, b) == 0);
 
+
+    // a == b
+    *(a+0) = *(b+0) = 0x05;
+    *(a+1) = *(b+1) = 0x0a;
+    *(a+2) = *(b+2) = 0x0b;
+    *(a+3) = *(b+3) = 0x0c;
+    *(a+4) = *(b+4) = 0x00;
+    *(b+3) = 0x0d;
+
+    mu_true(key_cmp(a, b) < 0);
+    mu_true(key_cmp(b, a) > 0);
+
     free(a);
     free(b);
 }
@@ -709,7 +785,7 @@ test_key_masked_ipv4_good(void)
     *(a+3) = *(m+3) = 0xff;
     *(a+4) = 0xff;
     *(m+4) = 0x00;
-    mu_true(key_masked(a, m));
+    mu_true(key_network(a, m));
     mu_eq(0xff, *(a+1), "%i");
     mu_eq(0xff, *(a+2), "%i");
     mu_eq(0xff, *(a+3), "%i");
@@ -724,7 +800,7 @@ test_key_masked_ipv4_good(void)
     *(m+2) = 0xff;
     *(m+3) = 0xff;
     *(m+4) = 0xff;
-    mu_true(key_masked(a, m));
+    mu_true(key_network(a, m));
     mu_eq(0x00, *(a+1), "%i");
     mu_eq(0xff, *(a+2), "%i");
     mu_eq(0xff, *(a+3), "%i");
@@ -739,7 +815,7 @@ test_key_masked_ipv4_good(void)
     *(m+2) = 0x00;
     *(m+3) = 0xff;
     *(m+4) = 0xff;
-    mu_true(key_masked(a, m));
+    mu_true(key_network(a, m));
     mu_eq(0xff, *(a+1), "%i");
     mu_eq(0x00, *(a+2), "%i");
     mu_eq(0xff, *(a+3), "%i");
@@ -755,7 +831,7 @@ test_key_masked_ipv4_good(void)
     *(m+2) = 0xf0;
     *(m+3) = 0x0f;
     *(m+4) = 0xff;
-    mu_true(key_masked(a, m));
+    mu_true(key_network(a, m));
     mu_eq(0xff, *(a+1), "%i");
     mu_eq(0xf0, *(a+2), "%i");
     mu_eq(0x0f, *(a+3), "%i");
@@ -771,7 +847,7 @@ test_key_masked_ipv4_good(void)
     *(m+2) = 0xff;
     *(m+3) = 0xff;  // not used, will be assumed zero's
     *(m+4) = 0xff;  // dito
-    mu_true(key_masked(a, m));
+    mu_true(key_network(a, m));
     mu_eq(0xff, *(a+1), "%i");
     mu_eq(0xff, *(a+2), "%i");
     mu_eq(0x00, *(a+3), "%i");

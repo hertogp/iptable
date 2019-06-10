@@ -67,7 +67,9 @@ int key_tolen(void *);
 int key_incr(void *);
 int key_decr(void *);
 int key_cmp(void *, void *);
-int key_masked(void *, void *);
+int key_network(void *, void *);
+int key_broadcast(void *, void *);
+int key_invert(void *);
 
 // -- rdx funcs
 
