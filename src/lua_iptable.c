@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <math.h>
 
 #include "lua.h"
 #include "lualib.h"
@@ -38,6 +39,7 @@ static int ipt_new(lua_State *);
 static int ipt_tobin(lua_State *);
 static int ipt_tostr(lua_State *);
 static int ipt_tolen(lua_State *);
+static int ipt_numhosts(lua_State *);
 static int ipt_network(lua_State *);
 static int ipt_broadcast(lua_State *);
 static int ipt_iter_hosts(lua_State *);
@@ -61,6 +63,7 @@ static const struct luaL_Reg funcs [] = {
     {"tobin", ipt_tobin},
     {"tostr", ipt_tostr},
     {"tolen", ipt_tolen},
+    {"numhosts", ipt_numhosts},
     {"network", ipt_network},
     {"broadcast", ipt_broadcast},
     {"hosts", ipt_iter_hosts},
@@ -250,6 +253,33 @@ ipt_tolen(lua_State *L)
     mlen = key_tolen(buf);
     lua_pushinteger(L, mlen);
 
+    dbg_stack("out(1) ==>");
+
+    return 1;
+}
+
+static int
+ipt_numhosts(lua_State *L)
+{
+    // iptable.numhosts(strKey) <-- [str]
+    dbg_stack("inc(.) <--");
+
+    uint8_t addr[KEYBUFLEN_MAX];
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1, hlen = 0;
+    const char *pfx = NULL;
+
+    pfx = check_pfxstr(L, 1, &len);
+    if (! key_bystr(pfx, &mlen, &af, addr)) return 0;
+
+    if (af == AF_INET)
+        hlen = mlen < 0 ? 0 : IP4_MAXMASK - mlen;
+    else if (af == AF_INET6)
+        hlen = mlen < 0 ? 0 : IP6_MAXMASK - mlen;
+    else return 0;
+
+    lua_pushinteger(L, pow(2,hlen));
+    dbg_msg("hlen is %d", hlen);
     dbg_stack("out(1) ==>");
 
     return 1;

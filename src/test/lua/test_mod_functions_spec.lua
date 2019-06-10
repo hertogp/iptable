@@ -463,3 +463,36 @@ describe("iptable.hosts(): ", function()
 
   end)
 end)
+
+describe("iptable.numhosts(pfx): ", function()
+
+  expose("ipt: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+
+    it("no mask means 1 host", function()
+      assert.are_equal(1, iptable.numhosts("1.1.1.1"));
+    end)
+
+    it("/32 mask means 1 host", function()
+      assert.are_equal(1, iptable.numhosts("0.0.0.0/32"));
+    end)
+
+    it("/0 mask means a lot of hosts", function()
+      assert.are_equal(2^32, iptable.numhosts("0.0.0.0/0"));
+    end)
+
+    -- ipv6 may represent a lot of hosts ...
+    it("62 bits is the largets working nr right now", function()
+      hbits = 62;
+      assert.are_equal(2^hbits, iptable.numhosts("2f::/"..(128-hbits)));
+    end)
+
+    -- for 128 hostbits, it definitely fails!
+    it("/0 mask means a lot more host for ipv6", function()
+      assert.are_equal(2^128, iptable.numhosts("2f::/0"));
+    end)
+
+  end)
+end)
+
