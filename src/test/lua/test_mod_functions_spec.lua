@@ -73,10 +73,10 @@ describe("iptable.tobin(): ", function()
     end)
 
     it("zero mask (/0) -> mlen=0", function()
-      addr, mlen, af = iptable.tobin("002f:00aa:00bb::/0");
+      addr, mlen, af = iptable.tobin("003f:cc:dd:ee::/0");
       assert.are_equal(iptable.AF_INET6, af);
       assert.are_equal(0, mlen);
-      assert.are_equal("11:00:2f:00:aa:00:bb:00:00:00:00:00:00:00:00:00:00", bin2str(addr));
+      assert.are_equal("11:00:3f:00:cc:00:dd:00:ee:00:00:00:00:00:00:00:00", bin2str(addr));
     end)
 
     it("bad mask (<0) -> yields nil values", function()
@@ -130,10 +130,8 @@ describe("iptable.tostr(): ", function()
     assert.is_truthy(iptable);
 
     it("host address", function()
-      local ip = "10.10.10.10";
-      addr, mlen, af = iptable.tobin(ip);
-      str = iptable.tostr(addr);
-      assert.are_equal(ip, str);
+      str = iptable.tostr('\x05\x0a\x0a\x0a\x0a');
+      assert.are_equal("10.10.10.10", str);
     end)
 
     it("handles empty string arg", function()
@@ -407,7 +405,7 @@ describe("iptable.hosts(): ", function()
       assert.are_equal(0, cnt);
     end)
 
-    it("no mask, inclusive -> iteration yields 1 hosts", function()
+    it("no mask, inclusive -> iteration yields 1 host", function()
       cnt = 0;
       for host in iptable.hosts("10.10.10.10", true) do
         cnt = cnt + 1;

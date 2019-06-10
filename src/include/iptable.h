@@ -28,7 +28,6 @@ typedef struct table_t {
 #define IPT_KEYOFFSET 8       // 8 bit offset to 1st byte of key
 #define IPT_KEYLEN(k) (*k)    // 1st byte is 5 or 17 (includes itself)
 #define IPT_KEYPTR(k) (k+1)   // 2nd byte starts actual key
-#define IPT_KEYBUFLEN 17      // buffer size to fit both ipv4 and ipv6
 
 #define IP4_KEYLEN 4
 #define IP4_MAXMASK 32
@@ -44,6 +43,8 @@ typedef struct table_t {
 #define KEY_IS_IP4(k) (*((uint8_t *)(k))==(1+IP4_KEYLEN))
 #define KEY_IS_IP6(k) (*((uint8_t *)(k))==(1+IP6_KEYLEN))
 #define KEY_AF_FAM(k) (KEY_IS_IP4(k) ? AF_INET : KEY_IS_IP6(k) ? AF_INET6 : AF_UNSPEC)
+#define KEYBUFLEN_MAX 17
+#define KEYBUFLEN_FAM(af) (af==AF_INET ? (uint8_t)(1+IP4_KEYLEN) : af==AF_INET6 ? (uint8_t)(1+IP6_KEYLEN) : 0x00)
 
 // radix tree macros
 #define RDX_ISLEAF(rn) (rn->rn_bit < 0)
@@ -64,8 +65,7 @@ typedef struct table_t {
 
 uint8_t *key_alloc(int);
 uint8_t *key_copy(uint8_t *);
-uint8_t *key_bystr(char *, int *, int *);
-/* uint8_t *key_bylen(int, int); */
+uint8_t *key_bystr(const char *, int *, int *, uint8_t *);
 uint8_t *key_bylen(int, int, uint8_t *);
 const char *key_tostr(void *, char *);
 int key_tolen(void *);
@@ -84,12 +84,12 @@ struct radix_node *rdx_next(struct radix_node *);
 
 // -- tbl funcs
 
-int tbl_set(table_t *, char *, void *, void *);
-int tbl_del(table_t *, char *, void *);
+int tbl_set(table_t *, const char *, void *, void *);
+int tbl_del(table_t *, const char *, void *);
 int tbl_walk(table_t *, walktree_f_t *, void *);
 table_t *tbl_create(purge_f_t *);
-entry_t * tbl_get(table_t *, char *);
-entry_t * tbl_lpm(table_t *, char *);
+entry_t * tbl_get(table_t *, const char *);
+entry_t * tbl_lpm(table_t *, const char *);
 void tbl_destroy(table_t **, void *);
 
 #endif

@@ -44,27 +44,29 @@ key_alloc(int af)
 uint8_t *
 key_copy(uint8_t *src)
 {
+    // assumes proper LEN-byte in the src byte array
     uint8_t *key = key_alloc(KEY_AF_FAM(src));
     if (key == NULL) return NULL;
     memcpy(key, src, IPT_KEYLEN(key));
 
     return key;
 }
-uint8_t *
-key_bystr(char *s, int *mlen, int *af)
-{
-    // on success, sets mlen, af & returns a ptr to key
-    // - mlen = -1 when no prefix length was supplied
-    // on failure returns NULL and mlen is undefined
 
-    uint8_t *addr = NULL;                         // the address as key ptr
+uint8_t *
+key_bystr(const char *s, int *mlen, int *af, uint8_t *dst)
+{
+    // Store string s' binary key in dst. Returns NULL on failure
+    // Also sets mlen and  af. mlen=-1 when no mask was supplied
+    // assumes dst -> uint8_t dst[KEYBUFLEN_MAX], to fit both ipv4/ipv6
+
     *mlen = -1;                                   // the mask as length
     *af = AF_UNSPEC;
+    char buf[IP6_PFXSTRLEN];
 
     int a, b, c, d, n;
     char *slash;
-    // char buf[1 + IP6_PFXSTRLEN];
 
+    if (dst == NULL) return NULL;                 // lame dst buffer check
     if (s == NULL) return NULL;                   // need prefix string
     if (strlen(s) > IP6_PFXSTRLEN) return NULL;   // invalid string length
     if (strlen(s) < 1) return NULL;               // invalid string length
@@ -78,27 +80,24 @@ key_bystr(char *s, int *mlen, int *af)
 
     if (STR_IS_IP6(s)) {
         if (*mlen > IP6_MAXMASK) return NULL;
-        addr = key_alloc(AF_INET6);
-        if (addr == NULL) return NULL;            // mem error
-        if (slash) *slash = '\0';                 // just for inet_pton
-        inet_pton(AF_INET6, s, IPT_KEYPTR(addr));
-        if (slash) *slash = '/';                  // restore s
+        strncpy(buf, s, INET6_ADDRSTRLEN);
+        if(slash) buf[slash - s]='\0';
+        IPT_KEYLEN(dst) = KEYBUFLEN_FAM(AF_INET6);
+        inet_pton(AF_INET6, buf, IPT_KEYPTR(dst));
         *af = AF_INET6;
-        return addr;
+        return dst;
 
     } else {
-        // use scanf to support normal shorthand notation:
-        // - 10.10/16 means 10.10.0.0/16, *not* 10.0.0.10/16
+        // use scanf to support shorthand notation: 10.10/16 is 10.10.0.0/16
         // %i scans hex (0x..), octal (0..) or base 10 ([1-9]..)
-        // -> so 1.2.3.008 is actually an illegal octal number ...
-
+        if (strlen(s) > IP4_PFXSTRLEN) return NULL;
         if (*mlen > IP4_MAXMASK) return NULL;
         if (!isdigit(*s)) return NULL; // must start with 0x, 0, or [1-9]
 
         a = b = c = d = n = 0;
         sscanf(s, "%i%n.%i%n.%i%n.%i%n", &a, &n, &b, &n, &c, &n, &d, &n);
         if(n > 0 && *(s+n) != '/' && *(s+n) != '\0')
-            return NULL; // malformed digits
+            return NULL; // malformed digits (or too many)
 
         // check validity of digits
         if(a < 0 || a > 255) return NULL;
@@ -106,53 +105,23 @@ key_bystr(char *s, int *mlen, int *af)
         if(c < 0 || c > 255) return NULL;
         if(d < 0 || d > 255) return NULL;
 
-        addr = key_alloc(AF_INET);
-        if (addr == NULL) return NULL;                 // mem error
-        *(addr+1) = a;  // bigendian, so a goes first
-        *(addr+2) = b;
-        *(addr+3) = c;
-        *(addr+4) = d;
+        IPT_KEYLEN(dst) = KEYBUFLEN_FAM(AF_INET);
+        *(dst+1) = a;  // bigendian, so a goes first
+        *(dst+2) = b;
+        *(dst+3) = c;
+        *(dst+4) = d;
         *af = AF_INET;
-        return addr;
+        return dst;
     }
 
     return NULL;  // failed
 }
 
-/* uint8_t * */
-/* key_bylen(int af, int mlen) */
-/* { */
-/*     // returns ptr to key for AF_family when succesfull, NULL otherwise */
-/*     uint8_t *key, *cp; */
-/*     int size; */
-
-/*     // check: valid mask length, corresponding to valid AF_family */
-/*     if(af == AF_INET6) { */
-/*         mlen = mlen == -1 ? IP6_MAXMASK : mlen; */
-/*         if (mlen < 0 || mlen > IP6_MAXMASK) return NULL; */
-/*     } else if (af == AF_INET) { */
-/*         mlen = mlen == -1 ? IP4_MAXMASK : mlen; */
-/*         if (mlen < 0 || mlen > IP4_MAXMASK) return NULL; */
-/*     } else return NULL; */
-
-/*     key = key_alloc(af); */
-/*     if (key == NULL) return NULL; */
-
-/*     size = IPT_KEYLEN(key); */
-/*     cp = IPT_KEYPTR(key); */
-/*     while (--size > 0) {                                  // set all key bytes */
-/*         *(cp++) = mlen > 8 ? 0xff : ~((1 << (8 - mlen))-1); */
-/*         mlen = mlen > 8 ? mlen - 8 : 0; */
-/*     } */
-
-/*     return key;  // caller must free(key) */
-/* } */
-
 uint8_t *
 key_bylen(int af, int mlen, uint8_t *buf)
 {
     // create key by masklength, store result in buf.  Retuns NULL on failure.
-    // buf is typically uint8_t buf[IPT_KEYBUFLEN]
+    // buf is typically uint8_t buf[KEYBUFLEN_MAX]
     uint8_t *cp;
     int keylen;
 
@@ -332,30 +301,7 @@ key_cmp(void *a, void *b)
     return 0;
 }
 
-// -- TABLE funcs
-
-table_t *
-tbl_create(purge_f_t *fp)
-{
-    // create a new iptable w/ 2 radix trees
-    table_t *tbl = NULL;
-
-    tbl = calloc(sizeof(*tbl), 1);  // sets count's to zero & ptr's to NULL
-    if (tbl == NULL) return NULL;
-
-    if (rn_inithead((void **)&tbl->head4, 8) == 0) { // IPv4 radix tree
-        free(tbl);
-        return NULL;
-    }
-    if (rn_inithead((void **)&tbl->head6, 8) == 0) { // IPv6 radix tree
-        rn_detachhead((void **)&tbl->head4);
-        free(tbl);
-        return NULL;
-    }
-    tbl->purge = fp;
-
-    return tbl;
-}
+// radix node functions
 
 int
 rdx_flush(struct radix_node *rn, void *args)
@@ -420,6 +366,32 @@ rdx_next(struct radix_node *rn)
     return rn;
 }
 
+// tbl functions
+
+table_t *
+tbl_create(purge_f_t *fp)
+{
+    // create a new iptable w/ 2 radix trees
+    table_t *tbl = NULL;
+
+    tbl = calloc(sizeof(*tbl), 1);  // sets count's to zero & ptr's to NULL
+    if (tbl == NULL) return NULL;
+
+    if (rn_inithead((void **)&tbl->head4, 8) == 0) { // IPv4 radix tree
+        free(tbl);
+        return NULL;
+    }
+    if (rn_inithead((void **)&tbl->head6, 8) == 0) { // IPv6 radix tree
+        rn_detachhead((void **)&tbl->head4);
+        free(tbl);
+        return NULL;
+    }
+    tbl->purge = fp;
+
+    return tbl;
+}
+
+
 int
 tbl_walk(table_t *t, walktree_f_t *f, void *fargs)
 {
@@ -454,145 +426,132 @@ tbl_destroy(table_t **t, void *pargs)
 }
 
 entry_t *
-tbl_get(table_t *t, char *s)
+tbl_get(table_t *t, const char *s)
 {
     // An exact lookup for addr/mask, missing mask is set to AF's max mask
-    uint8_t *addr = NULL;
-    uint8_t mask[IPT_KEYBUFLEN];
+    // uint8_t *addr = NULL;
+    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t mask[KEYBUFLEN_MAX];
     int mlen = -1, af = AF_UNSPEC;
     struct radix_node_head *head = NULL;
     entry_t *entry = NULL;
 
-    if (t == NULL) return NULL;
-
     // get head, af, addr, mask, or bail on error
-    addr = key_bystr(s, &mlen, &af);
-    if (addr == NULL) goto bail;
-    if (KEY_IS_IP6(addr)) head = t->head6;
-    else if (KEY_IS_IP4(addr)) head = t->head4;
-    else goto bail;
+    if (t == NULL || s == NULL) return NULL;
+    if (! key_bystr(s, &mlen, &af, addr)) return NULL;
 
-    if (! key_bylen(af, mlen, mask)) goto bail;
-    if (! key_network(addr, mask)) goto bail;
+    if (af == AF_INET) head = t->head4;
+    else if (af == AF_INET6) head = t->head6;
+    else return NULL;
+
+    if (! key_bylen(af, mlen, mask)) return NULL;
+    if (! key_network(addr, mask)) return NULL;
 
     entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match for pfx
 
-bail:
-    if (addr) free(addr);
     return entry;
 }
 
 int
-tbl_set(table_t *t, char *s, void *v, void *pargs)
+tbl_set(table_t *t, const char *s, void *v, void *pargs)
 {
     // A missing mask is taken to mean AF's max mask
     // - applies mask before searching/setting the tree
-    uint8_t *addr = NULL;
-    uint8_t mask[IPT_KEYBUFLEN];
+    /* uint8_t *addr = NULL; */
+
+    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX], *treekey = NULL;
     int mlen = -1, af = AF_UNSPEC;
     entry_t *entry = NULL;
     struct radix_node *rn = NULL;
     struct radix_node_head *head = NULL;
 
-    if (t == NULL) return 0;
-
     // get head, af, addr, mask, or bail on error
-    addr = key_bystr(s, &mlen, &af);
-    if (addr == NULL) goto bail;
-    if (KEY_IS_IP6(addr)) head = t->head6;
-    else if (KEY_IS_IP4(addr)) head = t->head4;
-    else goto bail;
+    if (t == NULL || s == NULL) return 0;
+    if (! key_bystr(s, &mlen, &af, addr)) return 0;
+    if (! key_bylen(af, mlen, mask)) return 0;
+    if (! key_network(addr, mask)) return 0;
 
-    if (! key_bylen(af, mlen, mask)) goto bail;
-
-    if (! key_network(addr, mask)) goto bail;
+    if (af == AF_INET) head = t->head4;
+    else if (af == AF_INET6) head = t->head6;
+    else return 0;
 
     entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
     if (entry) {
         // update existing entry
-        free(addr);
         if(entry->value) t->purge(pargs, &entry->value); // free userdata
-        entry->value = v;                                // ptr-> new userdata
-        return 1;
+        entry->value = v;                                // set new userdata
 
     } else {
-        // add new entry, donot free key
-        if (!(entry = calloc(sizeof(*entry),1)))  // init'd to all zeros
-            goto bail;
+        // add new entry, need to donate a new key for the tree to keep
+        if (!(entry = calloc(sizeof(*entry),1))) return 0;
         entry->value = v;
-        rn = head->rnh_addaddr(addr, mask, &head->rh, entry->rn);
-        if (!rn) goto bail;
-        // update count
-        if (KEY_IS_IP6(addr)) t->count6++;
-        else t->count4++;
+        treekey = key_copy(addr);
 
-        return 1;
+        rn = head->rnh_addaddr(treekey, mask, &head->rh, entry->rn);
+        if (!rn) {
+            t->purge(pargs, &entry->value);
+            free(entry);
+            free(treekey); // t'was not stored
+            return 0;
+        }
+
+        if (af == AF_INET) t->count4++;
+        else t->count6++;
     }
 
-bail:
-    if (addr) free(addr);
-    if (entry && entry->value) t->purge(pargs, &entry->value);
-    if (entry) free(entry);
-    return 0;
+    return 1;
 }
 
 int
-tbl_del(table_t *t, char *s, void *pargs)
+tbl_del(table_t *t, const char *s, void *pargs)
 {
     // Deletion requires exact match on prefix
     // - a missing mask is set to AF's max mask
     entry_t *e;
     struct radix_node_head *head = NULL;
-    uint8_t *addr = NULL;
-    uint8_t mask[IPT_KEYBUFLEN];
-    int mlen = -1, rv = 0, af = AF_UNSPEC;
-    if (t == NULL) return 0;
+    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX];
+    int mlen = -1, af = AF_UNSPEC;
 
     // get head, af, addr, mask, or bail on error
-    addr = key_bystr(s, &mlen, &af);
-    if (addr == NULL) goto bail;
-    if (KEY_IS_IP6(addr)) head = t->head6;
-    else if (KEY_IS_IP4(addr)) head = t->head4;
-    else goto bail;
+    if (t == NULL || s == NULL) return 0;
+    if (! key_bystr(s, &mlen, &af, addr)) return 0;
+    if (! key_bylen(af, mlen, mask)) return 0;
+    if (! key_network(addr, mask)) return 0;
 
-    if (! key_bylen(af, mlen, mask)) goto bail;
+    if (af == AF_INET) head = t->head4;
+    else if (af == AF_INET6) head = t->head6;
+    else return 0;
 
-    if (! key_network(addr, mask)) goto bail;
+    e = (entry_t *)head->rnh_deladdr(addr, mask, &head->rh);
+    if (! e) return 0;
 
-    if ((e = (entry_t *)head->rnh_deladdr(addr, mask, &head->rh))) {
-      if (KEY_IS_IP6(addr)) t->count6--;
-      else t->count4--;
-      free(e->rn[0].rn_key);
-      if(e->value) t->purge(pargs, &e->value);
-      free(e);
-      rv = 1;
-    }
+    if (af == AF_INET) t->count4--;
+    else t->count6--;
 
-bail:
-    if (addr) free(addr);
-    return rv;
+    free(e->rn[0].rn_key);                      // free the key
+    if(e->value) t->purge(pargs, &e->value);    // free the user data
+    free(e);                                    // free the entry
+
+    return 1;
 }
 
 entry_t *
-tbl_lpm(table_t *t, char *s)
+tbl_lpm(table_t *t, const char *s)
 {
     // longest prefix match for address (a /mask is ignored)
     struct radix_node_head *head = NULL;
-    uint8_t *addr = NULL;
+    uint8_t addr[KEYBUFLEN_MAX];
     int mlen = -1, af = AF_UNSPEC;
     entry_t *rv = NULL;
 
-    if (t == NULL) return 0;
+    if (t == NULL || s == NULL) return NULL;
+    if (! key_bystr(s, &mlen, &af, addr)) return NULL;
 
-    addr = key_bystr(s, &mlen, &af);
-    if (addr == NULL) goto bail;
-    if (KEY_IS_IP6(addr)) head = t->head6;
-    else if (KEY_IS_IP4(addr)) head = t->head4;
-    else goto bail;
+    if (af == AF_INET) head = t->head4;
+    else if (af == AF_INET6) head = t->head6;
+    else return NULL;
 
     rv = (entry_t *)head->rnh_matchaddr(addr, &head->rh);
 
-bail:
-    if (addr) free(addr);
     return rv;
 }
