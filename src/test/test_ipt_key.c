@@ -274,106 +274,93 @@ test_key_bystr_shorthand_good(void)
 void
 test_key_bylen_good(void)
 {
-    uint8_t *addr;
+    uint8_t addr[IPT_KEYBUFLEN];
 
     // ipv4 masks
 
-    addr = key_bylen(AF_INET, 0);
-    if(addr != NULL) {
+    if (key_bylen(AF_INET, 0, addr)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0x00);  // 0
         mu_true(*(addr+2) == 0x00);  // 0
         mu_true(*(addr+3) == 0x00);  // 0
         mu_true(*(addr+4) == 0x00);  // 0
-        free(addr);
     }
 
-    addr = key_bylen(AF_INET, 1);
-    if(addr != NULL) {
+    if (key_bylen(AF_INET, 1, addr)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0x80);  // 128
         mu_true(*(addr+2) == 0x00);  // 0
         mu_true(*(addr+3) == 0x00);  // 0
         mu_true(*(addr+4) == 0x00);  // 0
-        free(addr);
     }
 
-    addr = key_bylen(AF_INET, 9);
-    if(addr != NULL) {
+    if (key_bylen(AF_INET, 9, addr)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0xff);  // 255
         mu_true(*(addr+2) == 0x80);  // 128
         mu_true(*(addr+3) == 0x00);  // 0
         mu_true(*(addr+4) == 0x00);  // 0
-        free(addr);
     }
 
-    addr = key_bylen(AF_INET, 24);
-    if(addr != NULL) {
+    if (key_bylen(AF_INET, 24, addr)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0xff);  // 255
         mu_true(*(addr+2) == 0xff);  // 255
         mu_true(*(addr+3) == 0xff);  // 255
         mu_true(*(addr+4) == 0x00);  //   0
-        free(addr);
     }
 
-    addr = key_bylen(AF_INET, 30);
-    if(addr != NULL) {
+    if (key_bylen(AF_INET, 30, addr)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0xff);  // 255
         mu_true(*(addr+2) == 0xff);  // 255
         mu_true(*(addr+3) == 0xff);  // 255
         mu_true(*(addr+4) == 0xfc);  // 252
-        free(addr);
     }
 
-    addr = key_bylen(AF_INET, 31);
-    if(addr != NULL) {
+    if (key_bylen(AF_INET, 31, addr)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0xff);  // 255
         mu_true(*(addr+2) == 0xff);  // 255
         mu_true(*(addr+3) == 0xff);  // 255
         mu_true(*(addr+4) == 0xfe);  // 254
-        free(addr);
     }
 
-    addr = key_bylen(AF_INET, 32);
-    if(addr != NULL) {
+    if (key_bylen(AF_INET, 32, addr)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0xff);  // 255
         mu_true(*(addr+2) == 0xff);  // 255
         mu_true(*(addr+3) == 0xff);  // 255
         mu_true(*(addr+4) == 0xff);  // 255
-        free(addr);
     }
 }
 
 void
 test_key_bylen_bad(void)
 {
+    uint8_t buf[IPT_KEYBUFLEN];
     uint8_t *addr;
 
     // invalid ipv4 masks
 
-    addr = key_bylen(AF_INET, -32);
+    addr = key_bylen(AF_INET, -32, buf);
     mu_true(addr == NULL);
 
-    addr = key_bylen(AF_INET, 33);
+    addr = key_bylen(AF_INET, 33, buf);
     mu_true(addr == NULL);
 
-    addr = key_bylen(AF_INET, 64);
+    addr = key_bylen(AF_INET, 64, buf);
     mu_true(addr == NULL);
 
     // invalid ipv6 masks
 
-    addr = key_bylen(AF_INET6, -128);
+    addr = key_bylen(AF_INET6, -128, buf);
     mu_true(addr == NULL);
 
-    addr = key_bylen(AF_INET6, 129);
+    addr = key_bylen(AF_INET6, 129, buf);
     mu_true(addr == NULL);
 
-    addr = key_bylen(AF_INET6, 256);
+    addr = key_bylen(AF_INET6, 256, buf);
     mu_true(addr == NULL);
 }
 

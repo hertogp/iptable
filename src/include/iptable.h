@@ -28,6 +28,7 @@ typedef struct table_t {
 #define IPT_KEYOFFSET 8       // 8 bit offset to 1st byte of key
 #define IPT_KEYLEN(k) (*k)    // 1st byte is 5 or 17 (includes itself)
 #define IPT_KEYPTR(k) (k+1)   // 2nd byte starts actual key
+#define IPT_KEYBUFLEN 17      // buffer size to fit both ipv4 and ipv6
 
 #define IP4_KEYLEN 4
 #define IP4_MAXMASK 32
@@ -37,11 +38,12 @@ typedef struct table_t {
 #define IP6_MAXMASK 128
 #define IP6_PFXSTRLEN (INET6_ADDRSTRLEN + 4)  // + /128
 
-#define STR_IS_IP4(s) (strchr(s, (int)'.') ? 1 : 0)  // use it on fixed ipv4!
+#define STR_IS_IP4(s) (strchr(s, (int)'.') ? 1 : 0)  // not for shorthand ipv4
 #define STR_IS_IP6(s) (strchr(s, (int)':') ? 1 : 0)
 
 #define KEY_IS_IP4(k) (*((uint8_t *)(k))==(1+IP4_KEYLEN))
 #define KEY_IS_IP6(k) (*((uint8_t *)(k))==(1+IP6_KEYLEN))
+#define KEY_AF_FAM(k) (KEY_IS_IP4(k) ? AF_INET : KEY_IS_IP6(k) ? AF_INET6 : AF_UNSPEC)
 
 // radix tree macros
 #define RDX_ISLEAF(rn) (rn->rn_bit < 0)
@@ -60,8 +62,11 @@ typedef struct table_t {
 
 // -- key funcs
 
+uint8_t *key_alloc(int);
+uint8_t *key_copy(uint8_t *);
 uint8_t *key_bystr(char *, int *, int *);
-uint8_t *key_bylen(int, int);
+/* uint8_t *key_bylen(int, int); */
+uint8_t *key_bylen(int, int, uint8_t *);
 const char *key_tostr(void *, char *);
 int key_tolen(void *);
 int key_incr(void *);

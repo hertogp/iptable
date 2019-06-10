@@ -18,9 +18,8 @@
 
 #define LUA_IPTABLE_ID "iptable"
 
-// buffer size for binary resp. string keys
-#define BIN_BUFLEN     IP6_KEYLEN + 1
-#define STR_BUFLEN     IP6_PFXSTRLEN
+// size for local buffer var to temporary store keys (str or binary)
+#define KEY_BUFLEN     IP6_PFXSTRLEN + 1
 
 // lua functions
 
@@ -28,9 +27,10 @@ int luaopen_iptable(lua_State *);
 
 // helper funtions
 
-table_t *checkUserDatum(lua_State *, int);
-int *ud_create(int);                        // userdata stored as entry->value
-void ud_delete(void *, void **);            // ud_delete(L, &ud)
+table_t *check_table(lua_State *, int);
+static int check_key(lua_State *, int, char *, size_t *);
+static int *ud_create(int);                        // userdata stored as entry->value
+static void ud_delete(void *, void **);            // ud_delete(L, &ud)
 static int iter_kv(lua_State *);
 static int iter_hosts(lua_State *);
 
@@ -105,9 +105,9 @@ luaopen_iptable (lua_State *L)
     dbg_stack("set as __index");
 
     // set object methods, no upvalues (0)
-    luaL_setfuncs(L, meths, 0);             // [.., {+meths} ]
+    luaL_setfuncs(L, meths, 0);             // [.., {+m's} ]
     dbg_stack("_setfuncs");
-    luaL_newlib(L, funcs);                  // [.., {+meths} {+funcs} ]
+    luaL_newlib(L, funcs);                  // [.., {+m'} {+f's} ]
     dbg_stack("_newlib");
 
     lua_pushinteger(L, AF_INET);
@@ -126,22 +126,42 @@ luaopen_iptable (lua_State *L)
 // helpers
 
 table_t *
-checkUserDatum (lua_State *L, int index)
+check_table (lua_State *L, int index)
 {
     void **ud = luaL_checkudata(L, index, LUA_IPTABLE_ID);
     luaL_argcheck(L, ud != NULL, index, "`iptable' expected");
     return (table_t *)*ud;
 }
 
-int *ud_create(int ref)
+static int
+check_key(lua_State *L, int idx, char *buf, size_t *len)
 {
-    // store LUA_REGISTRYINDEX acquired ref's in the radix tree as ptr->int
+    // Write string key @ idx in buffer; returns 1 on success, 0 on failure
+    const char *key = NULL;
+
+    if (!lua_isstring(L, idx)) return 0;
+
+    key = lua_tolstring(L, idx, len);
+    // dbg_msg("got key %s, len %lu", key, *len);
+
+    if (key == NULL) return 0;
+    if (*len < 1 || *len > KEY_BUFLEN-1) return 0;
+
+    memcpy(buf, key, *len);  // handles any embedded 0's in a (binary) key
+    buf[*len] = '\0';
+
+    return 1;
+}
+
+static int *ud_create(int ref)
+{
+    // store LUA_REGISTRYINDEX ref's in the radix tree as ptr->int
     int *p = calloc(1, sizeof(int));
     *p = ref;
     return p;
 }
 
-void
+static void
 ud_delete(void *L, void **refp)
 {
     // unref the userdata and free associated ptr->int
@@ -176,76 +196,54 @@ static int
 ipt_tobin(lua_State *L)
 {
     // iptable.tobin(strKey) <-- [str]
-    dbg_stack("stack .");
 
-    if (!lua_isstring(L, 1)) return 0;
-
-    int af, mlen, rv = 0;
-    size_t len;
-    const char *key = NULL;
-    char buf[IP6_PFXSTRLEN]; // max buffer needed
+    int af, mlen;
+    size_t len = 0;
+    char buf[KEY_BUFLEN];
     uint8_t *addr = NULL;
 
-    key = lua_tolstring(L, 1, &len);                       // Lua owns key mem
-    dbg_msg("got key %s with len %lu", key, len);
-    if (key == NULL) return rv;                            // empty string
-    if (len < 1 || len > IP6_PFXSTRLEN) return rv;         // illegal length
+    dbg_stack("stack .");
 
-    strncpy(buf, key, IP6_PFXSTRLEN);                                // ditch const
+    if (!check_key(L, 1, buf, &len)) return 0;
+
     addr = key_bystr(buf, &mlen, &af);
-    if (addr != NULL) {
-        lua_pushlstring(L, (const char*)addr, IPT_KEYLEN(addr));
-        lua_pushinteger(L, mlen);
-        lua_pushinteger(L, af);
-        free(addr);
-        rv = 3;
-    }
+    if (addr == NULL) return 0;
 
-    return rv;
+    lua_pushlstring(L, (const char*)addr, IPT_KEYLEN(addr));
+    lua_pushinteger(L, mlen);
+    lua_pushinteger(L, af);
+    free(addr);
+
+    return 3;
 }
 
 static int
 ipt_tostr(lua_State *L)
 {
     // iptable.tostr(binKey) <-- [key]
-    char buf[IP6_PFXSTRLEN];
-    char str[IP6_PFXSTRLEN];
-    const char *key = NULL;
+    char buf[KEY_BUFLEN];
+    char str[KEY_BUFLEN];
     size_t len = 0;
-    int rv = 0;  // fail unless succesfull
 
-    if (!lua_isstring(L, 1)) return rv;  // need a (binary) string arg
+    if (!check_key(L, 1, buf, &len)) return 0;
+    if (len != (size_t)IPT_KEYLEN(buf)) return 0; // illegal binary
+    if (key_tostr(buf, str) == NULL) return 0;
 
-    key = lua_tolstring(L, 1, &len);                       // Lua owns key mem
-    if (key == NULL) return rv;                            // binary is empty
-    if (len < 1 || len > IP6_KEYLEN) return rv;            // illegal binary
-    if (strlen(key) != (size_t)IPT_KEYLEN(key)) return rv; // illegal binary
+    lua_pushstring(L, str);
 
-    strncpy(buf, key, IP6_PFXSTRLEN);                         // ditch const
-    if (key_tostr(buf, str) != NULL) {
-        lua_pushstring(L, str);
-        rv = 1;
-    }
-
-    return rv;
+    return 1;
 }
 
 static int
 ipt_tolen(lua_State *L)
 {
     // iptable.masklen(binKey) <-- [key]
-    char buf[1+IP6_KEYLEN];  // max 17 bytes
-    const char *key = NULL;
+    char buf[KEY_BUFLEN];
     size_t len = 0;
     int mlen = -1;
 
-    if (!lua_isstring(L, 1)) return 0;  // need a (binary) string arg
+    if (!check_key(L, 1, buf, &len)) return 0;
 
-    key = lua_tolstring(L, 1, &len);                      // Lua owns key mem
-    if (key == NULL) return 0;                            // binary is empty
-    if (len < 1 || len > 1+IP6_KEYLEN) return 0;          // illegal binary
-
-    strncpy(buf, key, 1+IP6_KEYLEN);                      // ditch const
     mlen = key_tolen(buf);
     lua_pushinteger(L, mlen);
 
@@ -258,21 +256,16 @@ ipt_network(lua_State *L)
     // iptable.network(strKey) <-- [str]
     dbg_stack("stack .");
 
-    if (!lua_isstring(L, 1)) return 0;
+    char buf[KEY_BUFLEN];
+    uint8_t mask[IPT_KEYBUFLEN];
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1, rv = 0;
+    uint8_t *addr = NULL; //, *mask = NULL;
 
-    int af, mlen, rv = 0;
-    size_t len;
-    const char *key = NULL;
-    char buf[IP6_PFXSTRLEN]; // max buffer needed
-    uint8_t *addr = NULL, *mask = NULL;;
+    if (!check_key(L, 1, buf, &len)) return 0;
 
-    key = lua_tolstring(L, 1, &len);                       // Lua owns key mem
-    if (key == NULL) return rv;                            // empty string
-    if (len < 1 || len > IP6_PFXSTRLEN) return rv;         // illegal length
-
-    strncpy(buf, key, IP6_PFXSTRLEN);                      // ditch const
     addr = key_bystr(buf, &mlen, &af);
-    mask = key_bylen(af, mlen);
+    key_bylen2(af, mlen, mask);
 
     if (key_network(addr, mask)) {
         key_tostr(addr, buf);
@@ -283,7 +276,7 @@ ipt_network(lua_State *L)
     }
 
     if (addr) free(addr);
-    if (mask) free(mask);
+//     if (mask) free(mask);
 
     return rv;
 }
@@ -294,19 +287,13 @@ ipt_broadcast(lua_State *L)
     // iptable.broadcast(strKey) <-- [str]
     dbg_stack("stack .");
 
-    if (!lua_isstring(L, 1)) return 0;
+    int af = AF_UNSPEC, mlen = -1, rv = 0;
+    size_t len = 0;
+    char buf[KEY_BUFLEN];
+    uint8_t *addr = NULL, *mask = NULL;
 
-    int af, mlen, rv = 0;
-    size_t len;
-    const char *key = NULL;
-    char buf[IP6_PFXSTRLEN]; // max buffer needed
-    uint8_t *addr = NULL, *mask = NULL;;
+    if (!check_key(L, 1, buf, &len)) return 0;
 
-    key = lua_tolstring(L, 1, &len);                       // Lua owns key mem
-    if (key == NULL) return rv;                            // empty string
-    if (len < 1 || len > IP6_PFXSTRLEN) return rv;         // illegal length
-
-    strncpy(buf, key, IP6_PFXSTRLEN);                      // ditch const
     addr = key_bystr(buf, &mlen, &af);
     mask = key_bylen(af, mlen);
 
@@ -331,17 +318,13 @@ iter_hosts(lua_State *L)
     // actual iterator used by factory func ipt_iter_hosts
     // [prev.value], which is nil the first time around
     // we ignore prev.value, incr upvalue(1) instead till it equals upvalue(2)
-    size_t nlen, slen;
-    char buf[IP6_PFXSTRLEN];
-    char next[IP6_PFXSTRLEN];
-    char stop[IP6_PFXSTRLEN];
-    const char *n = lua_tolstring(L, lua_upvalueindex(1), &nlen);
-    const char *s = lua_tolstring(L, lua_upvalueindex(2), &slen);
+    size_t nlen = 0, slen = 0;
+    char next[KEY_BUFLEN], stop[KEY_BUFLEN], buf[KEY_BUFLEN];
 
-    strncpy(next, n, nlen);
-    strncpy(stop, s, slen);
+    if (!check_key(L, lua_upvalueindex(1), next, &nlen)) return 0;
+    if (!check_key(L, lua_upvalueindex(2), stop, &slen)) return 0;
 
-    if (key_cmp(next, stop) == 0) return 0;             // we're done
+    if (key_cmp(next, stop) == 0) return 0;
 
     key_tostr(next, buf);                               // return cur val
     lua_pushstring(L, buf);
@@ -349,8 +332,6 @@ iter_hosts(lua_State *L)
     key_incr(next);                                     // setup next val
     lua_pushlstring(L, (const char *)next, (size_t)IPT_KEYLEN(next));
     lua_replace(L, lua_upvalueindex(1));
-
-    dbg_stack("return 1 .");
 
     return 1;
 }
@@ -360,25 +341,17 @@ ipt_iter_hosts(lua_State *L)
 {
     // iptable.iter_hosts(pfx) <-- [str, incl] (inclusive is optional)
     dbg_stack("stack .");
-    int inclusive = 0;      // whether to include netw/bcast in iteration
 
-    if (!lua_isstring(L, 1)) return 0;
+    char buf[KEY_BUFLEN];
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1, rv = 0, inclusive = 0;
+    uint8_t *addr = NULL, *mask = NULL, *stop = NULL;
+
+    if (!check_key(L, 1, buf, &len)) return 0;
 
     if (lua_gettop(L) == 2 && lua_isboolean(L, 2))
-        inclusive = lua_toboolean(L, 2);                   // may be false
+        inclusive = lua_toboolean(L, 2);  // include netw/bcast (or not)
 
-    // prefix string to addr, mask
-    int af, mlen, rv = 0;
-    size_t len;
-    const char *key = NULL;
-    char buf[IP6_PFXSTRLEN]; // max buffer needed
-    uint8_t *addr = NULL, *mask = NULL, *stop = NULL;;
-
-    key = lua_tolstring(L, 1, &len);                       // Lua owns key mem
-    if (key == NULL) return rv;                            // empty string
-    if (len < 1 || len > IP6_PFXSTRLEN) return rv;         // illegal length
-
-    strncpy(buf, key, IP6_PFXSTRLEN);                      // ditch const
     addr = key_bystr(buf, &mlen, &af);                     // start
     stop = key_bystr(buf, &mlen, &af);                     // sentinel
     mask = key_bylen(af, mlen);
@@ -399,6 +372,7 @@ ipt_iter_hosts(lua_State *L)
     if (addr) free(addr);
     if (mask) free(mask);
     if (stop) free(stop);
+
     return rv;
 }
 
@@ -407,7 +381,7 @@ ipt_iter_hosts(lua_State *L)
 static int
 _gc(lua_State *L) {
     // __gc: utterly destroy the table
-    table_t *ud = checkUserDatum(L, 1);
+    table_t *ud = check_table(L, 1);
     tbl_destroy(&ud, L);
     return 0;  // Lua owns the memory for the pointer to-> *ud
 }
@@ -415,19 +389,22 @@ _gc(lua_State *L) {
 static int
 _newindex(lua_State *L)
 {
-    // __newindex() -- [ud pfx val]
+    // __newindex() -- [tbl_ud pfx val]
+    dbg_stack("stack .");
 
-    table_t *ud = checkUserDatum(L, 1);
-    int ref = LUA_NOREF;
-    char *pfx = strdup(luaL_checkstring(L,2)); // modifiable copy
+    void *ud;               // userdata to store (will be ptr->int)
+    char pfx[KEY_BUFLEN];
+    size_t len = 0;
+    table_t *t = check_table(L, 1);
+
+    if (!check_key(L, 2, pfx, &len)) return 0;
 
     if (lua_isnil(L, -1))
-        tbl_del(ud, pfx, L);
+        tbl_del(t, pfx, L);
     else {
-        ref = luaL_ref(L, LUA_REGISTRYINDEX);
-        tbl_set(ud, pfx, ud_create(ref), L);
+        ud = ud_create(luaL_ref(L, LUA_REGISTRYINDEX));
+        if (!tbl_set(t, pfx, ud, L)) ud_delete(L, &ud);
     }
-    free(pfx);
 
     return 0;
 }
@@ -439,7 +416,7 @@ get(lua_State *L)
     // FIXME: not needed anymore since ipt[addr/mask] does specific match due to
     // the presence of the mask?
 
-    table_t *ud = checkUserDatum(L, 1);
+    table_t *ud = check_table(L, 1);
     // const char *s = luaL_checkstring(L, 2);
     char *pfx = strdup(luaL_checkstring(L,2));
     entry_t *e = tbl_get(ud, pfx);
@@ -459,33 +436,35 @@ _index(lua_State *L)
     // __index() -- [ud pfx] or [ud name]
     // - no mask -> do longest prefix search,
     // - with mask -> do exact lookup of prefix with mask
+    // - if pfx lookup fails -> try metatable
 
     dbg_stack("__index() .");
-    table_t *ud = checkUserDatum(L, 1);
+
     entry_t *e = NULL;
-    char *pfx;
-    const char *s = luaL_checkstring(L, 2);
+    size_t len = 0;
+    char pfx[KEY_BUFLEN];
 
-    pfx = strdup(s);              // get modifiable copy
-    e = strchr(s, '/') ? tbl_get(ud, pfx) : tbl_lpm(ud, pfx);
-    free(pfx);
+    table_t *t = check_table(L, 1);
 
-    if(e) {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
-        dbg_stack("val by ref +");
-    } else {
-        // else, not found or not a pfx -> might be func name
-        // NOTE: if checkstring(L,2) == NULL then getmetafield -> LUA_TNIL
+    if (!check_key(L, 2, pfx, &len)) {
+        // note: check_key will fail on a really long function/property name
+        // which we don't have currently but maybe later ...
+        dbg_msg("a %s function/property name", "loooooong");
         if (luaL_getmetafield(L, 1, luaL_checkstring(L,2)) == LUA_TNIL)
             return 0;
-        dbg_stack("metatable lookup +");
 
-        /* lua_getmetatable(L, 1);   // [ud name M] */
-        /* dbg_stack("metatable +"); */
-        /* lua_rotate(L, 2, 1);      // [ud M name] */
-        /* dbg_stack("swap top ."); */
-        /* lua_gettable(L, -2);      // [ud M func] or [ud M nil] */
-        /* dbg_stack("mt value -+"); */
+    } else {
+        e = strchr(pfx, '/') ? tbl_get(t, pfx) : tbl_lpm(t, pfx);
+        if(e) {
+            lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
+            dbg_stack("val by ref +");
+
+        } else {
+            // pfx might still be a short(er) function/property name
+            if (luaL_getmetafield(L, 1, luaL_checkstring(L,2)) == LUA_TNIL)
+                return 0;
+            dbg_stack("metatable lookup +");
+        }
     }
 
     return 1;
@@ -495,8 +474,8 @@ static int
 _len(lua_State *L)
 {
     // #ipt -- [ud]  -- return sum of count4 and count6
-    table_t *ud = checkUserDatum(L, 1);
-    lua_pushinteger(L, ud->count4 + ud->count6);
+    table_t *t = check_table(L, 1);
+    lua_pushinteger(L, t->count4 + t->count6);
 
     return 1;
 }
@@ -505,8 +484,8 @@ static int
 _tostring(lua_State *L)
 {
     // as string: iptable{#ipv4=.., #ipv6=..}
-    table_t *ud = checkUserDatum(L, 1);
-    lua_pushfstring(L, "iptable{#ipv4=%d, #ipv6=%d}", ud->count4, ud->count6);
+    table_t *t = check_table(L, 1);
+    lua_pushfstring(L, "iptable{#ipv4=%d, #ipv6=%d}", t->count4, t->count6);
 
     return 1;
 }
@@ -514,53 +493,42 @@ _tostring(lua_State *L)
 static int
 counts(lua_State *L)
 {
-    // ipt:size() -- [ud]  -- return both count4 and count6 (in that order)
-    table_t *ud = checkUserDatum(L, 1);
+    // ipt:size() -- [t_ud]  -- return both count4 and count6 (in that order)
     dbg_stack("stack .");
 
-    lua_pushinteger(L, ud->count4);         // [ud count4]
-    dbg_stack("count4 +");
+    table_t *t = check_table(L, 1);
+    lua_pushinteger(L, t->count4);         // [t_ud count4]
+    lua_pushinteger(L, t->count6);         // [t_ud count4 count6]
 
-    lua_pushinteger(L, ud->count6);         // [ud count4 count6]
-    dbg_stack("count6 +");
-
-    return 2;                               // [.., count4, count6]
+    return 2;                              // [.., count4, count6]
 }
 
 static int
 iter_kv(lua_State *L)
 {
     // iter_kv() <-- [ud k] (key k is nil if first call)
-    // - returns next [k v]-pair or nil to stop iteration
+    // - returns next [k' v']-pair or nil [] to stop iteration
     dbg_stack("stack .");
 
-    table_t *ud = checkUserDatum(L, 1);
+    table_t *t = check_table(L, 1);
     struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
     entry_t *e = NULL;
-    char saddr[IP6_PFXSTRLEN];
+    char saddr[KEY_BUFLEN];
 
     if (rn == NULL || RDX_ISROOT(rn)) return 0; // we're done
 
-    // push k,v onto stack
+    // push k',v' onto stack
     key_tostr(rn->rn_key, saddr);
     e = (entry_t *)rn;
-
-    lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [ud k k']
-    dbg_stack("key +");
-
-    lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value); // [ud k k' v']
-    dbg_stack("value +");
+    lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [t_ud k k']
+    lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value); // [t_ud k k' v']
 
     // get next node & save it for next time around
     rn = rdx_next(rn);
     if (rn == NULL && KEY_IS_IP4(e->rn[0].rn_key))
-        rn = rdx_first(ud->head6);
-
-    lua_pushlightuserdata(L, rn);                       // [ud k k' v' lud]
-    dbg_stack("next radix node +");
-
-    lua_replace(L, lua_upvalueindex(1));                // [ud k k' v']
-    dbg_stack("set upvalue(1) -");
+        rn = rdx_first(t->head6);
+    lua_pushlightuserdata(L, rn);                       // [t_ud k k' v' lud]
+    lua_replace(L, lua_upvalueindex(1));                // [t_ud k k' v']
 
     return 2;                                           // [.., k', v']
 }
@@ -569,28 +537,20 @@ iter_kv(lua_State *L)
 static int
 _pairs(lua_State *L)
 {
-    // __pairs(ipt('ipv4')) <-- [ud]
-    // factory function for iterator (closure) function
+    // __pairs(ipt) <-- [t_ud]
     dbg_stack("stack .");
 
-    table_t *ud = checkUserDatum(L, 1);
+    table_t *ud = check_table(L, 1);
     struct radix_node *rn = rdx_first(ud->head4);
     if (rn == NULL)
         rn = rdx_first(ud->head6);
 
     if (rn == NULL) return 0;
-    // save rn as 1st node
-    lua_pushlightuserdata(L, rn);        // [ud lud], rn is 1st node
-    dbg_stack("1st leaf +");
 
-    lua_pushcclosure(L, iter_kv, 1);     // [ud f], rn as upvalue(1)
-    dbg_stack("iter_f (1 arg) +-");
-
-    lua_rotate(L, 1, 1);                 // [f ud]
-    dbg_stack("swap .");
-
-    lua_pushnil(L);                      // [f ud nil]
-    dbg_stack("ctl var +");
+    lua_pushlightuserdata(L, rn);        // [t_ud lud], rn is 1st node
+    lua_pushcclosure(L, iter_kv, 1);     // [t_ud f], rn as upvalue(1)
+    lua_rotate(L, 1, 1);                 // [f t_ud]
+    lua_pushnil(L);                      // [f t_ud nil]
 
     return 3;                           // [iter_f invariant ctl_var]
 }

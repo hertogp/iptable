@@ -65,5 +65,10 @@ describe("iptable object interface", function()
       assert.are_equal(nil, ipt["10e"]);
     end)
 
+    it("unknown index yields nil", function()
+      ipt.a_really_long_property_name = 42;
+      assert.are_equal(nil, ipt.a_really_long_property_name);
+    end)
+
   end)
 end)

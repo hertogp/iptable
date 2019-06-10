@@ -24,7 +24,32 @@ static uint8_t  rn_ones[RDX_MAX_KEYLEN] = {
 // -- helpers
 
 // -- KEY funcs
+uint8_t *
+key_alloc(int af)
+{
+    uint8_t *key = NULL, keylen = 0;
 
+    if (af == AF_INET)
+        keylen = 1 + IP4_KEYLEN;               // 5
+    else if (af == AF_INET6)
+        keylen = 1 + IP6_KEYLEN;               // 17
+    else return NULL;                          // unknown AF family
+
+    key = calloc(sizeof(uint8_t), keylen);     // zero initialized
+    if (key) IPT_KEYLEN(key) = keylen;         // set LEN byte
+
+    return key;
+}
+
+uint8_t *
+key_copy(uint8_t *src)
+{
+    uint8_t *key = key_alloc(KEY_AF_FAM(src));
+    if (key == NULL) return NULL;
+    memcpy(key, src, IPT_KEYLEN(key));
+
+    return key;
+}
 uint8_t *
 key_bystr(char *s, int *mlen, int *af)
 {
@@ -53,9 +78,8 @@ key_bystr(char *s, int *mlen, int *af)
 
     if (STR_IS_IP6(s)) {
         if (*mlen > IP6_MAXMASK) return NULL;
-        addr = calloc(sizeof(uint8_t), 1 + IP6_KEYLEN);
+        addr = key_alloc(AF_INET6);
         if (addr == NULL) return NULL;            // mem error
-        IPT_KEYLEN(addr) = 1 + IP6_KEYLEN;        // +1 for length byte
         if (slash) *slash = '\0';                 // just for inet_pton
         inet_pton(AF_INET6, s, IPT_KEYPTR(addr));
         if (slash) *slash = '/';                  // restore s
@@ -82,15 +106,12 @@ key_bystr(char *s, int *mlen, int *af)
         if(c < 0 || c > 255) return NULL;
         if(d < 0 || d > 255) return NULL;
 
-        // snprintf(buf, INET_ADDRSTRLEN, "%d.%d.%d.%d", a, b, c, d);
-        addr = calloc(sizeof(uint8_t), 1 + IP4_KEYLEN);
+        addr = key_alloc(AF_INET);
         if (addr == NULL) return NULL;                 // mem error
-        IPT_KEYLEN(addr) = 1 + IP4_KEYLEN;
         *(addr+1) = a;  // bigendian, so a goes first
         *(addr+2) = b;
         *(addr+3) = c;
         *(addr+4) = d;
-        /* inet_pton(AF_INET, buf, IPT_KEYPTR(addr)); */
         *af = AF_INET;
         return addr;
     }
@@ -98,34 +119,62 @@ key_bystr(char *s, int *mlen, int *af)
     return NULL;  // failed
 }
 
+/* uint8_t * */
+/* key_bylen(int af, int mlen) */
+/* { */
+/*     // returns ptr to key for AF_family when succesfull, NULL otherwise */
+/*     uint8_t *key, *cp; */
+/*     int size; */
+
+/*     // check: valid mask length, corresponding to valid AF_family */
+/*     if(af == AF_INET6) { */
+/*         mlen = mlen == -1 ? IP6_MAXMASK : mlen; */
+/*         if (mlen < 0 || mlen > IP6_MAXMASK) return NULL; */
+/*     } else if (af == AF_INET) { */
+/*         mlen = mlen == -1 ? IP4_MAXMASK : mlen; */
+/*         if (mlen < 0 || mlen > IP4_MAXMASK) return NULL; */
+/*     } else return NULL; */
+
+/*     key = key_alloc(af); */
+/*     if (key == NULL) return NULL; */
+
+/*     size = IPT_KEYLEN(key); */
+/*     cp = IPT_KEYPTR(key); */
+/*     while (--size > 0) {                                  // set all key bytes */
+/*         *(cp++) = mlen > 8 ? 0xff : ~((1 << (8 - mlen))-1); */
+/*         mlen = mlen > 8 ? mlen - 8 : 0; */
+/*     } */
+
+/*     return key;  // caller must free(key) */
+/* } */
+
 uint8_t *
-key_bylen(int af, int mlen)
+key_bylen(int af, int mlen, uint8_t *buf)
 {
-    // returns ptr to key when succesfull, NULL otherwise
-    uint8_t *key, *cp;
-    int size;
+    // create key by masklength, store result in buf.  Retuns NULL on failure.
+    // buf is typically uint8_t buf[IPT_KEYBUFLEN]
+    uint8_t *cp;
+    int keylen;
 
     // check: valid mask length, corresponding to valid AF_family
     if(af == AF_INET6) {
         mlen = mlen == -1 ? IP6_MAXMASK : mlen;
         if (mlen < 0 || mlen > IP6_MAXMASK) return NULL;
+        keylen = 1 + IP6_KEYLEN;
     } else if (af == AF_INET) {
         mlen = mlen == -1 ? IP4_MAXMASK : mlen;
         if (mlen < 0 || mlen > IP4_MAXMASK) return NULL;
+        keylen = 1 + IP4_KEYLEN;
     } else return NULL;
 
-    size = (af == AF_INET6) ? 1 + IP6_KEYLEN : 1 + IP4_KEYLEN;
-    if (!(key = calloc(sizeof(*key), size)))
-        return NULL;                                      // mem error
-
-    IPT_KEYLEN(key) = size;                               // set keylen byte
-    cp = IPT_KEYPTR(key);
-    while (--size > 0) {                                  // set all key bytes
+    IPT_KEYLEN(buf) = keylen;
+    cp = IPT_KEYPTR(buf);
+    while (--keylen > 0) {                              // set all key bytes
         *(cp++) = mlen > 8 ? 0xff : ~((1 << (8 - mlen))-1);
         mlen = mlen > 8 ? mlen - 8 : 0;
     }
 
-    return key;  // caller must free(key)
+    return buf;
 }
 
 int key_tolen(void *key)
@@ -408,7 +457,8 @@ entry_t *
 tbl_get(table_t *t, char *s)
 {
     // An exact lookup for addr/mask, missing mask is set to AF's max mask
-    uint8_t *addr = NULL, *mask = NULL;
+    uint8_t *addr = NULL;
+    uint8_t mask[IPT_KEYBUFLEN];
     int mlen = -1, af = AF_UNSPEC;
     struct radix_node_head *head = NULL;
     entry_t *entry = NULL;
@@ -421,16 +471,14 @@ tbl_get(table_t *t, char *s)
     if (KEY_IS_IP6(addr)) head = t->head6;
     else if (KEY_IS_IP4(addr)) head = t->head4;
     else goto bail;
-    mask = key_bylen(af, mlen);
 
-    if (mask == NULL) goto bail;
+    if (! key_bylen(af, mlen, mask)) goto bail;
     if (! key_network(addr, mask)) goto bail;
 
     entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match for pfx
 
 bail:
     if (addr) free(addr);
-    if (mask) free(mask);
     return entry;
 }
 
@@ -439,7 +487,8 @@ tbl_set(table_t *t, char *s, void *v, void *pargs)
 {
     // A missing mask is taken to mean AF's max mask
     // - applies mask before searching/setting the tree
-    uint8_t *addr = NULL, *mask = NULL;
+    uint8_t *addr = NULL;
+    uint8_t mask[IPT_KEYBUFLEN];
     int mlen = -1, af = AF_UNSPEC;
     entry_t *entry = NULL;
     struct radix_node *rn = NULL;
@@ -453,21 +502,21 @@ tbl_set(table_t *t, char *s, void *v, void *pargs)
     if (KEY_IS_IP6(addr)) head = t->head6;
     else if (KEY_IS_IP4(addr)) head = t->head4;
     else goto bail;
-    mask = key_bylen(af, mlen);
-    if (mask == NULL) goto bail;
+
+    if (! key_bylen(af, mlen, mask)) goto bail;
+
     if (! key_network(addr, mask)) goto bail;
 
     entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
     if (entry) {
         // update existing entry
         free(addr);
-        free(mask);
         if(entry->value) t->purge(pargs, &entry->value); // free userdata
         entry->value = v;                                // ptr-> new userdata
         return 1;
 
     } else {
-        // add new entry
+        // add new entry, donot free key
         if (!(entry = calloc(sizeof(*entry),1)))  // init'd to all zeros
             goto bail;
         entry->value = v;
@@ -476,13 +525,12 @@ tbl_set(table_t *t, char *s, void *v, void *pargs)
         // update count
         if (KEY_IS_IP6(addr)) t->count6++;
         else t->count4++;
-        free(mask);  // new entry, tree copies key ptr, so donot free key
+
         return 1;
     }
 
 bail:
     if (addr) free(addr);
-    if (mask) free(mask);
     if (entry && entry->value) t->purge(pargs, &entry->value);
     if (entry) free(entry);
     return 0;
@@ -495,7 +543,8 @@ tbl_del(table_t *t, char *s, void *pargs)
     // - a missing mask is set to AF's max mask
     entry_t *e;
     struct radix_node_head *head = NULL;
-    uint8_t *addr = NULL, *mask = NULL;
+    uint8_t *addr = NULL;
+    uint8_t mask[IPT_KEYBUFLEN];
     int mlen = -1, rv = 0, af = AF_UNSPEC;
     if (t == NULL) return 0;
 
@@ -505,8 +554,9 @@ tbl_del(table_t *t, char *s, void *pargs)
     if (KEY_IS_IP6(addr)) head = t->head6;
     else if (KEY_IS_IP4(addr)) head = t->head4;
     else goto bail;
-    mask = key_bylen(af, mlen);
-    if (mask == NULL) goto bail;
+
+    if (! key_bylen(af, mlen, mask)) goto bail;
+
     if (! key_network(addr, mask)) goto bail;
 
     if ((e = (entry_t *)head->rnh_deladdr(addr, mask, &head->rh))) {
@@ -520,7 +570,6 @@ tbl_del(table_t *t, char *s, void *pargs)
 
 bail:
     if (addr) free(addr);
-    if (mask) free(mask);
     return rv;
 }
 
