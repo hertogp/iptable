@@ -600,6 +600,6 @@ more(lua_State *L)
 {
     // more(pfx) <-- [ud pfx]
     // Return array of more specific prefixes in the iptable
-    lua_pushliteral(L, "not implemented yet");
+    lua_pushliteral(L, "not implemented (yet)");
     return 1;
 }

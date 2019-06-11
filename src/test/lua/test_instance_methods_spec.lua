@@ -233,3 +233,24 @@ describe("iptable tostring: ", function()
     end)
   end)
 end)
+
+describe("ipt:more() ", function()
+
+  expose("instance: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+    ipt = iptable.new();
+    assert.is_truthy(ipt);
+
+    it("iterates across more specific ipv4 prefixes", function()
+      ipt["1.1.1.0/24"] = 24;
+      ipt["1.1.1.0/25"] = 25;
+      ipt["1.1.1.128/25"] = 25;
+      ipt["1.1.1.0/26"] = 26;
+      ipt["1.1.1.32/26"] = 26;
+      ipt["1.1.1.64/26"] = 26;
+      ipt["1.1.1.96/26"] = 26;
+      assert.equal("not implemented (yet)", ipt:more("1.1.1.0/24"));
+    end)
+  end)
+end)

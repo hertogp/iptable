@@ -500,7 +500,6 @@ describe("iptable.numhosts(pfx): ", function()
 
     -- for 128 hostbits, it definitely fails!
     it("/0 mask means a lot more host for ipv6", function()
-      pending("need to figure out how to do large numbers for ipv6");
       assert.are_equal(2^128, iptable.numhosts("2f::/0"));
     end)
 
