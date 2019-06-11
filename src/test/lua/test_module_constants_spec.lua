@@ -21,29 +21,17 @@
 
 package.cpath = "./build/?.so;"..package.cpath
 
-describe("require iptable: ", function()
-  expose("iptable", function()
+describe("iptable module: ", function()
+  expose("ipt", function()
     iptable = require("iptable");
     assert.is_truthy(iptable);
 
-    it("requiring iptable", function()
-      iptable = require("iptable");
-      assert.is_truthy(iptable);
-    end)
-
-    it("create an iptable", function()
-      ipt = iptable.new()
-      assert.is_truthy(ipt);
-    end)
-
-    it("iptable constants", function()
-      ipt = iptable.new();
-
-      for k,v in pairs(iptable) do print(k,v) end
-
+    it("has an AF_INET constant", function()
       assert.is_equal(2, iptable.AF_INET);
-      assert.is_equal(10, iptable.AF_INET6);
+    end)
 
+    it("has an AF_INET6 constant", function()
+      assert.is_equal(10, iptable.AF_INET6);
     end)
 
 

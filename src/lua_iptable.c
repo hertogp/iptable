@@ -54,6 +54,7 @@ static int _len(lua_State *);
 static int _tostring(lua_State *);
 static int _pairs(lua_State *);
 static int counts(lua_State *);
+static int more(lua_State *);
 
 
 // iptable function array
@@ -80,6 +81,7 @@ static const struct luaL_Reg meths [] = {
     {"__tostring", _tostring},
     {"__pairs", _pairs},
     {"counts", counts},
+    {"more", more},
     {NULL, NULL}
 };
 
@@ -177,6 +179,7 @@ static int
 ipt_new(lua_State *L)
 {
     // void** -> tbl_destroy(&ud) sets t=NULL when done clearing it
+    // Return a new iptable instance.  Bails on memory errors.
     dbg_stack("inc(.) <--");
 
     void **t = lua_newuserdata(L, sizeof(void **));
@@ -199,6 +202,7 @@ static int
 ipt_tobin(lua_State *L)
 {
     // iptable.tobin(strKey) <-- [str]
+    // Return binary form, masklength & AF for a given prefix, nil on errors
     dbg_stack("inc(.) <--");
 
     int af, mlen;
@@ -221,6 +225,7 @@ static int
 ipt_tostr(lua_State *L)
 {
     // iptable.tostr(binKey) <-- [binkey]
+    // Return string representation for a binary key, nil on errors
     dbg_stack("inc(.) <--");
 
     char buf[KEYBUFLEN_MAX];
@@ -242,6 +247,8 @@ static int
 ipt_tolen(lua_State *L)
 {
     // iptable.masklen(binKey) <-- [key]
+    // Return the number of consequtive msb 1-bits, nil on errors.
+    // - stops at the first zero bit.
     dbg_stack("inc(.) <--");
 
     char buf[KEYBUFLEN_MAX];
@@ -262,6 +269,7 @@ static int
 ipt_numhosts(lua_State *L)
 {
     // iptable.numhosts(strKey) <-- [str]
+    // Return the number of hosts in a given prefix, nil on errors
     dbg_stack("inc(.) <--");
 
     uint8_t addr[KEYBUFLEN_MAX];
@@ -289,6 +297,7 @@ static int
 ipt_network(lua_State *L)
 {
     // iptable.network(strKey) <-- [str]
+    // Return network address & masklen for a given prefix, nil on errors
     dbg_stack("inc(.) <--");
 
     char buf[IP6_PFXSTRLEN];
@@ -370,6 +379,7 @@ static int
 ipt_iter_hosts(lua_State *L)
 {
     // iptable.iter_hosts(pfx) <-- [str, incl] (inclusive is optional)
+    // Setup iteration across hosts in a given prefix.
     dbg_stack("inc(.) <--");
 
     size_t len = 0;
@@ -582,4 +592,13 @@ _pairs(lua_State *L)
     dbg_stack("out(3) ==>");
 
     return 3;                           // [iter_f invariant ctl_var]
+}
+
+static int
+more(lua_State *L)
+{
+    // more(pfx) <-- [ud pfx]
+    // Return array of more specific prefixes in the iptable
+    lua_pushliteral(L, "not implemented yet");
+    return 1;
 }

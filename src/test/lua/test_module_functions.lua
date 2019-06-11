@@ -17,48 +17,59 @@ function bin2str(buf)
   return s;
 end
 
-describe("iptable.tobin(): ", function()
+describe("require iptable: ", function()
+  expose("iptable", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
 
+    it("should yield a module", function()
+      iptable = require("iptable");
+      assert.is_truthy(iptable);
+    end)
+  end)
+end)
+
+describe("iptable.tobin(): ", function()
   expose("ipt: ", function()
     iptable = require("iptable");
     assert.is_truthy(iptable);
 
-    it("no mask -> mlen=-1", function()
+    it("returns mlen=-1 wen no mask is given", function()
       addr, mlen, af = iptable.tobin("10.10.10.10");
       assert.are_equal(iptable.AF_INET, af);
-      assert.are_equal(-1, mlen);  -- -1 means no mask
+      assert.are_equal(-1, mlen);
       assert.are_equal(5, #addr);
     end)
 
-    it("max ipv4 mask -> mlen=32", function()
+    it("returns 32 in case of an ipv4 maximum mask", function()
       addr, mlen, af = iptable.tobin("10.10.10.10/32");
       assert.are_equal(iptable.AF_INET, af);
       assert.are_equal(32, mlen);
       assert.are_equal("05:0a:0a:0a:0a", bin2str(addr));
     end)
 
-    it("zero mask (/0) -> mlen=0", function()
+    it("correctly return mlen=0 for a zero mask (/0)", function()
       addr, mlen, af = iptable.tobin("10.11.12.13/0");
       assert.are_equal(iptable.AF_INET, af);
       assert.are_equal(0, mlen);
       assert.are_equal("05:0a:0b:0c:0d", bin2str(addr));
     end)
 
-    it("bad mask (<0) -> yields nil values", function()
+    it("yields nil values for a bad mask (<0)", function()
       addr, mlen, af = iptable.tobin("10.10.10.10/-1");
       assert.are_equal(nil, af);
       assert.are_equal(nil, mlen);
       assert.are_equal(nil, addr);
     end)
 
-    it("bad mask (>max) -> yields nil", function()
+    it("yields nil values for a bad mask (>max)", function()
       addr, mlen, af = iptable.tobin("10.10.10.10/33");
       assert.are_equal(nil, af);
       assert.are_equal(nil, mlen);
       assert.are_equal(nil, addr);
     end)
 
-    it("no mask -> mlen=-1", function()
+    it("yields mlen=-1 to signal absence of /mask in prefix string", function()
       addr, mlen, af = iptable.tobin("2f:aa:bb::");
       assert.are_equal(iptable.AF_INET6, af);
       assert.are_equal(-1, mlen);  -- -1 means no mask
@@ -495,4 +506,5 @@ describe("iptable.numhosts(pfx): ", function()
 
   end)
 end)
+
 
