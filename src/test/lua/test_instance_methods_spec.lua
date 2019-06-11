@@ -1,23 +1,12 @@
 #!/usr/bin/env lua
---
 -------------------------------------------------------------------------------
---         File:  test_create.lua
+--         File:  test_instance_methods.lua
 --
---        Usage:  ./test_create.lua
+--        Usage:  busted src/test/lua/test_instance_methods.lua
 --
 --  Description:  
 --
---      Options:  ---
--- Requirements:  ---
---         Bugs:  ---
---        Notes:  ---
---       Author:  YOUR NAME (), <>
--- Organization:  
---      Version:  1.0
---      Created:  01-06-19
---     Revision:  ---
 -------------------------------------------------------------------------------
---
 
 package.cpath = "./build/?.so;"..package.cpath
 

@@ -18,6 +18,7 @@
 // lua_iptable defines
 
 #define LUA_IPTABLE_ID "iptable"
+#define AF_UNKNOWN(f) (f != AF_INET && f!= AF_INET6)
 
 // lua functions
 
@@ -270,24 +271,24 @@ ipt_numhosts(lua_State *L)
 {
     // iptable.numhosts(strKey) <-- [str]
     // Return the number of hosts in a given prefix, nil on errors
+    // - uses Lua's arithmatic (2^hostbits), since ipv6 can get large.
+
     dbg_stack("inc(.) <--");
 
     uint8_t addr[KEYBUFLEN_MAX];
     size_t len = 0;
-    int af = AF_UNSPEC, mlen = -1, hlen = 0;
+    int af = AF_UNSPEC, mlen = -1, hlen = -1;
     const char *pfx = NULL;
 
     pfx = check_pfxstr(L, 1, &len);
     if (! key_bystr(pfx, &mlen, &af, addr)) return 0;
+    if (AF_UNKNOWN(af)) return 0;
 
-    if (af == AF_INET)
-        hlen = mlen < 0 ? 0 : IP4_MAXMASK - mlen;
-    else if (af == AF_INET6)
-        hlen = mlen < 0 ? 0 : IP6_MAXMASK - mlen;
-    else return 0;
-
-    lua_pushinteger(L, pow(2,hlen));
-    dbg_msg("hlen is %d", hlen);
+    hlen = af == AF_INET ? IP4_MAXMASK : IP6_MAXMASK;
+    hlen = mlen < 0 ? 0 : hlen - mlen;              // mlen<0 means host addr
+    lua_pushinteger(L, 2);
+    lua_pushinteger(L, hlen);
+    lua_arith(L, LUA_OPPOW);
     dbg_stack("out(1) ==>");
 
     return 1;

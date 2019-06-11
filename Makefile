@@ -9,7 +9,7 @@
 # - http://make.mad-scientist.net/papers/advanced-auto-dependency-generation/#tldr
 RM=/bin/rm
 BUSTED=~/.luarocks/bin/busted
-BOPTS=--defer-print
+BOPTS=
 #
 # project directories
 #
@@ -51,6 +51,7 @@ LFLAGS=  -fPIC -shared -Wl,-soname=$(TARGET:.$(MINOR)=)
 # make <tgt> DEBUG=1
 ifdef DEBUG
   CFLAGS+=-DDEBUG
+  BOPTS=--defer-print
 endif
 
 .PHONY: test clean purge
