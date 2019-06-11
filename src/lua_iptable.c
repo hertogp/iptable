@@ -43,6 +43,7 @@ static int ipt_tolen(lua_State *);
 static int ipt_numhosts(lua_State *);
 static int ipt_network(lua_State *);
 static int ipt_broadcast(lua_State *);
+static int ipt_mask(lua_State *);
 static int ipt_iter_hosts(lua_State *);
 
 
@@ -56,23 +57,25 @@ static int _tostring(lua_State *);
 static int _pairs(lua_State *);
 static int counts(lua_State *);
 static int more(lua_State *);
+static int less(lua_State *);
 
 
-// iptable function array
+// iptable module function array
 
 static const struct luaL_Reg funcs [] = {
     {"new", ipt_new},
     {"tobin", ipt_tobin},
     {"tostr", ipt_tostr},
     {"tolen", ipt_tolen},
-    {"numhosts", ipt_numhosts},
     {"network", ipt_network},
     {"broadcast", ipt_broadcast},
+    {"mask", ipt_mask},
+    {"numhosts", ipt_numhosts},
     {"hosts", ipt_iter_hosts},
     {NULL, NULL}
 };
 
-// iptable methods array
+// iptable instance methods array
 
 static const struct luaL_Reg meths [] = {
     {"__gc", _gc},
@@ -83,6 +86,7 @@ static const struct luaL_Reg meths [] = {
     {"__pairs", _pairs},
     {"counts", counts},
     {"more", more},
+    {"less", less},
     {NULL, NULL}
 };
 
@@ -247,7 +251,7 @@ ipt_tostr(lua_State *L)
 static int
 ipt_tolen(lua_State *L)
 {
-    // iptable.masklen(binKey) <-- [key]
+    // iptable.tolen(binKey) <-- [key]
     // Return the number of consequtive msb 1-bits, nil on errors.
     // - stops at the first zero bit.
     dbg_stack("inc(.) <--");
@@ -347,6 +351,35 @@ ipt_broadcast(lua_State *L)
     dbg_stack("out(3) ==>");
 
     return 3;
+}
+
+static int
+ipt_mask(lua_State *L)
+{
+    // iptable.mask(af, mlen) <-- [num]
+    // Returns mask (as string) for mlen bits given. Nil on errors
+    // - mlen < 0 means inverse mask of mlen, so mlen = -8 -> 0.255.255.255
+    dbg_stack("inc(.) <--");
+
+    int af = AF_UNSPEC, mlen = -1, isnum = 0;
+    char buf[KEYBUFLEN_MAX];
+    uint8_t mask[KEYBUFLEN_MAX];
+
+    af = lua_tointegerx(L, 1, &isnum);
+    if (! isnum) return 0;
+    if (AF_UNKNOWN(af)) return 0;
+
+    mlen = lua_tointegerx(L, 2, &isnum);
+    if (! isnum) return 0;
+    if (! key_bylen(af, mlen < 0 ? -mlen : mlen, mask)) return 0;
+    if (mlen < 0 && ! key_invert(mask)) return 0;
+    if (! key_tostr(mask, buf)) return 0;
+
+    lua_pushstring(L, buf);
+
+    dbg_stack("out(1) ==>");
+
+    return 1;
 }
 
 static int
@@ -598,8 +631,17 @@ _pairs(lua_State *L)
 static int
 more(lua_State *L)
 {
-    // more(pfx) <-- [ud pfx]
+    // ipt:more(pfx) <-- [ud pfx]
     // Return array of more specific prefixes in the iptable
+    lua_pushliteral(L, "not implemented (yet)");
+    return 1;
+}
+
+static int
+less(lua_State *L)
+{
+    // ipt:less(pfx) <-- [ud pfx]
+    // Return array of less specific prefixes in the iptable
     lua_pushliteral(L, "not implemented (yet)");
     return 1;
 }
