@@ -58,10 +58,11 @@
 #define log(x, ...) fprintf(stderr, ##__VA_ARGS__)
 #define panic(x)    fprintf(stderr, "PANIC: %s", x), exit(1)
 #define min(a, b) ((a) < (b) ? (a) : (b) )
+//#include <sys/types.h>                // ipt: needed for u_char
 #include <sys/socket.h>                 // ipt: XXX temp for debug printf's
 #include <arpa/inet.h>                  // ipt: XXX temp for debug printf's
 #include <assert.h>                     // ipt: to redefine KASSERT
-#define KASSERT(val, sdm) assert(val)  // ipt: fake KASSERT, since its missing
+#define KASSERT(val, sdm) assert(val)   // ipt: fake KASSERT, since its missing
 #include "radix.h"
 #endif /* !_KERNEL */
 

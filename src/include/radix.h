@@ -35,9 +35,8 @@
 #ifndef _RADIX_H_
 #define _RADIX_H_
 
-/* ipt: iptable is userland code, so undef _KERNEL */
+/* ipt: iptable is userland code..*/
 #undef _KERNEL
-
 #ifdef _KERNEL
 #include <sys/_lock.h>
 #include <sys/_mutex.h>

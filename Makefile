@@ -1,18 +1,26 @@
 # Makefile for iptable for C or Lua
 #
 # Lua                  | C
-# ---------------------|---------------------
-# make                 | make         CLIB=1
-# make test            | make test    CLIB=1
-# make install         | make install CLIB=1
+# ---------------------|--------------------
+# make                 | make CLIB=1
+# make test            | make CLIB=1 test
+# make install         | TODO: make CLIB=1 install
+# ------------------------------------------
+# - for debugging mode, add DEBUG=1 flag
+#
 # See
 # - http://make.mad-scientist.net/papers/advanced-auto-dependency-generation/#tldr
+
 RM=/bin/rm
 BUSTED=~/.luarocks/bin/busted
 BOPTS=
-#
+
+# LUA directories
+LUA_VER=5.3
+LUA_DIR=/usr/local
+LUA_LIBDIR=$(LUA_DIR)/lib/lua/$(LUA_VER)
+
 # project directories
-#
 D_DOC=doc
 D_SRC=src
 D_INCL=src/include
@@ -20,16 +28,16 @@ D_BIN=src/bin
 D_UNIT=src/test
 D_TEST=test
 D_BUILD=build
+# TODO: create proper rockspec for this
+D_INSTALL=~/.luarocks/lib/lua/5.3
 
-#
-# LIB iptable version 1.0.x
-#
+# C-LIB iptable version 1.0.x
 MINOR=0.1
 VERSION=1.$(MINOR)
 LIB=iptable
 TARGET=$(LIB).so
 
-# make CLIB=1 builds C-library instead of Lua-library
+# File collections
 SRCS=$(sort $(wildcard $(D_SRC)/*.c))
 ifdef CLIB
 	SRCS:=$(filter-out %/lua_iptable.c, $(SRCS))
@@ -38,17 +46,26 @@ endif
 OBJS=$(SRCS:$(D_SRC)/%.c=$(D_BUILD)/%.o)
 DEPS=$(OBJS:%.o=%.d)
 
-CFLAGS+= -std=c99 -O2 -g -Wall -Wextra -Werror -pedantic -fPIC
-CFLAGS+= -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DEFAULT_SOURCE
+# Flags
+# override CFLAGS+= -std=c99 -g -std=c99 -fPIC
+CFLAGS=  -std=gnu99 -O2 -g -fPIC
+#CFLAGS+= -D_POSIX_C_SOURCE=200810L  # <-- too old?
+
+#CFLAGS+= -D_GNU_SOURCE
+#CFLAGS+= -D_DEFAULT_SOURCE
+
+# add warnings and treat them as errors
+CFLAGS+= -Wall -Wextra -Werror -pedantic
 CFLAGS+= -Wno-unknown-warning-option -Wold-style-definition
 CFLAGS+= -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 CFLAGS+= -Wmissing-declarations -Wredundant-decls -Wnested-externs
 CFLAGS+= -Wshadow -Wcast-qual -Wcast-align -Wwrite-strings
 CFLAGS+= -Wsuggest-attribute=noreturn -Wjump-misses-init
 
-LFLAGS=  -fPIC -shared -Wl,-soname=$(TARGET:.$(MINOR)=)
+LFLAGS=  -shared -fPIC -Wl,-soname=$(TARGET:.$(MINOR)=)
+LIBFLAG= -shared
 
-# make <tgt> DEBUG=1
+# flag DEBUG=1
 ifdef DEBUG
   CFLAGS+=-DDEBUG
   BOPTS=--defer-print
@@ -57,7 +74,7 @@ endif
 .PHONY: test clean purge
 .PRECIOUS: %/.f
 
-# create (sub)dir and marker file .f
+# create (sub)dir and the precious file-markers .f
 %/.f:
 	@mkdir -p $(dir $@)
 	@touch $@
@@ -65,8 +82,8 @@ endif
 .SECONDEXPANSION:
 
 # Default target: shared object file & its symlinks (if CLIB)
-$(D_BUILD)/$(TARGET): $(OBJS) $(OBJS:.o=.d)
-	$(CC) $(LFLAGS) $(OBJS) -o $@
+$(D_BUILD)/$(TARGET): $(OBJS) $(DEPS)
+	$(CC) $(LIBFLAG) $(LFLAGS) $(OBJS) -o $@
 ifdef CLIB
 	@ln -sf $(TARGET) $(@:.$(VERSION)=)
 	@ln -sf $(TARGET) $(@:.$(MINOR)=)
@@ -76,12 +93,20 @@ endif
 $(D_BUILD)/%.o: $(D_SRC)/%.c $$(@D)/.f
 	$(CC) $(CFLAGS) -I$(D_INCL) -c $< -o $@
 
-# dependency files
+# dependency files .d : 
 $(D_BUILD)/%.d: $(D_SRC)/%.c
 	$(CC) -I$(D_INCL) -MM -MQ$(D_BUILD)/$*.o -MQ$(D_BUILD)/$*.d -MF $@ $<
 
-# include dependencies
+# include the dependencies
 include $(wildcard $(D_BUILD)/*.d)
+
+
+# install TODO: make proper rockspec for this.
+install: $(D_BUILD)/$(TARGET)
+	@echo $(D_BUILD)/$(TARGET) $(INST_LIBDIR)
+	@echo mkdir -p $(INST_LIBDIR)
+	@echo cp $(D_BUILD)/$(TARGET) $(INST_LIBDIR)
+
 
 clean:
 	@$(RM) -f $(D_BUILD)/* $(D_TEST)/*
@@ -89,6 +114,7 @@ clean:
 purge: clean
 	@rm -f $(D_BUILD)/.f $(D_TEST)/.f
 	@rmdir $(D_BUILD) $(D_TEST)
+
 
 # show variables
 vars:
@@ -104,6 +130,7 @@ vars:
 	@echo "     D_UNIT : $(D_UNIT)"
 	@echo "     D_TEST : $(D_TEST)"
 	@echo "    D_BUILD : $(D_BUILD)"
+	@echo "   D_INSTALL: $(D_INSTALL)"
 	@echo " -----------:"
 ifdef CLIB
 	@echo " MU_SOURCES : $(MU_SOURCES)"
@@ -138,6 +165,8 @@ MU_RUNNERS=$(MU_TARGETS:%=$(D_TEST)/%)
 test: $(MU_RUNNERS)
 	@$(foreach runner, $(MU_RUNNERS), valgrind --leak-check=yes ./$(runner);)
 
+endif
+
 # run a single unit test
 $(MU_TARGETS): %: $(D_TEST)/%
 	@valgrind --leak-check=yes ./$<
@@ -153,5 +182,3 @@ $(MU_OBJECTS): $(D_BUILD)/%.o: $(D_UNIT)/%.c $(D_BUILD)/%_mu.h $(D_INCL)/minunit
 # build a unit test runner
 $(MU_RUNNERS): $(D_TEST)/%: $(D_BUILD)/%.o $(D_BUILD)/$(TARGET) $$(@D)/.f
 	$(CC) -L$(D_BUILD) -Wl,-rpath,.:$(D_BUILD) $< -o $@ -l$(LIB)
-
-endif
