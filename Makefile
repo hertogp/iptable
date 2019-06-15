@@ -5,6 +5,7 @@ RM=/bin/rm
 BUSTED=~/.luarocks/bin/busted
 BOPTS=
 MKDIR= mkdir
+INSTALL= cp
 
 # project directories
 SRCDIR=src
@@ -115,6 +116,7 @@ install: $(TARGET)
 	@echo "LUADIR     = $(INST_LUADIR)"
 	@echo "CONFDIR    = $(INST_CONFDIR)"
 	@echo "cp $(TARGET) $(INST_LIBDIR)"
+	$(INSTALL) $(TARGET) $(INST_LIBDIR)"
 
 clean:
 	$(RM) $(BLDDIR)/*
