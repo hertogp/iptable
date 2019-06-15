@@ -1,5 +1,6 @@
 # Makefile for iptable
 
+# utilities
 RM=/bin/rm
 BUSTED=~/.luarocks/bin/busted
 BOPTS=
@@ -10,12 +11,26 @@ TSTDIR=src/test
 BLDDIR=build
 DOCDIR=doc
 
+# Lua/luarocks directories
+# - build dirs
+# LUA_LIBDIR=
+# LUA_BINDIR=
+# LUA_INCDIR=
+# LUALIB=
+# LUA=
+# - install dirs
+INST_PREFIX=/usr/local
+INST_BINDIR=$(INST_PREFIX)/bin
+INST_LIBDIR=$(INST_PREFIX)/lib/lua/5.3
+INST_LUADIR=$(INST_PREFIX)/share/lua/5.3
+INST_CONFDIR=$(INST_PREFIX)/etc
+
 # versioning
 MAJOR=0
 MINOR=0
 PATCH=1
+ROCKR=1
 VERSION=$(MAJOR).$(MINOR).$(PATCH)
-ROCKV=1
 
 # library
 LIB=iptable
@@ -45,7 +60,7 @@ CFLAGS+= -Wsuggest-attribute=noreturn -Wjump-misses-init
 
 LIBFLAG= -shared
 LFLAGS=  -fPIC
-SONAME=  -Wl,-soname=lib$(LIB).so.$(MAJOR)
+SOFLAG=  -Wl,-soname=$(SONAME)
 
 # flag DEBUG=1
 ifdef DEBUG
@@ -66,7 +81,7 @@ $(TARGET): $(OBJS) $(DEPS)
 
 # C libary
 $(CTARGET): $(COBJS)
-	$(CC) $(LIBFLAG) $(LFLAGS) $(SONAME) $(COBJS) -o $(CTARGET)
+	$(CC) $(LIBFLAG) $(LFLAGS) $(SOFLAG) $(COBJS) -o $(CTARGET)
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so.$(MAJOR)
 
@@ -79,15 +94,31 @@ $(BLDDIR)/%.d: $(SRCDIR)/%.c
 	$(CC) -I$(SRCDIR) -MM -MQ$(BLDDIR)/$*.o -MF $@ $<
 #	$(CC) -I$(SRCDIR) -MM -MQ$@ -MQ$(@:%.d=%.o) -MF $@ $<
 
+install: $(TARGET)
+	@echo "luarocks"
+	@echo "LUA_LIBDIR = $(LUA_LIBDIR)"
+	@echo "LUA_BINDIR = $(LUA_BINDIR)"
+	@echo "LUA_INCDIR = $(LUA_INCDIR)"
+	@echo "LUALIB     = $(LUALIB)"
+	@echo "LUA        = $(LUA)"
+# - install dirs
+	@echo "PREFIX     = $(INST_PREFIX)"
+	@echo "BINDIR     = $(INST_BINDIR)"
+	@echo "LIBDIR     = $(INST_LIBDIR)"
+	@echo "LUADIR     = $(INST_LUADIR)"
+	@echo "CONFDIR    = $(INST_CONFDIR)"
+	@echo "cp $(TARGET) $(INST_LIBDIR)"
+
 clean:
 	$(RM) $(BLDDIR)/*
 
 # include the dependencies for the object files
 -include $(DEPS)
 
-# C/LUA unit tests
-test: lua_test c_test
+# run all C- and LUA-unit tests
+test: c_test lua_test
 
+# run all Lua-unit tests
 lua_test: $(TARGET)
 	@echo "\n\n--- Lua unit tests ---\n"
 	@$(BUSTED) $(BOPTS) .
@@ -99,18 +130,16 @@ MU_HEADERS=$(MU_TARGETS:%=$(BLDDIR)/%.h)
 MU_OBJECTS=$(MU_TARGETS:%=$(BLDDIR)/%.o)
 MU_RUNNERS=$(MU_TARGETS:%=$(BLDDIR)/%.out)
 
-# run all unit tests
+# run all C-unit tests
 c_test: $(CTARGET) $(MU_RUNNERS)
 	@echo "\n\n--- C unit tests ---\n"
 	@$(foreach runner, $(MU_RUNNERS), valgrind --leak-check=yes ./$(runner);)
-
-# endif
 
 # # run a single unit test
 $(MU_TARGETS): %: $(BLDDIR)/%.out
 	@valgrind --leak-check=yes ./$<
 
-# # build a unit test's mu-header
+# build a unit test's mu-header
 $(MU_HEADERS): $(BLDDIR)/%.h: $(TSTDIR)/%.c
 	$(SRCDIR)/mu_header.sh $< $@
 
@@ -156,6 +185,19 @@ echo:
 	@echo "MU_RUNNERS  = $(MU_RUNNERS)"
 	@echo -n "$(CTARGET) = "
 	@objdump -p $(CTARGET) | grep -i soname
+	@echo
+	@echo "luarocks"
+	@echo "LUA_LIBDIR = $()"
+	@echo "LUA_BINDIR = $(LUA_BINDIR)"
+	@echo "LUA_INCDIR = $(LUA_INCDIR)"
+	@echo "LUALIB     = $(LUALIB)"
+	@echo "LUA        = $(LUA)"
+# - install dirs
+	@echo "PREFIX     = $(PREFIX)"
+	@echo "BINDIR     = $(BINDIR)"
+	@echo "LIBDIR     = $(LIBDIR)"
+	@echo "LUADIR     = $(LUADIR)"
+	@echo "CONFDIR    = $(CONFDIR"
 	@echo
 	@echo "removables"
 	@echo "$(OBJS)"

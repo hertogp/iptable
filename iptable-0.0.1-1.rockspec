@@ -1,6 +1,6 @@
 rockspec_format = "3.0"
 package = "iptable"
-version = "1.0.1-1"
+version = "0.0.1-1"
 
 description = {
    summary = "A Lua longest prefix matching table for ipv4 and ipv6.",
@@ -21,7 +21,7 @@ dependencies={"lua>=5.3"}
 supported_platforms={"linux"}
 
 source = {
-   url = "https://github.com/hertogp/iptable.git",
+   url = "git://github.com/hertogp/iptable.git",
    -- tag = "1", -- version's tag
    branch="master",
 }
