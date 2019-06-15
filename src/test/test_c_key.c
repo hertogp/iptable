@@ -11,7 +11,7 @@
 #include "iptable.h"         // iptable layered on top of radix.c
 
 #include "minunit.h"         // the mu_test macros
-#include "test_ipt_key_mu.h"   // a generated header file for this test runner
+#include "test_c_key.h"    // a generated header file for this test runner
 
 // helpers
 char *mk_strptr(const char *);
