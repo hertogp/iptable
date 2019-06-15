@@ -100,22 +100,9 @@ $(BLDDIR)/%.o: $(SRCDIR)/%.c
 #   the existence of $BLDDIR
 $(BLDDIR)/%.d: $(SRCDIR)/%.c | $(BLDDIR)
 	$(CC) -I$(SRCDIR) -MM -MQ$(BLDDIR)/$*.o -MF $@ $<
-#	$(CC) -I$(SRCDIR) -MM -MQ$@ -MQ$(@:%.d=%.o) -MF $@ $<
 
+# make install -or- luarocks install iptable
 install: $(TARGET)
-	@echo "luarocks"
-	@echo "LUA_LIBDIR = $(LUA_LIBDIR)"
-	@echo "LUA_BINDIR = $(LUA_BINDIR)"
-	@echo "LUA_INCDIR = $(LUA_INCDIR)"
-	@echo "LUALIB     = $(LUALIB)"
-	@echo "LUA        = $(LUA)"
-# - install dirs
-	@echo "PREFIX     = $(INST_PREFIX)"
-	@echo "BINDIR     = $(INST_BINDIR)"
-	@echo "LIBDIR     = $(INST_LIBDIR)"
-	@echo "LUADIR     = $(INST_LUADIR)"
-	@echo "CONFDIR    = $(INST_CONFDIR)"
-	@echo "cp $(TARGET) $(INST_LIBDIR)"
 	$(INSTALL) $(TARGET) $(INST_LIBDIR)
 
 clean:

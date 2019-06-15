@@ -5,7 +5,7 @@
 --  Description:  unit test file for iptable
 -------------------------------------------------------------------------------
 
-package.cpath = "./build/?.so;"..package.cpath
+package.cpath = "./build/?.so;"
 
 function bin2str(buf)
   local s = ""

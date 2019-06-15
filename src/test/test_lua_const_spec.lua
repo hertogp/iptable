@@ -19,7 +19,7 @@
 -------------------------------------------------------------------------------
 --
 
-package.cpath = "./build/?.so;"..package.cpath
+package.cpath = "./build/?.so;"
 
 describe("iptable module: ", function()
   expose("ipt", function()

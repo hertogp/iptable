@@ -8,7 +8,7 @@
 --
 -------------------------------------------------------------------------------
 
-package.cpath = "./build/?.so;"..package.cpath
+package.cpath = "./build/?.so;"
 
 describe("iptable instance methods: ", function()
   expose("ipt", function()

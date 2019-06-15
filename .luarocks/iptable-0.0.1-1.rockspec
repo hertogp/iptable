@@ -21,7 +21,7 @@ dependencies={"lua>=5.3"}
 supported_platforms={"linux"}
 
 source = {
-   url = "git://github.com/hertogp/iptable.git",
+   url = "git+https://github.com/hertogp/iptable.git",
    -- tag = "1", -- version's tag
    branch="master",
 }
