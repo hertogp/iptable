@@ -122,6 +122,7 @@ test: c_test lua_test
 lua_test: $(TARGET)
 	@echo "\n\n--- Lua unit tests ---\n"
 	@$(BUSTED) $(BOPTS) .
+	@echo "\n--- done ---\n\n"
 
 # MINUT - C unit tests
 MU_SOURCES=$(sort $(wildcard $(TSTDIR)/test_*.c))
@@ -134,6 +135,7 @@ MU_RUNNERS=$(MU_TARGETS:%=$(BLDDIR)/%.out)
 c_test: $(CTARGET) $(MU_RUNNERS)
 	@echo "\n\n--- C unit tests ---\n"
 	@$(foreach runner, $(MU_RUNNERS), valgrind --leak-check=yes ./$(runner);)
+	@echo "\n--- done ---\n\n"
 
 # # run a single unit test
 $(MU_TARGETS): %: $(BLDDIR)/%.out
