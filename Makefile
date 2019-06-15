@@ -116,7 +116,7 @@ install: $(TARGET)
 	@echo "LUADIR     = $(INST_LUADIR)"
 	@echo "CONFDIR    = $(INST_CONFDIR)"
 	@echo "cp $(TARGET) $(INST_LIBDIR)"
-	$(INSTALL) $(TARGET) $(INST_LIBDIR)"
+	$(INSTALL) $(TARGET) $(INST_LIBDIR)
 
 clean:
 	$(RM) $(BLDDIR)/*
