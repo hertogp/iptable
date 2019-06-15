@@ -37,6 +37,8 @@ VERSION=1.$(MINOR)
 LIB=iptable
 TARGET=$(LIB).so
 
+PLAT:=$(shell echo $(shell uname) | tr [:upper:] [:lower:])
+
 # File collections
 SRCS=$(sort $(wildcard $(D_SRC)/*.c))
 ifdef CLIB
@@ -48,14 +50,11 @@ DEPS=$(OBJS:%.o=%.d)
 
 # Flags
 # override CFLAGS+= -std=c99 -g -std=c99 -fPIC
-CFLAGS=  -std=gnu99 -O2 -g -fPIC
-#CFLAGS+= -D_POSIX_C_SOURCE=200810L  # <-- too old?
-
-#CFLAGS+= -D_GNU_SOURCE
-#CFLAGS+= -D_DEFAULT_SOURCE
+CFLAGS=  -std=gnu99
+CFLAGS+= -O2 -g -fPIC
+CFLAGS+= -Wall -Wextra -Werror -pedantic
 
 # add warnings and treat them as errors
-CFLAGS+= -Wall -Wextra -Werror -pedantic
 CFLAGS+= -Wno-unknown-warning-option -Wold-style-definition
 CFLAGS+= -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 CFLAGS+= -Wmissing-declarations -Wredundant-decls -Wnested-externs
@@ -81,7 +80,7 @@ endif
 
 .SECONDEXPANSION:
 
-# Default target: shared object file & its symlinks (if CLIB)
+# Default target: iptable.so or iptable.so.x.y.z + symlinks
 $(D_BUILD)/$(TARGET): $(OBJS) $(DEPS)
 	$(CC) $(LIBFLAG) $(LFLAGS) $(OBJS) -o $@
 ifdef CLIB
@@ -117,8 +116,9 @@ purge: clean
 
 
 # show variables
-vars:
+echo:
 	@echo
+	@echo "       PLAT : $(PLAT)"
 	@echo "     TARGET : $(TARGET)"
 	@echo "       SRCS : $(SRCS)"
 	@echo "       OBJS : $(OBJS)"
