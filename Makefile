@@ -1,52 +1,44 @@
-# Makefile for iptable for C or Lua
-#
-# Lua                  | C
-# ---------------------|--------------------
-# make                 | make CLIB=1
-# make test            | make CLIB=1 test
-# make install         | TODO: make CLIB=1 install
-# ------------------------------------------
-# - for debugging mode, add DEBUG=1 flag
-#
-# See
-# - http://make.mad-scientist.net/papers/advanced-auto-dependency-generation/#tldr
+# Makefile for iptable
 
 RM=/bin/rm
 BUSTED=~/.luarocks/bin/busted
 BOPTS=
 
-# LUA directories
-LUA_VER=5.3
-LUA_DIR=/usr/local
-LUA_LIBDIR=$(LUA_DIR)/lib/lua/$(LUA_VER)
-
 # project directories
-D_DOC=doc
-D_SRC=src
-D_INCL=src/include
-D_BIN=src/bin
-D_UNIT=src/test
-D_TEST=test
-D_BUILD=build
-# TODO: create proper rockspec for this
-D_INSTALL=~/.luarocks/lib/lua/5.3
+SRCDIR=src
+TSTDIR=src/test
+BLDDIR=build
 
-# C-LIB iptable version 1.0.x
-MINOR=0.1
-VERSION=1.$(MINOR)
+# versioning
+MAJOR=0
+MINOR=0
+PATCH=1
+VERSION=$(MAJOR).$(MINOR).$(PATCH)
+ROCKV=1
+
+# library
 LIB=iptable
-TARGET=$(LIB).so
+SONAME=$(LIB).$(MAJOR)
 
-PLAT:=$(shell echo $(shell uname) | tr [:upper:] [:lower:])
+# LUA file collections
+L_SRCS= radix.c iptable.c lua_iptable.c
+L_TGT=$(LIB).so
 
-# File collections
-SRCS=$(sort $(wildcard $(D_SRC)/*.c))
+# C file collections
+C_SRCS= radix.c iptable.c
+C_TGT=lib$(LIB).$(MAJOR).$(MINOR).$(PATCH)
+
 ifdef CLIB
-	SRCS:=$(filter-out %/lua_iptable.c, $(SRCS))
-	TARGET:=lib$(TARGET).$(VERSION)
+	SRCS:= radix.c iptable.c
+	TARGET:= lib$(LIB).$(MAJOR).$(MINOR).$(PATCH)
+else
+	SRCS= radix.c iptable.c lua_iptable.c
+	TARGET=$(LIB).so
 endif
-OBJS=$(SRCS:$(D_SRC)/%.c=$(D_BUILD)/%.o)
+OBJS=$(SRCS:%.c=$(BLDDIR)/%.o)
 DEPS=$(OBJS:%.o=%.d)
+# prepend src dir for srcs
+SRCS=$(SRCS:%.c=$(SRCDIR)/%.c)
 
 # Flags
 # override CFLAGS+= -std=c99 -g -std=c99 -fPIC
