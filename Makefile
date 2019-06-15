@@ -18,22 +18,20 @@ VERSION=$(MAJOR).$(MINOR).$(PATCH)
 ROCKV=1
 
 # library
-PROJ=iptable
-LIB=$(PROJ).so
-CLIB=libiptable.so
-SONAME=$(CLIB).$(MAJOR)
+LIB=iptable
+SONAME=lib$(LIB).so.$(MAJOR)
+TARGET=$(BLDDIR)/$(LIB).so
+CTARGET=$(BLDDIR)/lib$(LIB).so.$(VERSION)
 
 # C/LUA file collections
+# note: lua_iptable.c must come last
 FILES= radix.c iptable.c lua_iptable.c
+DEPS=$(FILES:%.c=$(BLDDIR)/%.d)
 SRCS=$(FILES:%.c=$(SRCDIR)/%.c)
 OBJS=$(FILES:%.c=$(BLDDIR)/%.o)
-DEPS=$(FILES:%.c=$(BLDDIR)/%.d)
-TARGET=$(BLDDIR)/$(LIB)
 COBJS=$(filter-out $(lastword $(OBJS)), $(OBJS))
-CTARGET=$(BLDDIR)/$(CLIB).$(VERSION)
 
 # Flags
-# override CFLAGS+= -std=c99 -g -std=c99 -fPIC
 CFLAGS=  -std=gnu99
 CFLAGS+= -O2 -g -fPIC
 CFLAGS+= -Wall -Wextra -Werror -pedantic
@@ -47,7 +45,7 @@ CFLAGS+= -Wsuggest-attribute=noreturn -Wjump-misses-init
 
 LIBFLAG= -shared
 LFLAGS=  -fPIC
-SONAME=-Wl,-soname=$(CLIB).$(MAJOR)
+SONAME=  -Wl,-soname=lib$(LIB).so.$(MAJOR)
 
 # flag DEBUG=1
 ifdef DEBUG
@@ -69,8 +67,8 @@ $(TARGET): $(OBJS) $(DEPS)
 # C libary
 $(CTARGET): $(COBJS)
 	$(CC) $(LIBFLAG) $(LFLAGS) $(SONAME) $(COBJS) -o $(CTARGET)
-	ln -sf $(CLIB).$(VERSION) $(BLDDIR)/$(CLIB)
-	ln -sf $(CLIB).$(VERSION) $(BLDDIR)/$(CLIB).$(MAJOR)
+	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so
+	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so.$(MAJOR)
 
 # object files
 $(BLDDIR)/%.o: $(SRCDIR)/%.c
@@ -78,26 +76,14 @@ $(BLDDIR)/%.o: $(SRCDIR)/%.c
 
 # dependency files .d
 $(BLDDIR)/%.d: $(SRCDIR)/%.c
-	@echo "@ $@"
-	@echo "* $*"
-	@echo "< $<"
-	@echo "^ $^"
 	$(CC) -I$(SRCDIR) -MM -MQ$(BLDDIR)/$*.o -MF $@ $<
 #	$(CC) -I$(SRCDIR) -MM -MQ$@ -MQ$(@:%.d=%.o) -MF $@ $<
 
 clean:
 	$(RM) $(BLDDIR)/*
 
-# include the dependencies
+# include the dependencies for the object files
 -include $(DEPS)
-# -----------------------------------------------------------------------
-# build/radix.d build/radix.o: src/radix.c src/radix.h
-# build/iptable.d build/iptable.o: src/iptable.c src/radix.h src/iptable.h
-# build/lua_iptable.d build/lua_iptable.o: src/lua_iptable.c src/lua.h \
-#   src/luaconf.h src/lualib.h src/lauxlib.h src/radix.h src/iptable.h \
-#   src/debug.h
-# -----------------------------------------------------------------------
-
 
 # C/LUA unit tests
 test: lua_test c_test
@@ -133,8 +119,8 @@ $(MU_OBJECTS): $(BLDDIR)/%.o: $(TSTDIR)/%.c $(BLDDIR)/%.h $(SRCDIR)/minunit.h
 	$(CC) -I$(BLDDIR) -I$(SRCDIR) $(CFLAGS) -o $@ -c $<
 
 # build a unit test runner
-$(MU_RUNNERS): $(BLDDIR)/%.out: $(BLDDIR)/%.o $(BLDDIR)/$(CLIB)
-	$(CC) -L$(BLDDIR) -Wl,-rpath,.:$(BLDDIR) $< -o $@ -l$(PROJ)
+$(MU_RUNNERS): $(BLDDIR)/%.out: $(BLDDIR)/%.o $(BLDDIR)/lib$(LIB).so
+	$(CC) -L$(BLDDIR) -Wl,-rpath,.:$(BLDDIR) $< -o $@ -l$(LIB)
 
 
 # show variables
@@ -144,7 +130,6 @@ echo:
 	@echo "BUSTED      = $(BUSTED)"
 	@echo "BOPTS       = $(BOPTS)"
 	@echo
-	@echo "PROJ        = $(PROJ)"
 	@echo "LIB         = $(LIB)"
 	@echo "TARGET      = $(TARGET)"
 	@echo "VERSION     = $(VERSION)"
@@ -154,7 +139,6 @@ echo:
 	@echo "DEPS        = $(DEPS)"
 	@echo
 	@echo "CTARGET     = $(CTARGET)"
-	@echo "CLIB        = $(CLIB)"
 	@echo "COBJS       = $(COBJS)"
 	@echo "SONAME      = $(SONAME)"
 	@echo "VERSION     = $(VERSION)"
@@ -170,10 +154,15 @@ echo:
 	@echo "MU_HEADERS  = $(MU_HEADERS)"
 	@echo "MU_OBJECTS  = $(MU_OBJECTS)"
 	@echo "MU_RUNNERS  = $(MU_RUNNERS)"
-	@echo -n "$(TARGET) = "
-	@objdump -p $(TARGET) | grep -i soname
 	@echo -n "$(CTARGET) = "
 	@objdump -p $(CTARGET) | grep -i soname
+	@echo
+	@echo "removables"
+	@echo "$(OBJS)"
+	@echo "$(DEPS)"
+	@echo "$(MU_HEADERS)"
+	@echo "$(MU_OBJECTS)"
+	@echo "$(MU_RUNNERS)"
 
 # BSD sources - update (runs unconditionally)
 bsd:
