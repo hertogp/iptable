@@ -44,12 +44,13 @@ build = {
     LUA="$(LUA)",
   },
 
-  install_variables = {         -- local => ~/.luarocks/lib/luarocks/rocks-5.3
-                                -- sudo  =>  /usr/local/lib/luarocks/rocks-5.3
-    INST_PREFIX="$(PREFIX)",       --> (local|sudo)/iptable/(version)/
-    INST_BINDIR="$(BINDIR)",       --> (local|sudo)/iptable/(version)/bin
-    INST_LIBDIR="$(LIBDIR)",       --> (local|sudo)/iptable/(version)/lib
-    INST_LUADIR="$(LUADIR)",       --> (local|sudo)/iptable/(version)/lua
-    INST_CONFDIR="$(CONFDIR)",     --> (local|sudo)/iptable/(version)conf
+  install_variables = {
+    -- with .. --local => ~/.luarocks/lib/luarocks/rocks-5.3
+    -- with sudo ..    =>  /usr/local/lib/luarocks/rocks-5.3
+    INST_PREFIX="$(PREFIX)",
+    INST_BINDIR="$(BINDIR)",
+    INST_LIBDIR="$(LIBDIR)",
+    INST_LUADIR="$(LUADIR)",
+    INST_CONFDIR="$(CONFDIR)",
   },
 }
