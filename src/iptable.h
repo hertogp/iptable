@@ -72,6 +72,7 @@ int key_tolen(void *);
 int key_incr(void *);
 int key_decr(void *);
 int key_cmp(void *, void *);
+int key_isin(void *, void *, void *);
 int key_network(void *, void *);
 int key_broadcast(void *, void *);
 int key_invert(void *);
@@ -84,12 +85,13 @@ struct radix_node *rdx_next(struct radix_node *);
 
 // -- tbl funcs
 
-int tbl_set(table_t *, const char *, void *, void *);
-int tbl_del(table_t *, const char *, void *);
-int tbl_walk(table_t *, walktree_f_t *, void *);
 table_t *tbl_create(purge_f_t *);
 entry_t * tbl_get(table_t *, const char *);
 entry_t * tbl_lpm(table_t *, const char *);
-void tbl_destroy(table_t **, void *);
+int tbl_set(table_t *, const char *, void *, void *);
+int tbl_del(table_t *, const char *, void *);
+int tbl_walk(table_t *, walktree_f_t *, void *);
+int tbl_destroy(table_t **, void *);
+int tbl_less(table_t *, const char *, int, walktree_f_t *, void *);
 
 #endif

@@ -12,14 +12,13 @@
 #include "iptable.h"
 
 /* static char rn_zeros[RDX_MAX_KEYLEN]; */
-/* needed for masking a key
-static uint8_t  rn_ones[RDX_MAX_KEYLEN] = {
+// needed for masking a key
+uint8_t  all_ones[RDX_MAX_KEYLEN] = {
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
 };
-*/
 
 // -- helpers
 
@@ -301,6 +300,27 @@ key_cmp(void *a, void *b)
     return 0;
 }
 
+int
+key_isin(void *a, void *b, void *m)
+{
+    // 1 iff a == b & m, 0 otherwise
+    uint8_t *aa = a, *bb = b, *mm = m;
+    int matchlen = 0;  // how many bytes to match depends on mask
+
+    // sanity checks
+    if(aa == NULL || bb == NULL) return 0;
+    if((matchlen = IPT_KEYLEN(aa)) != IPT_KEYLEN(bb)) return 0;
+
+    matchlen = mm ? min(matchlen, IPT_KEYLEN(mm)) : matchlen;
+    mm = mm ? mm+1 : all_ones;
+
+    aa++; bb++;
+    for (; --matchlen > 0; aa++, bb++, mm++)
+        if ((*aa ^ *bb) & *mm) return 0;
+
+    return 1;
+}
+
 // radix node functions
 
 int
@@ -317,7 +337,9 @@ rdx_flush(struct radix_node *rn, void *args)
     if (entry == NULL) return 0;
 
     free(entry->rn[0].rn_key);
-    if (entry->value != NULL) arg->purge(arg->args, &entry->value);
+    if (entry->value != NULL && arg->purge != NULL)
+        arg->purge(arg->args, &entry->value);
+
     free(entry);
 
     return 0;
@@ -371,7 +393,7 @@ rdx_next(struct radix_node *rn)
 table_t *
 tbl_create(purge_f_t *fp)
 {
-    // create a new iptable w/ 2 radix trees
+    // create a new iptable with 2 radix trees
     table_t *tbl = NULL;
 
     tbl = calloc(sizeof(*tbl), 1);  // sets count's to zero & ptr's to NULL
@@ -403,12 +425,14 @@ tbl_walk(table_t *t, walktree_f_t *f, void *fargs)
    return 1;
 }
 
-void
+int
 tbl_destroy(table_t **t, void *pargs)
 {
+    // utterly destroy the entire table; 1 on success, 0 on errors
+
     purge_t args;  // args to flush radix nodes & free userdata
 
-    if (t == NULL || *t == NULL) return;  // nothing to free
+    if (t == NULL || *t == NULL) return 0;  // nothing to free
 
     args.purge = (*t)->purge;          // the user callback to free userdata
     args.args = pargs;                 // context for purge callback
@@ -423,6 +447,8 @@ tbl_destroy(table_t **t, void *pargs)
 
     free(*t);
     *t = NULL;
+
+    return 1;
 }
 
 entry_t *
@@ -554,4 +580,68 @@ tbl_lpm(table_t *t, const char *s)
     rv = (entry_t *)head->rnh_matchaddr(addr, &head->rh);
 
     return rv;
+}
+
+int
+tbl_less(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
+{
+    // find less specific prefixes relative to s & call f(fargs, rn)
+    // return 0 on failure, 1 on success
+    // - actually traverses almost the entire tree to find all candidates
+    struct radix_node_head *head = NULL;
+    struct radix_node *rn = NULL, *base = NULL;
+    uint8_t addr[KEYBUFLEN_MAX];
+    int mlen = -1, af = AF_UNSPEC, done = 0;
+    // include = include > 0 ? -2 : -1;
+    include = include > 0 ? -2 : -1;
+
+    // sanity checks
+    if (t == NULL || s == NULL) return 0;
+    if (f == NULL) return 0;
+    if (! key_bystr(s, &mlen, &af, addr)) return 0;
+
+    if (af == AF_INET) {
+        head = t->head4;
+        mlen = mlen < 0 ? IP4_MAXMASK : mlen;
+    } else if (af == AF_INET6) {
+        head = t->head6;
+        mlen = mlen < 0 ? IP6_MAXMASK : mlen;
+    } else return 0;
+
+    if (mlen == 0 && include == -1) return 1;  // nothing is less specific than /0
+    mlen += IPT_KEYOFFSET;
+
+    // goto left most leaf
+    for(rn = head->rh.rnh_treetop; !RDX_ISLEAF(rn);)
+        rn = rn->rn_left;
+
+    // how to limit running around the tree for less specific prefixes?
+    /* rn = head->rnh_matchaddr(addr, &head->rh); */
+    /* if(rn == NULL) return 1; */
+    if (rn == NULL) return 1;
+
+    done = 0;
+    while (!done) {
+        base = rn;
+        // process leaf & its duplicates
+        for(; rn; rn = rn->rn_dupedkey) {
+            if (! RDX_ISROOT(rn) && rn->rn_bit + mlen > include)
+                if (key_isin(addr, rn->rn_key, rn->rn_mask))
+                    f(rn, fargs);
+        }
+        rn = base;
+
+        // go up while "I am a right->child" & "not a ROOT" node
+        while(RDX_ISRIGHT_CHILD(rn) && !RDX_ISROOT(rn))
+            rn = rn->rn_parent;
+
+        // go 1 up, then right & find the next left most *leaf*
+        for (rn = rn->rn_parent->rn_right; !RDX_ISLEAF(rn); )
+            rn = rn->rn_left;
+
+        if (rn->rn_flags & RNF_ROOT)
+            done = 1;
+    }
+
+    return 1;
 }

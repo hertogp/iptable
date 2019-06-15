@@ -40,9 +40,16 @@ test_tbl_setup(void)
 {
     table_t *ipt;
 
+    // create an ipt table with a purge function
     mu_assert((ipt = tbl_create(purge)));
-    tbl_destroy(&ipt, NULL);
+    mu_assert(tbl_destroy(&ipt, NULL));
     mu_true(ipt == NULL);
+
+    // create/destroy an ipt table without a purge function
+    mu_assert((ipt = tbl_create(NULL)));
+    mu_assert(tbl_destroy(&ipt, NULL));
+    mu_true(ipt == NULL);
+
 }
 
 void
@@ -229,9 +236,6 @@ test_tbl_del_bad(void)
 void
 test_tbl_lpm_good(void)
 {
-    // these tests don't store any user data.  Freeing a node will free the
-    // pointer to the user data so we would need to allocate new pointers to
-    // some data, each time a prefix is added.
 
     char pfx[IP6_PFXSTRLEN];
     entry_t *itm = NULL;
@@ -262,4 +266,304 @@ test_tbl_lpm_good(void)
 
 
     tbl_destroy(&ipt, NULL);
+}
+
+int cb_sum(struct radix_node *rn, void *runtotal);
+int
+cb_sum(struct radix_node *rn, void *runtotal)
+{
+    // return 0 on success, else walktree will quit walking
+    // cb_sum assumes both runtotal and entry->value are (int *)
+
+    if (rn == NULL || runtotal == NULL) return 1; // breaks off the walkabout
+
+    entry_t *itm = (entry_t *)rn;
+    *(int *)runtotal += *(int *)itm->value;
+
+    return 0;
+}
+
+void
+test_tbl_walk_good(void)
+{
+    // these tests store int data from a int char on the stack, rather than the
+    // heap, so we donot need a purge fuction
+    char pfx[IP6_PFXSTRLEN];
+    int number[5] = {1, 2, 4, 8, 16};
+    int total[1] = {0};
+    table_t *ipt = tbl_create(NULL);
+
+    mu_assert(ipt);
+
+    // add a few prefixes
+
+    snprintf(pfx, IP6_PFXSTRLEN, "0.0.0.0/0");
+    mu_assert(tbl_set(ipt, pfx, number+0, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.1/8");
+    mu_assert(tbl_set(ipt, pfx, number+1, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "2.2.2.2/16");
+    mu_assert(tbl_set(ipt, pfx, number+2, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "3.3.3.3/24");
+    mu_assert(tbl_set(ipt, pfx, number+3, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "4.4.4.4/32");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    // we should have 5 prefixes
+    mu_assert(5 == ipt->count4);
+
+    // walkabout and sum the values associated with all prefixes
+    mu_assert(tbl_walk(ipt, cb_sum, total));
+    mu_assert(1+2+4+8+16 == *total);
+
+    tbl_destroy(&ipt, NULL);
+
+    return;
+}
+
+void
+test_tbl_less_good(void)
+{
+    // these tests store int data from a int char on the stack, rather than the
+    // heap, so we donot need a purge fuction
+    char pfx[IP6_PFXSTRLEN];
+    int number[5] = {1, 2, 4, 8, 16};
+    int total[1] = {0}, include = 0;
+    table_t *ipt = tbl_create(NULL);
+
+    mu_assert(ipt);
+
+    // add a few prefixes
+
+    snprintf(pfx, IP6_PFXSTRLEN, "0.0.0.0/0");
+    mu_assert(tbl_set(ipt, pfx, number+0, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.0.0.0/8");
+    mu_assert(tbl_set(ipt, pfx, number+1, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.0.0.0/8");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.10.0.0/16");
+    mu_assert(tbl_set(ipt, pfx, number+2, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.10.0.0/16");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.0/24");
+    mu_assert(tbl_set(ipt, pfx, number+3, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.0/24");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.128/25");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.128/25");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    mu_assert(9 == ipt->count4);
+
+    // walkabout and sum the values associated with all prefixes
+
+    // less than /32
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129", include, cb_sum, total));
+    mu_eq(1+2+4+8+16, *total, "%d");
+
+    include = 1; // include /32 won't change anything, it's not in iptable
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129", include, cb_sum, total));
+    mu_eq(1+2+4+8+16, *total, "%d");
+
+    // 11.x.y.z crosscheck, should find 0/0 & 4 * an 11.10.10.x/y prefix
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "11.10.10.129", include, cb_sum, total));
+    mu_eq(1+16+16+16+16, *total, "%d");
+
+    // less than /25
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.128/25", include, cb_sum, total));
+    mu_eq(1+2+4+8+0, *total, "%d");
+
+    include = 1; // now include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.128/25", include, cb_sum, total));
+    mu_eq(1+2+4+8+16, *total, "%d");
+
+    // less than /24
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.128/24", include, cb_sum, total));
+    mu_eq(1+2+4+0+0, *total, "%d");
+
+    include = 1; // now include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.128/24", include, cb_sum, total));
+    mu_eq(1+2+4+8+0, *total, "%d");
+
+    // less than /16
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.128/16", include, cb_sum, total));
+    mu_eq(1+2+0+0+0, *total, "%d");
+
+    include = 1; // now include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.128/16", include, cb_sum, total));
+    mu_eq(1+2+4+0+0, *total, "%d");
+
+    // less than /8
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.128/8", include, cb_sum, total));
+    mu_eq(1+0+0+0+0, *total, "%d");
+
+    include = 1; // now include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.128/8", include, cb_sum, total));
+    mu_eq(1+2+0+0+0, *total, "%d");
+
+    // less than /8
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.128/0", include, cb_sum, total));
+    mu_eq(0+0+0+0+0, *total, "%d");
+
+    include = 1; // now include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.128/0", include, cb_sum, total));
+    mu_eq(1+0+0+0+0, *total, "%d");
+
+    tbl_destroy(&ipt, NULL);
+}
+
+int cb_count(struct radix_node *rn, void *runtotal);
+int
+cb_count(struct radix_node *rn, void *runtotal)
+{
+    // return 0 on success, else walktree will quit walking
+    // cb_count assumes both runtotal and entry->value are (int *)
+    // `-> counts the number of times cb_count is called
+
+    if (rn == NULL || runtotal == NULL) return 1; // breaks off the walkabout
+
+    *(int *)runtotal += 1;
+
+    return 0;
+}
+
+void
+test_tbl_less_traversal(void)
+{
+    // these tests store int data from a int char on the stack, rather than the
+    // heap, so we donot need a purge fuction
+    // Check how many times the callback is called
+    char pfx[IP6_PFXSTRLEN];
+    int number[5] = {1, 2, 4, 8, 16};
+    int total[1] = {0}, include = 0;
+    table_t *ipt = tbl_create(NULL);
+
+    mu_assert(ipt);
+
+    // add a few prefixes
+
+    snprintf(pfx, IP6_PFXSTRLEN, "0.0.0.0/0");
+    mu_assert(tbl_set(ipt, pfx, number+0, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.0.0.0/8");
+    mu_assert(tbl_set(ipt, pfx, number+1, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.0.0.0/8");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.10.0.0/16");
+    mu_assert(tbl_set(ipt, pfx, number+2, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.10.0.0/16");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.0/24");
+    mu_assert(tbl_set(ipt, pfx, number+3, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.0/24");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.128/25");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.128/25");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    mu_assert(9 == ipt->count4);
+
+    // walkabout and count the num of times the callback is called
+
+    // less than /32
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129", include, cb_count, total));
+    mu_eq(5, *total, "%d");
+
+    include = 1; // won't change anything, since the /32 is not in the tree
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129", include, cb_count, total));
+    mu_eq(5, *total, "%d");
+
+    // less than /25
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129/25", include, cb_count, total));
+    mu_eq(4, *total, "%d");
+
+    include = 1; // won't change anything, since the /32 is not in the tree
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129/25", include, cb_count, total));
+    mu_eq(5, *total, "%d");
+
+    // less than /24
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129/24", include, cb_count, total));
+    mu_eq(3, *total, "%d");
+
+    include = 1; // won't change anything, since the /32 is not in the tree
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129/24", include, cb_count, total));
+    mu_eq(4, *total, "%d");
+
+    // less than /16
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129/16", include, cb_count, total));
+    mu_eq(2, *total, "%d");
+
+    include = 1; // won't change anything, since the /32 is not in the tree
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129/16", include, cb_count, total));
+    mu_eq(3, *total, "%d");
+
+    // less than /8
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129/8", include, cb_count, total));
+    mu_eq(1, *total, "%d");
+
+    include = 1; // won't change anything, since the /32 is not in the tree
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129/8", include, cb_count, total));
+    mu_eq(2, *total, "%d");
+
+    // less than /0
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129/0", include, cb_count, total));
+    mu_eq(0, *total, "%d");
+
+    include = 1; // won't change anything, since the /32 is not in the tree
+    *total = 0;
+    mu_assert(tbl_less(ipt, "10.10.10.129/0", include, cb_count, total));
+    mu_eq(1, *total, "%d");
+
+    tbl_destroy(&ipt, NULL);
+
+    return;
 }
