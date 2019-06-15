@@ -4,12 +4,14 @@
 RM=/bin/rm
 BUSTED=~/.luarocks/bin/busted
 BOPTS=
+MKDIR= mkdir
 
 # project directories
 SRCDIR=src
 TSTDIR=src/test
 BLDDIR=build
 DOCDIR=doc
+
 
 # Lua/luarocks directories
 # - build dirs
@@ -85,12 +87,17 @@ $(CTARGET): $(COBJS)
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so.$(MAJOR)
 
+$(BLDDIR):
+	$(MKDIR) $(BLDDIR)
+
 # object files
 $(BLDDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(CFLAGS) -I$(SRCDIR) -c $< -o $@
 
 # dependency files .d
-$(BLDDIR)/%.d: $(SRCDIR)/%.c
+# - built first before others, hence the only one made dependent on 
+#   the existence of $BLDDIR
+$(BLDDIR)/%.d: $(SRCDIR)/%.c | $(BLDDIR)
 	$(CC) -I$(SRCDIR) -MM -MQ$(BLDDIR)/$*.o -MF $@ $<
 #	$(CC) -I$(SRCDIR) -MM -MQ$@ -MQ$(@:%.d=%.o) -MF $@ $<
 
