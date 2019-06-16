@@ -41,6 +41,7 @@ static int ipt_tobin(lua_State *);
 static int ipt_tostr(lua_State *);
 static int ipt_tolen(lua_State *);
 static int ipt_numhosts(lua_State *);
+static int ipt_address(lua_State *);
 static int ipt_network(lua_State *);
 static int ipt_broadcast(lua_State *);
 static int ipt_mask(lua_State *);
@@ -67,6 +68,7 @@ static const struct luaL_Reg funcs [] = {
     {"tobin", ipt_tobin},
     {"tostr", ipt_tostr},
     {"tolen", ipt_tolen},
+    {"address", ipt_address},
     {"network", ipt_network},
     {"broadcast", ipt_broadcast},
     {"mask", ipt_mask},
@@ -296,6 +298,33 @@ ipt_numhosts(lua_State *L)
     dbg_stack("out(1) ==>");
 
     return 1;
+}
+
+static int
+ipt_address(lua_State *L)
+{
+    // iptable.address(strKey) <-- [str]
+    // Return host address, masklen & af for a given prefix, nil on errors
+    dbg_stack("inc(.) <--");
+
+    char buf[IP6_PFXSTRLEN];
+    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX];
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1;
+    const char *pfx = NULL;
+
+    pfx = check_pfxstr(L, 1, &len);
+    if (! key_bystr(pfx, &mlen, &af, addr)) return 0;
+    if (! key_bylen(af, mlen, mask)) return 0;
+    if (! key_tostr(addr, buf)) return 0;
+
+    lua_pushstring(L, buf);
+    lua_pushinteger(L, mlen);
+    lua_pushinteger(L, af);
+
+    dbg_stack("out(3) ==>");
+
+    return 3;
 }
 
 static int
