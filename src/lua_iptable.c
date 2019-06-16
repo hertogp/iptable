@@ -483,7 +483,7 @@ _newindex(lua_State *L)
         tbl_del(t, pfx, L);
     }
     else {
-        ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        ref = luaL_ref(L, LUA_REGISTRYINDEX); // pop top & store in registry
         ud = ud_create(ref);
         if (!tbl_set(t, pfx, ud, L)) {
             ud_delete(L, &ud);
@@ -611,10 +611,10 @@ _pairs(lua_State *L)
     // __pairs(ipt) <-- [t_ud]
     dbg_stack("inc(.) <--");
 
-    table_t *ud = check_table(L, 1);
-    struct radix_node *rn = rdx_first(ud->head4);
+    table_t *t = check_table(L, 1);
+    struct radix_node *rn = rdx_first(t->head4);
     if (rn == NULL)
-        rn = rdx_first(ud->head6);
+        rn = rdx_first(t->head6);
 
     if (rn == NULL) return 0;
 
@@ -628,20 +628,94 @@ _pairs(lua_State *L)
     return 3;                           // [iter_f invariant ctl_var]
 }
 
+static int cb_collect(struct radix_node *, void *);
+static int
+cb_collect(struct radix_node *rn, void *LL)
+{
+    // collect prefixes into table on top <-- [t_ud, pfx bool* ref]
+    // - where bool* may be absent.
+    lua_State *L = LL;
+    dbg_stack("cb_more()");
+
+    char addr[KEYBUFLEN_MAX];
+    int mlen = -1, tlen = 0;
+
+    if (! lua_istable(L, -1)) return 1;
+    if (! key_tostr(rn->rn_key, addr)) return 1;
+    mlen = key_tolen(rn->rn_mask);
+
+    // working version
+    lua_len(L, -1);                                 // get table length
+    tlen = lua_tointeger(L, -1) + 1;                // new array index
+    lua_pop(L,1);
+    lua_pushinteger(L, tlen);
+    lua_pushfstring(L, "%s/%d", addr, mlen);        // more specific pfx
+    dbg_stack("new k,v 2+");
+    lua_settable(L, -3);                            // t[n]=pfx
+
+
+    dbg_stack("out(0) ==>");
+
+    return 1;
+}
+
 static int
 more(lua_State *L)
 {
-    // ipt:more(pfx) <-- [ud pfx]
+    // ipt:more(pfx, inclusive) <-- [t_ud pfx bool]
     // Return array of more specific prefixes in the iptable
-    lua_pushliteral(L, "not implemented (yet)");
+    dbg_stack("inc(.) <--");
+
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1, inclusive = 0;
+    uint8_t addr[KEYBUFLEN_MAX];
+    const char *pfx = NULL;
+
+    table_t *t = check_table(L, 1);
+    pfx = check_pfxstr(L, 2, &len);
+    if (! key_bystr(pfx, &mlen, &af, addr)) return 0; // invalid prefix
+    if (af == AF_UNSPEC) return 0;                    // unknown family
+
+    if (lua_gettop(L) == 3 && lua_isboolean(L, 3))
+        inclusive = lua_toboolean(L, 3);  // include search prefix (or not)
+
+    lua_newtable(L);                     // collector table on top
+    if (! tbl_more(t, pfx, inclusive, cb_collect, L)) return 0;
+
+    // XXX delme: show table length
+    lua_len(L, -1);
+    dbg_stack("tbl len +");
+    lua_pop(L, 1);
+
+    dbg_stack("out(1) ==>");
+
     return 1;
 }
 
 static int
 less(lua_State *L)
 {
-    // ipt:less(pfx) <-- [ud pfx]
+    // ipt:less(pfx, inclusive) <-- [ud pfx bool*]
     // Return array of less specific prefixes in the iptable
-    lua_pushliteral(L, "not implemented (yet)");
+    dbg_stack("inc(.) <--");
+
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1, inclusive = 0;
+    uint8_t addr[KEYBUFLEN_MAX];
+    const char *pfx = NULL;
+
+    table_t *t = check_table(L, 1);
+    pfx = check_pfxstr(L, 2, &len);
+    if (! key_bystr(pfx, &mlen, &af, addr)) return 0; // invalid prefix
+    if (af == AF_UNSPEC) return 0;                    // unknown family
+
+    if (lua_gettop(L) == 3 && lua_isboolean(L, 3))
+        inclusive = lua_toboolean(L, 3);              // include search prefix (or not)
+
+    lua_newtable(L);                                  // collector table
+    if (! tbl_less(t, pfx, inclusive, cb_collect, L)) return 0;
+
+    dbg_stack("out(1) ==>");
+
     return 1;
 }

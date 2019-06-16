@@ -564,8 +564,6 @@ test_tbl_less_traversal(void)
     mu_eq(1, *total, "%d");
 
     tbl_destroy(&ipt, NULL);
-
-    return;
 }
 
 void
@@ -663,6 +661,46 @@ test_tbl_more_good(void)
     mu_eq(1+2+4+8+16+4*16, *total, "%d");
 
     tbl_destroy(&ipt, NULL);
+}
 
-    return;
+void
+test_tbl_more_again(void)
+{
+    // these tests store int data from a int char on the stack, rather than the
+    // heap, so we donot need a purge fuction
+    char pfx[IP6_PFXSTRLEN];
+    int number[7] = {1, 2, 4, 8, 16, 32, 64};
+    int total[1] = {0}, include = 0;
+    table_t *ipt = tbl_create(NULL);
+
+    mu_assert(ipt);
+
+    // add a few prefixes
+
+    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.0/24");
+    mu_assert(tbl_set(ipt, pfx, number+0, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.0/25");
+    mu_assert(tbl_set(ipt, pfx, number+1, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.128/25");
+    mu_assert(tbl_set(ipt, pfx, number+2, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.0/26");
+    mu_assert(tbl_set(ipt, pfx, number+3, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.64/26");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.128/26");
+    mu_assert(tbl_set(ipt, pfx, number+5, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.192/26");
+    mu_assert(tbl_set(ipt, pfx, number+6, NULL));
+
+    mu_assert(7 == ipt->count4);
+
+    // more than /24
+    include = 0; // search pfx /24 is excluded
+    *total = 0;
+    mu_assert(tbl_more(ipt, "1.1.1.0/24", include, cb_sum, total));
+    mu_eq(0+2+4+8+16+32+64, *total, "%d");
+
+    tbl_destroy(&ipt, NULL);
 }

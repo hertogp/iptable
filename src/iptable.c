@@ -658,8 +658,8 @@ tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
     struct radix_node *rn = NULL, *base = NULL, *top = NULL;
     uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX];
     int mlen = -1, af = AF_UNSPEC, done = 0;
-    // include = include > 0 ? -2 : -1;
     include = include > 0 ? 0 : -1;
+    /* char buf[IP6_PFXSTRLEN]; // TODO: delme after debugging */
 
     // sanity checks
     if (t == NULL || s == NULL) return 0;
@@ -693,7 +693,12 @@ tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
         rn = rn->rn_left;
 
     // ensure we're in the right subtree (prefix s may not be in the tree)
-    if (!key_isin(rn->rn_key, addr, mask)) return 0;
+    if (!key_isin(addr, rn->rn_key, mask)) return 0;
+    /* if(rn) { */
+    /*     printf("Subtree @ %s ", key_tostr(rn->rn_key, buf)); */
+    /*     if (rn->rn_mask) printf("%s\n", key_tostr(rn->rn_mask, buf)); */
+    /*     else printf("\n"); */
+    /* } */
 
     done = 0;
     while (!done) {

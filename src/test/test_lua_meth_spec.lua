@@ -242,15 +242,31 @@ describe("ipt:more(pfx) ", function()
     ipt = iptable.new();
     assert.is_truthy(ipt);
 
-    it("iterates across more specific prefixes", function()
+    it("gets array of more specific prefixes", function()
       ipt["1.1.1.0/24"] = 24;
       ipt["1.1.1.0/25"] = 25;
       ipt["1.1.1.128/25"] = 25;
       ipt["1.1.1.0/26"] = 26;
-      ipt["1.1.1.32/26"] = 26;
       ipt["1.1.1.64/26"] = 26;
-      ipt["1.1.1.96/26"] = 26;
-      pending("ipt:more(pfx) yet to be implemented");
+      ipt["1.1.1.128/26"] = 26;
+      ipt["1.1.1.192/26"] = 26;
+      assert.is_truthy(7 == #ipt);
+
+      t = ipt:more("1.1.1.0/24");
+      assert.are.equal(6, #t);
+      t = ipt:more("1.1.1.0/24", true);  -- inclusive search
+      assert.are.equal(7, #t);
+
+      t = ipt:more("1.1.1.0/25");        -- should find two /26's
+      assert.are.equal(2, #t);
+      t = ipt:more("1.1.1.0/25", true);  -- inclusive search
+      assert.are.equal(3, #t);
+
+      t = ipt:more("1.1.1.0/26");        -- no more specifics
+      assert.are.equal(0, #t);
+      t = ipt:more("1.1.1.0/26", true);  -- inclusive search
+      assert.are.equal(1, #t);
+
     end)
   end)
 end)
@@ -271,12 +287,22 @@ describe("ipt:less(pfx) ", function()
       ipt["1.1.1.64/26"] = 26;
       ipt["1.1.1.128/26"] = 26;
       ipt["1.1.1.192/26"] = 26;
-      pending("ipt:less(pfx) yet to be implemented");
-      -- cnt = 0;
-      -- for pfx in ipt:less("1.1.1.200/26") do
-      --   cnt = cnt + 1
-      -- end
-      -- assert.equal(2, cnt); -- ie 1.1.1.128/25 and 1.1.1.0/24
+
+      t = ipt:less("1.1.1.192/26");
+      assert.are.equal(2, #t);
+      t = ipt:less("1.1.1.192/26", true); -- inclusive search
+      assert.are.equal(3, #t);
+
+      t = ipt:less("1.1.1.128/25");
+      assert.are.equal(1, #t);
+      t = ipt:less("1.1.1.128/25", true);
+      assert.are.equal(2, #t);
+
+      t = ipt:less("1.1.1.0/24");
+      assert.are.equal(0, #t);
+      t = ipt:less("1.1.1.0/24", true);  -- inclusive search
+      assert.are.equal(1, #t);
+
     end)
   end)
 end)
