@@ -14,7 +14,6 @@
 #include "iptable.h"
 #include "debug.h"
 
-
 // lua_iptable defines
 
 #define LUA_IPTABLE_ID "iptable"
@@ -30,9 +29,10 @@ table_t *check_table(lua_State *, int);
 static int check_binkey(lua_State *, int, uint8_t *, size_t *);
 const char *check_pfxstr(lua_State *, int, size_t *);
 static int *ud_create(int);                // userdata stored as entry->value
-static void ud_delete(void *, void **);    // ud_delete(L, &ud)
+static void usr_delete(void *, void **);    // usr_delete(L, &ud)
 static int iter_kv(lua_State *);
 static int iter_hosts(lua_State *);
+static int cb_collect(struct radix_node *, void *);
 
 // iptable module functions
 
@@ -47,8 +47,7 @@ static int ipt_broadcast(lua_State *);
 static int ipt_mask(lua_State *);
 static int ipt_iter_hosts(lua_State *);
 
-
-// (ip)table instance methods
+// iptable instance methods
 
 static int _gc(lua_State *);
 static int _index(lua_State *);
@@ -59,7 +58,6 @@ static int _pairs(lua_State *);
 static int counts(lua_State *);
 static int more(lua_State *);
 static int less(lua_State *);
-
 
 // iptable module function array
 
@@ -128,7 +126,7 @@ check_table (lua_State *L, int index)
 static int
 check_binkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
 {
-    // Write a binary key @ idx into buffer buf (of size MAX_BINKEY;
+    // Write a binary key @ idx into buffer buf (limit size to MAX_BINKEY);
     // returns 1 on success, 0 on failure
 
     const char *key = NULL;
@@ -137,11 +135,11 @@ check_binkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
 
     key = lua_tolstring(L, idx, len);
     if (key == NULL) return 0;
-    // LEN-byte cannot ever be larger than max buf length
+
     if (IPT_KEYLEN(key) > MAX_BINKEY-1) return 0;
     if (*len < 1 || *len > MAX_BINKEY-1) return 0;
 
-    memcpy(buf, key, *len);  // copies any embedded 0's in a binary key
+    memcpy(buf, key, *len);  // copy any embedded 0's in a binary key
     buf[*len] = '\0';
 
     return 1;
@@ -167,7 +165,7 @@ static int *ud_create(int ref)
 }
 
 static void
-ud_delete(void *L, void **refp)
+usr_delete(void *L, void **refp)
 {
     // unref the userdata and free associated ptr->int
     if (*refp) {
@@ -182,12 +180,13 @@ ud_delete(void *L, void **refp)
 static int
 ipt_new(lua_State *L)
 {
-    // void** -> tbl_destroy(&ud) sets t=NULL when done clearing it
-    // Return a new iptable instance.  Bails on memory errors.
+    // ipt.new()  <-- []
+    // - void** t -> so tbl_destroy(&t) sets t=NULL when done clearing it
+    // - Return a new iptable instance.  Bail on memory errors.
     dbg_stack("inc(.) <--");
 
     void **t = lua_newuserdata(L, sizeof(void **));
-    *t = tbl_create(ud_delete);             // ud_delete func to free values
+    *t = tbl_create(usr_delete);             // usr_delete func to free values
 
     if (*t == NULL) {
         lua_pushliteral(L, "error creating iptable");
@@ -513,7 +512,7 @@ _newindex(lua_State *L)
         ref = luaL_ref(L, LUA_REGISTRYINDEX); // pop top & store in registry
         ud = ud_create(ref);
         if (!tbl_set(t, pfx, ud, L)) {
-            ud_delete(L, &ud);
+            usr_delete(L, &ud);
             dbg_msg("unref'd %d", ref);
         } else {
             dbg_msg("stored as ref %d", ref);
@@ -559,7 +558,7 @@ _index(lua_State *L)
 static int
 _len(lua_State *L)
 {
-    // #ipt -- [ud]  -- return sum of count4 and count6
+    // #ipt <-- [ud]  --> return sum of count4 and count6
     dbg_stack("inc(.) <--");
 
     table_t *t = check_table(L, 1);
@@ -587,7 +586,7 @@ _tostring(lua_State *L)
 static int
 counts(lua_State *L)
 {
-    // ipt:size() -- [t_ud]  -- return both count4 and count6 (in that order)
+    // ipt:size() <-- [t_ud]  -- return both count4 and count6 (in that order)
     dbg_stack("inc(.) <--");
 
     table_t *t = check_table(L, 1);
@@ -655,14 +654,14 @@ _pairs(lua_State *L)
     return 3;                           // [iter_f invariant ctl_var]
 }
 
-static int cb_collect(struct radix_node *, void *);
 static int
 cb_collect(struct radix_node *rn, void *LL)
 {
     // collect prefixes into table on top <-- [t_ud, pfx bool* ref]
     // - where bool* may be absent.
+    // - Order of args follows walktree_f_t definition
     lua_State *L = LL;
-    dbg_stack("cb_more()");
+    dbg_stack("cb_more()");                         // after *L=LL (it needs L)
 
     char addr[MAX_STRKEY];
     int mlen = -1, tlen = 0;
@@ -674,14 +673,13 @@ cb_collect(struct radix_node *rn, void *LL)
     lua_len(L, -1);                                 // get table length
     tlen = lua_tointeger(L, -1) + 1;                // new array index
     lua_pop(L,1);
-    lua_pushinteger(L, tlen);
+
     lua_pushfstring(L, "%s/%d", addr, mlen);        // more specific pfx
-    dbg_stack("new k,v 2+");
-    lua_settable(L, -3);                            // t[n]=pfx
+    lua_seti(L, -2, tlen);                          // insert in array
 
     dbg_stack("out(0) ==>");
 
-    return 1;
+    return 1;                                       // ignored return value
 }
 
 static int
@@ -706,11 +704,6 @@ more(lua_State *L)
 
     lua_newtable(L);                     // collector table on top
     if (! tbl_more(t, pfx, inclusive, cb_collect, L)) return 0;
-
-    // XXX delme: show table length
-    lua_len(L, -1);
-    dbg_stack("tbl len +");
-    lua_pop(L, 1);
 
     dbg_stack("out(1) ==>");
 
