@@ -3,31 +3,30 @@
 #ifndef iptable_h
 #define iptable_h
 
-
 typedef struct entry_t {
-    struct radix_node rn[2];          // leaf & internal radix nodes
-    void *value;                      // user data, free by purge_f_t callback
+    struct radix_node rn[2];        // leaf & internal radix nodes
+    void *value;                    // user data, freed by purge_f_t callback
 } entry_t;
 
-typedef void purge_f_t(void *, void **);      // user supplied callback to free value
+typedef void purge_f_t(void *, void **); // user callback to free value
 
-typedef struct purge_t {             // args for rdx_flush
-   struct radix_node_head *head;            // head of tree where rdx_flush operates
-   purge_f_t *purge;                  // the callback to free entry->value
-   void *args;                  // extra args for the callback
+typedef struct purge_t {            // args for rdx_flush
+   struct radix_node_head *head;    // head of tree where rdx_flush operates
+   purge_f_t *purge;                // the callback to free entry->value
+   void *args;                      // extra args for the callback
 } purge_t;
 
 typedef struct table_t {
-    struct radix_node_head *head4;    // IPv4 radix tree
-    struct radix_node_head *head6;    // IPv6 radix tree
+    struct radix_node_head *head4;  // IPv4 radix tree
+    struct radix_node_head *head6;  // IPv6 radix tree
     size_t count4;
     size_t count6;
-    purge_f_t *purge;                    // callback to free userdata
+    purge_f_t *purge;               // callback to free userdata
 } table_t;
 
-#define IPT_KEYOFFSET 8       // 8 bit offset to 1st byte of key
-#define IPT_KEYLEN(k) (*k)    // 1st byte is 5 or 17 (includes itself)
-#define IPT_KEYPTR(k) (k+1)   // 2nd byte starts actual key
+#define IPT_KEYOFFSET 8             // 8 bit offset to 1st byte of key
+#define IPT_KEYLEN(k) (*k)          // 1st byte is 5 or 17 (includes itself)
+#define IPT_KEYPTR(k) (k+1)         // 2nd byte starts actual key
 
 #define IP4_KEYLEN 4
 #define IP4_MAXMASK 32
@@ -42,9 +41,16 @@ typedef struct table_t {
 
 #define KEY_IS_IP4(k) (*((uint8_t *)(k))==(1+IP4_KEYLEN))
 #define KEY_IS_IP6(k) (*((uint8_t *)(k))==(1+IP6_KEYLEN))
-#define KEY_AF_FAM(k) (KEY_IS_IP4(k) ? AF_INET : KEY_IS_IP6(k) ? AF_INET6 : AF_UNSPEC)
-#define KEYBUFLEN_MAX 17
-#define KEYBUFLEN_FAM(af) (af==AF_INET ? (uint8_t)(1+IP4_KEYLEN) : af==AF_INET6 ? (uint8_t)(1+IP6_KEYLEN) : 0x00)
+#define KEY_AF_FAM(k) \
+    (KEY_IS_IP4(k) ? AF_INET : KEY_IS_IP6(k) ? AF_INET6 : AF_UNSPEC)
+
+// max size for key byte array (1+IPx_KEYLEN)
+#define MAX_BINKEY 17
+// max size for string key (fits IP6 with /mask)
+#define MAX_STRKEY IP6_PFXSTRLEN
+// exact KEYBUF length by FAM
+#define FAM_BINKEY(af) (af==AF_INET ? (uint8_t)(1+IP4_KEYLEN) \
+        : af==AF_INET6 ? (uint8_t)(1+IP6_KEYLEN) : 0x00)
 
 // radix tree macros
 #define RDX_ISLEAF(rn) (rn->rn_bit < 0)
@@ -55,8 +61,8 @@ typedef struct table_t {
 #define STRINGIFY(x) STRINGIFY_x(x)
 #define STRINGIFY_x(x) #x
 
-// taken from radix.c & modified a bit
-#define min(a, b) ((a) < (b) ? (a) : (b) )
+// taken from radix.c
+#define min(a, b) ((a) < (b) ? (a) : (b))
 #define RDX_MAX_KEYLEN    32
 
 // -- PROTOTYPES

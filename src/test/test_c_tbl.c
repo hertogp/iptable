@@ -70,28 +70,28 @@ void
 test_tbl_set_good(void)
 {
     table_t *ipt;
-    char pfx[IP6_PFXSTRLEN];
+    char pfx[MAX_STRKEY];
 
     ipt = tbl_create(purge);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.4/32");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.4/32");
     mu_assert(tbl_set(ipt, pfx, mk_data(1234), NULL));
     mu_assert(ipt->count4 == 1);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "4.3.2.1/32");
+    snprintf(pfx, MAX_STRKEY, "4.3.2.1/32");
     mu_assert(tbl_set(ipt, pfx, mk_data(4321), NULL));
     mu_assert(ipt->count4 == 2);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.11.12.13/24");
+    snprintf(pfx, MAX_STRKEY, "10.11.12.13/24");
     mu_assert(tbl_set(ipt, pfx, mk_data(1213), NULL));
     mu_assert(ipt->count4 == 3);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.11.12.14");
+    snprintf(pfx, MAX_STRKEY, "10.11.12.14");
     mu_assert(tbl_set(ipt, pfx, mk_data(1214), NULL));
     mu_assert(ipt->count4 == 4);
 
     // adding an existing entry, wont increase the count
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.4/32");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.4/32");
     mu_assert(tbl_set(ipt, pfx, mk_data(1235), NULL));
     mu_assert(ipt->count4 == 4);
 
@@ -103,55 +103,55 @@ test_tbl_get_good(void)
 {
     table_t *ipt = NULL;
     entry_t *e = NULL;
-    char pfx[IP6_PFXSTRLEN];
+    char pfx[MAX_STRKEY];
 
     ipt = tbl_create(purge);
 
     // set 4 pfx's
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.4/32");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.4/32");
     mu_assert(tbl_set(ipt, pfx, mk_data(4), NULL));
     mu_assert(ipt->count4 == 1);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "4.3.2.1/32");
+    snprintf(pfx, MAX_STRKEY, "4.3.2.1/32");
     mu_assert(tbl_set(ipt, pfx, mk_data(1), NULL));
     mu_assert(ipt->count4 == 2);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.11.12.13/24");
+    snprintf(pfx, MAX_STRKEY, "10.11.12.13/24");
     mu_assert(tbl_set(ipt, pfx, mk_data(31), NULL));
     mu_assert(ipt->count4 == 3);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.11.12.14");
+    snprintf(pfx, MAX_STRKEY, "10.11.12.14");
     mu_assert(tbl_set(ipt, pfx, mk_data(41), NULL));
     mu_assert(ipt->count4 == 4);
 
     // now go get some!
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.4/32");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.4/32");
     e = tbl_get(ipt, pfx);
     mu_eq(4, *(int *)e->value, "%d");
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.11.12.14");
+    snprintf(pfx, MAX_STRKEY, "10.11.12.14");
     e = tbl_get(ipt, pfx);
     mu_eq(41, *(int *)e->value, "%d");
     // get/set apply max mask if missing
-    snprintf(pfx, IP6_PFXSTRLEN, "10.11.12.14/32");
+    snprintf(pfx, MAX_STRKEY, "10.11.12.14/32");
     e = tbl_get(ipt, pfx);
     mu_eq(41, *(int *)e->value, "%d");
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.11.12.13/24");
+    snprintf(pfx, MAX_STRKEY, "10.11.12.13/24");
     e = tbl_get(ipt, pfx);
     mu_eq(31, *(int *)e->value, "%d");
     // get/set apply mask prior to operations
-    snprintf(pfx, IP6_PFXSTRLEN, "10.11.12.0/24");
+    snprintf(pfx, MAX_STRKEY, "10.11.12.0/24");
     e = tbl_get(ipt, pfx);
     mu_eq(31, *(int *)e->value, "%d");
 
-    snprintf(pfx, IP6_PFXSTRLEN, "4.3.2.1/32");
+    snprintf(pfx, MAX_STRKEY, "4.3.2.1/32");
     e = tbl_get(ipt, pfx);
     mu_eq(1, *(int *)e->value, "%d");
 
     // setting an existing prefix updates its value, does not increase count
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.4/32");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.4/32");
     mu_assert(tbl_set(ipt, pfx, mk_data(42), NULL));
     mu_eq((size_t)4, ipt->count4, "%lu");
     e = tbl_get(ipt, pfx);
@@ -167,25 +167,25 @@ test_tbl_del_good(void)
     // pointer to the user data so we would need to allocate new pointers to
     // some data, each time a prefix is added.
     table_t *ipt;
-    char pfx[IP6_PFXSTRLEN];
+    char pfx[MAX_STRKEY];
 
     ipt = tbl_create(purge);
 
     // add one, del one
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.4/32");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.4/32");
     mu_assert(tbl_set(ipt, pfx, NULL, NULL));
     mu_assert(tbl_del(ipt, pfx, NULL));
     mu_assert(ipt->count4 == 0);
 
     // add two, del two
-    snprintf(pfx, IP6_PFXSTRLEN, "11.12.13.14");
+    snprintf(pfx, MAX_STRKEY, "11.12.13.14");
     mu_assert(tbl_set(ipt, pfx, NULL, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "10.11.12.13");
+    snprintf(pfx, MAX_STRKEY, "10.11.12.13");
     mu_assert(tbl_set(ipt, pfx, NULL, NULL));
     mu_assert(ipt->count4 == 2);
 
     mu_assert(tbl_del(ipt, pfx, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.12.13.14");
+    snprintf(pfx, MAX_STRKEY, "11.12.13.14");
     mu_assert(tbl_del(ipt, pfx, NULL));
     mu_assert(ipt->count4 == 0);
 
@@ -200,32 +200,32 @@ test_tbl_del_bad(void)
     // pointer to the user data so we would need to allocate new pointers to
     // some data, each time a prefix is added.
 
-    char pfx[IP6_PFXSTRLEN];
+    char pfx[MAX_STRKEY];
     table_t *ipt = tbl_create(purge);
 
     mu_assert(ipt);
 
     // try to delete non-existing pfx's
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.4/32");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.4/32");
     mu_assert(tbl_set(ipt, pfx, NULL, NULL));
     mu_assert(ipt->count4 == 1);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "11.12.13.14");
+    snprintf(pfx, MAX_STRKEY, "11.12.13.14");
     mu_assert(tbl_set(ipt, pfx, NULL, NULL));
     mu_assert(ipt->count4 == 2);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.11.12.13");
+    snprintf(pfx, MAX_STRKEY, "10.11.12.13");
     mu_assert(tbl_set(ipt, pfx, NULL, NULL));
     mu_assert(ipt->count4 == 3);
 
     // now delete non-existing pfx's
 
-    snprintf(pfx, IP6_PFXSTRLEN, "11.12.13.140");
+    snprintf(pfx, MAX_STRKEY, "11.12.13.140");
     mu_assert(tbl_del(ipt, pfx, NULL) == 0);
     mu_assert(ipt->count4 == 3);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "11.12.130.14");
+    snprintf(pfx, MAX_STRKEY, "11.12.130.14");
     mu_assert(tbl_del(ipt, pfx, NULL) == 0);
     mu_assert(ipt->count4 == 3);
 
@@ -237,7 +237,7 @@ void
 test_tbl_lpm_good(void)
 {
 
-    char pfx[IP6_PFXSTRLEN];
+    char pfx[MAX_STRKEY];
     entry_t *itm = NULL;
     table_t *ipt = tbl_create(purge);
     int *a = malloc(sizeof(int)), *b = malloc(sizeof(int));
@@ -247,19 +247,19 @@ test_tbl_lpm_good(void)
 
     mu_assert(ipt);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.0/24");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.0/24");
     mu_assert(tbl_set(ipt, pfx, a, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.0/30");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.0/30");
     mu_assert(tbl_set(ipt, pfx, b, NULL));
     mu_assert(ipt->count4 == 2);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.3");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.3");
     itm = tbl_lpm(ipt, pfx);
     mu_assert(itm);
     mu_assert(itm->value == b);
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.2.3.5");
+    snprintf(pfx, MAX_STRKEY, "1.2.3.5");
     itm = tbl_lpm(ipt, pfx);
     mu_assert(itm);
     mu_assert(itm->value == a);
@@ -288,7 +288,7 @@ test_tbl_walk_good(void)
 {
     // these tests store int data from a int char on the stack, rather than the
     // heap, so we donot need a purge fuction
-    char pfx[IP6_PFXSTRLEN];
+    char pfx[MAX_STRKEY];
     int number[5] = {1, 2, 4, 8, 16};
     int total[1] = {0};
     table_t *ipt = tbl_create(NULL);
@@ -297,19 +297,19 @@ test_tbl_walk_good(void)
 
     // add a few prefixes
 
-    snprintf(pfx, IP6_PFXSTRLEN, "0.0.0.0/0");
+    snprintf(pfx, MAX_STRKEY, "0.0.0.0/0");
     mu_assert(tbl_set(ipt, pfx, number+0, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.1/8");
+    snprintf(pfx, MAX_STRKEY, "1.1.1.1/8");
     mu_assert(tbl_set(ipt, pfx, number+1, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "2.2.2.2/16");
+    snprintf(pfx, MAX_STRKEY, "2.2.2.2/16");
     mu_assert(tbl_set(ipt, pfx, number+2, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "3.3.3.3/24");
+    snprintf(pfx, MAX_STRKEY, "3.3.3.3/24");
     mu_assert(tbl_set(ipt, pfx, number+3, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "4.4.4.4/32");
+    snprintf(pfx, MAX_STRKEY, "4.4.4.4/32");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
     // we should have 5 prefixes
@@ -329,7 +329,7 @@ test_tbl_less_good(void)
 {
     // these tests store int data from a int char on the stack, rather than the
     // heap, so we donot need a purge fuction
-    char pfx[IP6_PFXSTRLEN];
+    char pfx[MAX_STRKEY];
     int number[5] = {1, 2, 4, 8, 16};
     int total[1] = {0}, include = 0;
     table_t *ipt = tbl_create(NULL);
@@ -338,27 +338,27 @@ test_tbl_less_good(void)
 
     // add a few prefixes
 
-    snprintf(pfx, IP6_PFXSTRLEN, "0.0.0.0/0");
+    snprintf(pfx, MAX_STRKEY, "0.0.0.0/0");
     mu_assert(tbl_set(ipt, pfx, number+0, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.0.0.0/8");
+    snprintf(pfx, MAX_STRKEY, "10.0.0.0/8");
     mu_assert(tbl_set(ipt, pfx, number+1, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.0.0.0/8");
+    snprintf(pfx, MAX_STRKEY, "11.0.0.0/8");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.10.0.0/16");
+    snprintf(pfx, MAX_STRKEY, "10.10.0.0/16");
     mu_assert(tbl_set(ipt, pfx, number+2, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.10.0.0/16");
+    snprintf(pfx, MAX_STRKEY, "11.10.0.0/16");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.0/24");
+    snprintf(pfx, MAX_STRKEY, "10.10.10.0/24");
     mu_assert(tbl_set(ipt, pfx, number+3, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.0/24");
+    snprintf(pfx, MAX_STRKEY, "11.10.10.0/24");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.128/25");
+    snprintf(pfx, MAX_STRKEY, "10.10.10.128/25");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.128/25");
+    snprintf(pfx, MAX_STRKEY, "11.10.10.128/25");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
     mu_assert(9 == ipt->count4);
@@ -461,7 +461,7 @@ test_tbl_less_traversal(void)
     // these tests store int data from a int char on the stack, rather than the
     // heap, so we donot need a purge fuction
     // Check how many times the callback is called
-    char pfx[IP6_PFXSTRLEN];
+    char pfx[MAX_STRKEY];
     int number[5] = {1, 2, 4, 8, 16};
     int total[1] = {0}, include = 0;
     table_t *ipt = tbl_create(NULL);
@@ -470,27 +470,27 @@ test_tbl_less_traversal(void)
 
     // add a few prefixes
 
-    snprintf(pfx, IP6_PFXSTRLEN, "0.0.0.0/0");
+    snprintf(pfx, MAX_STRKEY, "0.0.0.0/0");
     mu_assert(tbl_set(ipt, pfx, number+0, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.0.0.0/8");
+    snprintf(pfx, MAX_STRKEY, "10.0.0.0/8");
     mu_assert(tbl_set(ipt, pfx, number+1, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.0.0.0/8");
+    snprintf(pfx, MAX_STRKEY, "11.0.0.0/8");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.10.0.0/16");
+    snprintf(pfx, MAX_STRKEY, "10.10.0.0/16");
     mu_assert(tbl_set(ipt, pfx, number+2, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.10.0.0/16");
+    snprintf(pfx, MAX_STRKEY, "11.10.0.0/16");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.0/24");
+    snprintf(pfx, MAX_STRKEY, "10.10.10.0/24");
     mu_assert(tbl_set(ipt, pfx, number+3, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.0/24");
+    snprintf(pfx, MAX_STRKEY, "11.10.10.0/24");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.128/25");
+    snprintf(pfx, MAX_STRKEY, "10.10.10.128/25");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.128/25");
+    snprintf(pfx, MAX_STRKEY, "11.10.10.128/25");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
     mu_assert(9 == ipt->count4);
@@ -571,7 +571,7 @@ test_tbl_more_good(void)
 {
     // these tests store int data from a int char on the stack, rather than the
     // heap, so we donot need a purge fuction
-    char pfx[IP6_PFXSTRLEN];
+    char pfx[MAX_STRKEY];
     int number[5] = {1, 2, 4, 8, 16};
     int total[1] = {0}, include = 0;
     table_t *ipt = tbl_create(NULL);
@@ -580,27 +580,27 @@ test_tbl_more_good(void)
 
     // add a few prefixes
 
-    snprintf(pfx, IP6_PFXSTRLEN, "0.0.0.0/0");
+    snprintf(pfx, MAX_STRKEY, "0.0.0.0/0");
     mu_assert(tbl_set(ipt, pfx, number+0, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.0.0.0/8");
+    snprintf(pfx, MAX_STRKEY, "10.0.0.0/8");
     mu_assert(tbl_set(ipt, pfx, number+1, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.0.0.0/8");
+    snprintf(pfx, MAX_STRKEY, "11.0.0.0/8");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.10.0.0/16");
+    snprintf(pfx, MAX_STRKEY, "10.10.0.0/16");
     mu_assert(tbl_set(ipt, pfx, number+2, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.10.0.0/16");
+    snprintf(pfx, MAX_STRKEY, "11.10.0.0/16");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.0/24");
+    snprintf(pfx, MAX_STRKEY, "10.10.10.0/24");
     mu_assert(tbl_set(ipt, pfx, number+3, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.0/24");
+    snprintf(pfx, MAX_STRKEY, "11.10.10.0/24");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.128/32");
+    snprintf(pfx, MAX_STRKEY, "10.10.10.128/32");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.128/32");
+    snprintf(pfx, MAX_STRKEY, "11.10.10.128/32");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
     mu_assert(9 == ipt->count4);
@@ -668,7 +668,7 @@ test_tbl_more_again(void)
 {
     // these tests store int data from a int char on the stack, rather than the
     // heap, so we donot need a purge fuction
-    char pfx[IP6_PFXSTRLEN];
+    char pfx[MAX_STRKEY];
     int number[7] = {1, 2, 4, 8, 16, 32, 64};
     int total[1] = {0}, include = 0;
     table_t *ipt = tbl_create(NULL);
@@ -677,21 +677,21 @@ test_tbl_more_again(void)
 
     // add a few prefixes
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.0/24");
+    snprintf(pfx, MAX_STRKEY, "1.1.1.0/24");
     mu_assert(tbl_set(ipt, pfx, number+0, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.0/25");
+    snprintf(pfx, MAX_STRKEY, "1.1.1.0/25");
     mu_assert(tbl_set(ipt, pfx, number+1, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.128/25");
+    snprintf(pfx, MAX_STRKEY, "1.1.1.128/25");
     mu_assert(tbl_set(ipt, pfx, number+2, NULL));
 
-    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.0/26");
+    snprintf(pfx, MAX_STRKEY, "1.1.1.0/26");
     mu_assert(tbl_set(ipt, pfx, number+3, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.64/26");
+    snprintf(pfx, MAX_STRKEY, "1.1.1.64/26");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.128/26");
+    snprintf(pfx, MAX_STRKEY, "1.1.1.128/26");
     mu_assert(tbl_set(ipt, pfx, number+5, NULL));
-    snprintf(pfx, IP6_PFXSTRLEN, "1.1.1.192/26");
+    snprintf(pfx, MAX_STRKEY, "1.1.1.192/26");
     mu_assert(tbl_set(ipt, pfx, number+6, NULL));
 
     mu_assert(7 == ipt->count4);

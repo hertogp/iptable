@@ -60,7 +60,7 @@ test_key_alloc_bad(void)
 void
 test_key_copy_good(void)
 {
-    uint8_t src[KEYBUFLEN_MAX], *key;
+    uint8_t src[MAX_BINKEY], *key;
 
     // all zero bytes
     *(src+0) = 0x05;
@@ -108,7 +108,7 @@ test_key_copy_good(void)
 
     // some random bytes - ipv6
     IPT_KEYLEN(src) = 1 + IP6_KEYLEN;
-    for(int i=0; i < KEYBUFLEN_MAX; i++)
+    for(int i=0; i < MAX_BINKEY; i++)
         *(src+i) = 0x00;
 
     *(src+0) = 0x11;  // LEN is 17
@@ -124,7 +124,7 @@ test_key_copy_good(void)
 void
 test_key_copy_bad(void)
 {
-    uint8_t src[KEYBUFLEN_MAX], *key;
+    uint8_t src[MAX_BINKEY], *key;
 
     // bad LEN's
     *(src+0) = 0x00;
@@ -146,7 +146,7 @@ test_key_copy_bad(void)
 void
 test_key_bystr_good(void)
 {
-    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
     char *str;
     int mlen = -2, af=0;
 
@@ -206,7 +206,7 @@ test_key_bystr_good(void)
 void
 test_key_bystr_bad(void)
 {
-    uint8_t *addr, buf[KEYBUFLEN_MAX];
+    uint8_t *addr, buf[MAX_BINKEY];
     char * str;
     int mlen = -2, af = 0;
 
@@ -288,7 +288,7 @@ test_key_bystr_bad(void)
 void
 test_key_bystr_shorthand_good(void)
 {
-    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
     char * str;
     int mlen = -2, af = 0;
 
@@ -369,7 +369,7 @@ test_key_bystr_shorthand_good(void)
 void
 test_key_bylen_good(void)
 {
-    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
 
     // ipv4 masks
 
@@ -433,7 +433,7 @@ test_key_bylen_good(void)
 void
 test_key_bylen_bad(void)
 {
-    uint8_t buf[KEYBUFLEN_MAX];
+    uint8_t buf[MAX_BINKEY];
     uint8_t *addr;
 
     // invalid ipv4 masks
@@ -590,7 +590,7 @@ test_key_tolen_bad(void)
 void
 test_key_tostr_good(void)
 {
-    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
     int mlen, af, equal = 0;
     char buf[IP6_PFXSTRLEN];  // large enough to include /128
     char sp[IP6_PFXSTRLEN];   // dito

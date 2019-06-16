@@ -12,7 +12,7 @@
 #include "iptable.h"
 
 /* static char rn_zeros[RDX_MAX_KEYLEN]; */
-// needed for masking a key
+// all_ones used as max mask in some cases where none was supplied
 uint8_t  all_ones[RDX_MAX_KEYLEN] = {
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
@@ -56,18 +56,18 @@ key_bystr(const char *s, int *mlen, int *af, uint8_t *dst)
 {
     // Store string s' binary key in dst. Returns NULL on failure
     // Also sets mlen and  af. mlen=-1 when no mask was supplied
-    // assumes dst -> uint8_t dst[KEYBUFLEN_MAX], to fit both ipv4/ipv6
+    // assumes dst -> uint8_t dst[MAX_BINKEY], to fit both ipv4/ipv6
 
     *mlen = -1;                                   // the mask as length
     *af = AF_UNSPEC;
-    char buf[IP6_PFXSTRLEN];
+    char buf[MAX_STRKEY];
 
     int a, b, c, d, n;
     char *slash;
 
     if (dst == NULL) return NULL;                 // lame dst buffer check
     if (s == NULL) return NULL;                   // need prefix string
-    if (strlen(s) > IP6_PFXSTRLEN) return NULL;   // invalid string length
+    if (strlen(s) > MAX_STRKEY) return NULL;   // invalid string length
     if (strlen(s) < 1) return NULL;               // invalid string length
 
     slash = strchr(s, '/');                       // pick up mask, if any
@@ -81,7 +81,7 @@ key_bystr(const char *s, int *mlen, int *af, uint8_t *dst)
         if (*mlen > IP6_MAXMASK) return NULL;
         strncpy(buf, s, INET6_ADDRSTRLEN);
         if(slash) buf[slash - s]='\0';
-        IPT_KEYLEN(dst) = KEYBUFLEN_FAM(AF_INET6);
+        IPT_KEYLEN(dst) = FAM_BINKEY(AF_INET6);
         inet_pton(AF_INET6, buf, IPT_KEYPTR(dst));
         *af = AF_INET6;
         return dst;
@@ -104,8 +104,8 @@ key_bystr(const char *s, int *mlen, int *af, uint8_t *dst)
         if(c < 0 || c > 255) return NULL;
         if(d < 0 || d > 255) return NULL;
 
-        IPT_KEYLEN(dst) = KEYBUFLEN_FAM(AF_INET);
-        *(dst+1) = a;  // bigendian, so a goes first
+        IPT_KEYLEN(dst) = FAM_BINKEY(AF_INET);
+        *(dst+1) = a;  // bigendian, so 'a' goes first
         *(dst+2) = b;
         *(dst+3) = c;
         *(dst+4) = d;
@@ -120,7 +120,7 @@ uint8_t *
 key_bylen(int af, int mlen, uint8_t *buf)
 {
     // create key by masklength, store result in buf.  Retuns NULL on failure.
-    // buf is typically uint8_t buf[KEYBUFLEN_MAX]
+    // buf is typically uint8_t buf[MAX_BINKEY]
     uint8_t *cp;
     int keylen;
 
@@ -458,8 +458,8 @@ tbl_get(table_t *t, const char *s)
 {
     // An exact lookup for addr/mask, missing mask is set to AF's max mask
     // uint8_t *addr = NULL;
-    uint8_t addr[KEYBUFLEN_MAX];
-    uint8_t mask[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
+    uint8_t mask[MAX_BINKEY];
     int mlen = -1, af = AF_UNSPEC;
     struct radix_node_head *head = NULL;
     entry_t *entry = NULL;
@@ -487,7 +487,7 @@ tbl_set(table_t *t, const char *s, void *v, void *pargs)
     // - applies mask before searching/setting the tree
     /* uint8_t *addr = NULL; */
 
-    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX], *treekey = NULL;
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY], *treekey = NULL;
     int mlen = -1, af = AF_UNSPEC;
     entry_t *entry = NULL;
     struct radix_node *rn = NULL;
@@ -537,7 +537,7 @@ tbl_del(table_t *t, const char *s, void *pargs)
     // - a missing mask is set to AF's max mask
     entry_t *e;
     struct radix_node_head *head = NULL;
-    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
     int mlen = -1, af = AF_UNSPEC;
 
     // get head, af, addr, mask, or bail on error
@@ -568,7 +568,7 @@ tbl_lpm(table_t *t, const char *s)
 {
     // longest prefix match for address (a /mask is ignored)
     struct radix_node_head *head = NULL;
-    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
     int mlen = -1, af = AF_UNSPEC;
     entry_t *rv = NULL;
 
@@ -592,7 +592,7 @@ tbl_less(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
     // - actually traverses almost the entire tree to find all candidates
     struct radix_node_head *head = NULL;
     struct radix_node *rn = NULL, *base = NULL;
-    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
     int mlen = -1, af = AF_UNSPEC, done = 0;
     // include = include > 0 ? -2 : -1;
     include = include > 0 ? -2 : -1;
@@ -656,10 +656,10 @@ tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
     // - actually traverses almost the entire tree to find all candidates
     struct radix_node_head *head = NULL;
     struct radix_node *rn = NULL, *base = NULL, *top = NULL;
-    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
     int mlen = -1, af = AF_UNSPEC, done = 0;
     include = include > 0 ? 0 : -1;
-    /* char buf[IP6_PFXSTRLEN]; // TODO: delme after debugging */
+    /* char buf[MAX_STRKEY]; // TODO: delme after debugging */
 
     // sanity checks
     if (t == NULL || s == NULL) return 0;

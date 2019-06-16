@@ -27,10 +27,10 @@ int luaopen_iptable(lua_State *);
 // helper funtions
 
 table_t *check_table(lua_State *, int);
-static int check_binkey(lua_State *, int, char *, size_t *);
+static int check_binkey(lua_State *, int, uint8_t *, size_t *);
 const char *check_pfxstr(lua_State *, int, size_t *);
-static int *ud_create(int);                        // userdata stored as entry->value
-static void ud_delete(void *, void **);            // ud_delete(L, &ud)
+static int *ud_create(int);                // userdata stored as entry->value
+static void ud_delete(void *, void **);    // ud_delete(L, &ud)
 static int iter_kv(lua_State *);
 static int iter_hosts(lua_State *);
 
@@ -126,12 +126,10 @@ check_table (lua_State *L, int index)
 }
 
 static int
-check_binkey(lua_State *L, int idx, char *buf, size_t *len)
+check_binkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
 {
-    // Write a binary key @ idx into buffer buf;
-    // returns 1 on success, 0 on failure; assumes -> char buf[KEYBUFLEN_MAX]
-
-    // dbg_stack("<--");
+    // Write a binary key @ idx into buffer buf (of size MAX_BINKEY;
+    // returns 1 on success, 0 on failure
 
     const char *key = NULL;
 
@@ -140,12 +138,11 @@ check_binkey(lua_State *L, int idx, char *buf, size_t *len)
     key = lua_tolstring(L, idx, len);
     if (key == NULL) return 0;
     // LEN-byte cannot ever be larger than max buf length
-    if (IPT_KEYLEN(key) > KEYBUFLEN_MAX-1) return 0;
-    if (*len < 1 || *len > KEYBUFLEN_MAX-1) return 0;
+    if (IPT_KEYLEN(key) > MAX_BINKEY-1) return 0;
+    if (*len < 1 || *len > MAX_BINKEY-1) return 0;
 
     memcpy(buf, key, *len);  // copies any embedded 0's in a binary key
     buf[*len] = '\0';
-    // dbg_stack("==>");
 
     return 1;
 }
@@ -213,7 +210,7 @@ ipt_tobin(lua_State *L)
     dbg_stack("inc(.) <--");
 
     int af, mlen;
-    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
     size_t len = 0;
     const char *pfx = check_pfxstr(L, 1, &len);
 
@@ -235,13 +232,13 @@ ipt_tostr(lua_State *L)
     // Return string representation for a binary key, nil on errors
     dbg_stack("inc(.) <--");
 
-    char buf[KEYBUFLEN_MAX];
-    char str[KEYBUFLEN_MAX];
+    uint8_t key[MAX_BINKEY];
+    char str[MAX_STRKEY];
     size_t len = 0;
 
-    if (!check_binkey(L, 1, buf, &len)) return 0;
-    if (len != (size_t)IPT_KEYLEN(buf)) return 0; // illegal binary
-    if (key_tostr(buf, str) == NULL) return 0;
+    if (!check_binkey(L, 1, key, &len)) return 0;
+    if (len != (size_t)IPT_KEYLEN(key)) return 0; // illegal binary
+    if (key_tostr(key, str) == NULL) return 0;
 
     lua_pushstring(L, str);
 
@@ -258,7 +255,7 @@ ipt_tolen(lua_State *L)
     // - stops at the first zero bit.
     dbg_stack("inc(.) <--");
 
-    char buf[KEYBUFLEN_MAX];
+    uint8_t buf[MAX_BINKEY];
     size_t len = 0;
     int mlen = -1;
 
@@ -281,7 +278,7 @@ ipt_numhosts(lua_State *L)
 
     dbg_stack("inc(.) <--");
 
-    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
     size_t len = 0;
     int af = AF_UNSPEC, mlen = -1, hlen = -1;
     const char *pfx = NULL;
@@ -307,8 +304,8 @@ ipt_address(lua_State *L)
     // Return host address, masklen & af for a given prefix, nil on errors
     dbg_stack("inc(.) <--");
 
-    char buf[IP6_PFXSTRLEN];
-    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX];
+    char buf[MAX_STRKEY];
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
     size_t len = 0;
     int af = AF_UNSPEC, mlen = -1;
     const char *pfx = NULL;
@@ -334,8 +331,8 @@ ipt_network(lua_State *L)
     // Return network address & masklen for a given prefix, nil on errors
     dbg_stack("inc(.) <--");
 
-    char buf[IP6_PFXSTRLEN];
-    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX];
+    char buf[MAX_STRKEY];
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
     size_t len = 0;
     int af = AF_UNSPEC, mlen = -1;
     const char *pfx = NULL;
@@ -363,8 +360,8 @@ ipt_broadcast(lua_State *L)
 
     int af = AF_UNSPEC, mlen = -1;
     size_t len = 0;
-    char buf[KEYBUFLEN_MAX];
-    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX];
+    char buf[MAX_STRKEY];
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
     const char *pfx = NULL;
 
     pfx = check_pfxstr(L, 1, &len);
@@ -391,8 +388,8 @@ ipt_mask(lua_State *L)
     dbg_stack("inc(.) <--");
 
     int af = AF_UNSPEC, mlen = -1, isnum = 0;
-    char buf[KEYBUFLEN_MAX];
-    uint8_t mask[KEYBUFLEN_MAX];
+    char buf[MAX_STRKEY];
+    uint8_t mask[MAX_BINKEY];
 
     af = lua_tointegerx(L, 1, &isnum);
     if (! isnum) return 0;
@@ -420,7 +417,8 @@ iter_hosts(lua_State *L)
     dbg_stack("inc(.) <--");
 
     size_t nlen = 0, slen = 0;
-    char next[KEYBUFLEN_MAX], stop[KEYBUFLEN_MAX], buf[KEYBUFLEN_MAX];
+    uint8_t next[MAX_BINKEY], stop[MAX_BINKEY];
+    char buf[MAX_STRKEY];
 
     if (!check_binkey(L, lua_upvalueindex(1), next, &nlen)) return 0;
     if (!check_binkey(L, lua_upvalueindex(2), stop, &slen)) return 0;
@@ -448,7 +446,7 @@ ipt_iter_hosts(lua_State *L)
     size_t len = 0;
     int af = AF_UNSPEC, mlen = -1, inclusive = 0;
     int fail = 0;  // even on failure, gotta push iterfunc with 2 upvalues
-    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX], stop[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY], stop[MAX_BINKEY];
     const char *pfx = NULL;
 
     if (lua_gettop(L) == 2 && lua_isboolean(L, 2))
@@ -611,7 +609,7 @@ iter_kv(lua_State *L)
     table_t *t = check_table(L, 1);
     struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
     entry_t *e = NULL;
-    char saddr[KEYBUFLEN_MAX];
+    char saddr[MAX_STRKEY];
 
     if (rn == NULL || RDX_ISROOT(rn)) return 0; // we're done
 
@@ -666,14 +664,13 @@ cb_collect(struct radix_node *rn, void *LL)
     lua_State *L = LL;
     dbg_stack("cb_more()");
 
-    char addr[KEYBUFLEN_MAX];
+    char addr[MAX_STRKEY];
     int mlen = -1, tlen = 0;
 
     if (! lua_istable(L, -1)) return 1;
     if (! key_tostr(rn->rn_key, addr)) return 1;
     mlen = key_tolen(rn->rn_mask);
 
-    // working version
     lua_len(L, -1);                                 // get table length
     tlen = lua_tointeger(L, -1) + 1;                // new array index
     lua_pop(L,1);
@@ -681,7 +678,6 @@ cb_collect(struct radix_node *rn, void *LL)
     lua_pushfstring(L, "%s/%d", addr, mlen);        // more specific pfx
     dbg_stack("new k,v 2+");
     lua_settable(L, -3);                            // t[n]=pfx
-
 
     dbg_stack("out(0) ==>");
 
@@ -697,7 +693,7 @@ more(lua_State *L)
 
     size_t len = 0;
     int af = AF_UNSPEC, mlen = -1, inclusive = 0;
-    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
     const char *pfx = NULL;
 
     table_t *t = check_table(L, 1);
@@ -730,7 +726,7 @@ less(lua_State *L)
 
     size_t len = 0;
     int af = AF_UNSPEC, mlen = -1, inclusive = 0;
-    uint8_t addr[KEYBUFLEN_MAX];
+    uint8_t addr[MAX_BINKEY];
     const char *pfx = NULL;
 
     table_t *t = check_table(L, 1);
