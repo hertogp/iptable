@@ -567,3 +567,102 @@ test_tbl_less_traversal(void)
 
     return;
 }
+
+void
+test_tbl_more_good(void)
+{
+    // these tests store int data from a int char on the stack, rather than the
+    // heap, so we donot need a purge fuction
+    char pfx[IP6_PFXSTRLEN];
+    int number[5] = {1, 2, 4, 8, 16};
+    int total[1] = {0}, include = 0;
+    table_t *ipt = tbl_create(NULL);
+
+    mu_assert(ipt);
+
+    // add a few prefixes
+
+    snprintf(pfx, IP6_PFXSTRLEN, "0.0.0.0/0");
+    mu_assert(tbl_set(ipt, pfx, number+0, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.0.0.0/8");
+    mu_assert(tbl_set(ipt, pfx, number+1, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.0.0.0/8");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.10.0.0/16");
+    mu_assert(tbl_set(ipt, pfx, number+2, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.10.0.0/16");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.0/24");
+    mu_assert(tbl_set(ipt, pfx, number+3, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.0/24");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    snprintf(pfx, IP6_PFXSTRLEN, "10.10.10.128/32");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+    snprintf(pfx, IP6_PFXSTRLEN, "11.10.10.128/32");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+
+    mu_assert(9 == ipt->count4);
+
+    // more than /32
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_more(ipt, "10.10.10.128", include, cb_sum, total));
+    mu_eq(0+0+0+0+0, *total, "%d");
+
+    include = 1; // this time include search key (host ip) i/t results
+    *total = 0;
+    mu_assert(tbl_more(ipt, "10.10.10.128", include, cb_sum, total));
+    mu_eq(0+0+0+0+16, *total, "%d");
+
+    // more than /24
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_more(ipt, "10.10.10.128/24", include, cb_sum, total));
+    mu_eq(0+0+0+0+16, *total, "%d");
+
+    include = 1; // this time include search key (host ip) i/t results
+    *total = 0;
+    mu_assert(tbl_more(ipt, "10.10.10.128/24", include, cb_sum, total));
+    mu_eq(0+0+0+8+16, *total, "%d");
+
+    // more than /16
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_more(ipt, "10.10.10.128/16", include, cb_sum, total));
+    mu_eq(0+0+0+8+16, *total, "%d");
+
+    include = 1; // this time include search key (host ip) i/t results
+    *total = 0;
+    mu_assert(tbl_more(ipt, "10.10.10.128/16", include, cb_sum, total));
+    mu_eq(0+0+4+8+16, *total, "%d");
+
+    // more than /8
+    include = 0; // don't include search pfx in results
+    *total = 0;
+    mu_assert(tbl_more(ipt, "10.10.10.128/8", include, cb_sum, total));
+    mu_eq(0+0+4+8+16, *total, "%d");
+
+    include = 1; // this time include search key (host ip) i/t results
+    *total = 0;
+    mu_assert(tbl_more(ipt, "10.10.10.128/8", include, cb_sum, total));
+    mu_eq(0+2+4+8+16, *total, "%d");
+
+    // more than /0
+    include = 0; // anything more specific than /0, means all pfx's but 0/0
+    *total = 0;  // so all 4 11.x.y.z/m (4*16) and all 10.x.y.z/m (1+2+4+8+16)
+    mu_assert(tbl_more(ipt, "10.10.10.128/0", include, cb_sum, total));
+    mu_eq(0+2+4+8+16+4*16, *total, "%d");
+
+    include = 1; // this time include 0/0 as well
+    *total = 0;
+    mu_assert(tbl_more(ipt, "10.10.10.128/0", include, cb_sum, total));
+    mu_eq(1+2+4+8+16+4*16, *total, "%d");
+
+    tbl_destroy(&ipt, NULL);
+
+    return;
+}

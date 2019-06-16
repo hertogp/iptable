@@ -93,5 +93,6 @@ int tbl_del(table_t *, const char *, void *);
 int tbl_walk(table_t *, walktree_f_t *, void *);
 int tbl_destroy(table_t **, void *);
 int tbl_less(table_t *, const char *, int, walktree_f_t *, void *);
+int tbl_more(table_t *, const char *, int, walktree_f_t *, void *);
 
 #endif

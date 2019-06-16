@@ -303,14 +303,16 @@ key_cmp(void *a, void *b)
 int
 key_isin(void *a, void *b, void *m)
 {
-    // 1 iff a == b & m, 0 otherwise
+    // 1 iff a & m == b & m, 0 otherwise
+    // note: any radix keys/masks may have short(er) KEYLEN's than usual
     uint8_t *aa = a, *bb = b, *mm = m;
     int matchlen = 0;  // how many bytes to match depends on mask
 
     // sanity checks
     if(aa == NULL || bb == NULL) return 0;
-    if((matchlen = IPT_KEYLEN(aa)) != IPT_KEYLEN(bb)) return 0;
 
+    // if((matchlen = IPT_KEYLEN(aa)) != IPT_KEYLEN(bb)) return 0;
+    matchlen = min(IPT_KEYLEN(aa), IPT_KEYLEN(bb));
     matchlen = mm ? min(matchlen, IPT_KEYLEN(mm)) : matchlen;
     mm = mm ? mm+1 : all_ones;
 
@@ -641,6 +643,90 @@ tbl_less(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
 
         if (rn->rn_flags & RNF_ROOT)
             done = 1;
+    }
+
+    return 1;
+}
+
+int
+tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
+{
+    // find more specific prefixes relative to s & call f(fargs, rn)
+    // return 0 on failure, 1 on success
+    // - actually traverses almost the entire tree to find all candidates
+    struct radix_node_head *head = NULL;
+    struct radix_node *rn = NULL, *base = NULL, *top = NULL;
+    uint8_t addr[KEYBUFLEN_MAX], mask[KEYBUFLEN_MAX];
+    int mlen = -1, af = AF_UNSPEC, done = 0;
+    // include = include > 0 ? -2 : -1;
+    include = include > 0 ? 0 : -1;
+
+    // sanity checks
+    if (t == NULL || s == NULL) return 0;
+    if (f == NULL) return 0;
+    if (! key_bystr(s, &mlen, &af, addr)) return 0;
+
+    if (mlen < 0 && include == -1) return 1; // host ip, no include -> done
+    if (af == AF_INET) {
+        head = t->head4;
+        mlen = mlen < 0 ? IP4_MAXMASK : mlen;
+    } else if (af == AF_INET6) {
+        head = t->head6;
+        mlen = mlen < 0 ? IP6_MAXMASK : mlen;
+    } else return 0;
+    if (! key_bylen(af, mlen, mask)) return 0;
+    if (! key_network(addr, mask)) return 0;
+
+    mlen += IPT_KEYOFFSET;
+
+    // descend tree while key-bits are non-masked
+    for (top = head->rh.rnh_treetop; !RDX_ISLEAF(top) && (top->rn_bit < mlen);)
+        if (addr[top->rn_offset] & top->rn_bmask)
+            top = top->rn_right;  // bit is on
+        else
+            top = top->rn_left;   // bit is off
+
+    if (top == NULL) return 0;
+
+    // goto left most leaf
+    for(rn = top; !RDX_ISLEAF(rn);)
+        rn = rn->rn_left;
+
+    // ensure we're in the right subtree (prefix s may not be in the tree)
+    if (!key_isin(rn->rn_key, addr, mask)) return 0;
+
+    done = 0;
+    while (!done) {
+        base = rn;
+        // process leaf & its duplicates
+        for(; rn; rn = rn->rn_dupedkey) {
+            if (!RDX_ISROOT(rn) && rn->rn_bit + mlen < include) {
+                /* printf("- visiting %s\n", key_tostr(rn->rn_key, buf)); */
+                f(rn, fargs);
+            } else if (!RDX_ISROOT(rn) && mlen + include == 8) {
+                // TODO: this is a hack for when:
+                // - 0/0 is present in the tree, and
+                // - 0/0 is used as search key (ehmm...), and
+                // - include-flag is on -> 0/0 should be included in results
+                // After dotify is added => re-investigate this!
+                f(rn, fargs);
+            }
+        }
+        if (base == top) break;  // no more leaves to visit
+        rn = base;
+
+        // go up while "I am a right->child" & "not a ROOT" node
+        while (!done && RDX_ISRIGHT_CHILD(rn) && !RDX_ISROOT(rn)) {
+            rn = rn->rn_parent;
+            done = (rn == top);
+        }
+        if (done) break;  // no need to goto any next leaf
+
+        // go 1 up, then right & find the next left most *leaf*
+        for (rn = rn->rn_parent->rn_right; !RDX_ISLEAF(rn);)
+            rn = rn->rn_left;
+
+        done = RDX_ISROOT(rn);
     }
 
     return 1;
