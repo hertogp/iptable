@@ -40,7 +40,7 @@ static int ipt_new(lua_State *);
 static int ipt_tobin(lua_State *);
 static int ipt_tostr(lua_State *);
 static int ipt_tolen(lua_State *);
-static int ipt_numhosts(lua_State *);
+static int ipt_size(lua_State *);
 static int ipt_address(lua_State *);
 static int ipt_network(lua_State *);
 static int ipt_broadcast(lua_State *);
@@ -70,7 +70,7 @@ static const struct luaL_Reg funcs [] = {
     {"network", ipt_network},
     {"broadcast", ipt_broadcast},
     {"mask", ipt_mask},
-    {"numhosts", ipt_numhosts},
+    {"size", ipt_size},
     {"hosts", ipt_iter_hosts},
     {NULL, NULL}
 };
@@ -269,9 +269,9 @@ ipt_tolen(lua_State *L)
 }
 
 static int
-ipt_numhosts(lua_State *L)
+ipt_size(lua_State *L)
 {
-    // iptable.numhosts(strKey) <-- [str]
+    // iptable.size(strKey) <-- [str]
     // Return the number of hosts in a given prefix, nil on errors
     // - uses Lua's arithmatic (2^hostbits), since ipv6 can get large.
 
