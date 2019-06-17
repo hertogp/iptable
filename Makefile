@@ -105,6 +105,9 @@ $(BLDDIR)/%.d: $(SRCDIR)/%.c | $(BLDDIR)
 install: $(TARGET)
 	$(INSTALL) $(TARGET) $(INST_LIBDIR)
 
+uninstall: $(TARGET)
+	$(RM) $(INST_LIBDIR)/$(TARGET)
+
 clean:
 	$(RM) $(BLDDIR)/*
 
