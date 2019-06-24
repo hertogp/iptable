@@ -16,12 +16,23 @@ typedef struct purge_t {            // args for rdx_flush
    void *args;                      // extra args for the callback
 } purge_t;
 
+typedef struct stackElm_t {
+    int type;
+    void * elm;
+    struct stackElm_t *next;
+} stackElm_t;
+
 typedef struct table_t {
     struct radix_node_head *head4;  // IPv4 radix tree
     struct radix_node_head *head6;  // IPv6 radix tree
+
     size_t count4;
     size_t count6;
+
     purge_f_t *purge;               // callback to free userdata
+
+    stackElm_t *top;
+    size_t size;
 } table_t;
 
 #define IPT_KEYOFFSET 8             // 8 bit offset to 1st byte of key
@@ -55,11 +66,31 @@ typedef struct table_t {
 // radix tree macros
 #define RDX_ISLEAF(rn) (rn->rn_bit < 0)
 #define RDX_ISROOT(rn) (rn->rn_flags & RNF_ROOT)
+#define MSK_ISROOT(rm) (rm->rm_flags & RNF_ROOT)
 #define RDX_ISRIGHT_CHILD(rn) (rn->rn_parent->rn_right == rn)
 
 // used to interpolate the value of CONST into string: "%"STRINGIFY(x)"s"
 #define STRINGIFY(x) STRINGIFY_x(x)
 #define STRINGIFY_x(x) #x
+
+// RADIX node types
+// - note: radix_head is actually struct inside radix_node_head and not a
+//   'node' itself.  TODO: eleminate this as a 'node type'?
+#define TRDX_NONE -1
+#define TRDX_NODE_HEAD 0
+#define TRDX_HEAD 1
+#define TRDX_NODE 2
+#define TRDX_MASK_HEAD 3
+#define TRDX_MASK 4
+
+// IPT supported AF FAMILY's
+enum IPT_PROTOS {
+    IPT_UNSPEC = 0,
+    IPT_INET   = 1,
+    IPT_INET6  = 2,
+    IPT_MAX    = 4
+} IPT_PROTOS;
+#define IPT_VALID_PROTO(x) ((x) > IPT_UNSPEC && (x) < IPT_MAX)
 
 // taken from radix.c
 #define min(a, b) ((a) < (b) ? (a) : (b))
@@ -86,8 +117,10 @@ int key_invert(void *);
 // -- rdx funcs
 
 int rdx_flush(struct radix_node *, void *);
-struct radix_node *rdx_first(struct radix_node_head *);
-struct radix_node *rdx_next(struct radix_node *);
+struct radix_node *rdx_firstleaf(struct radix_node_head *);
+struct radix_node *rdx_nextleaf(struct radix_node *);
+int rdx_firstnode(table_t *, int);
+int rdx_nextnode(table_t *, int *, void **);
 
 // -- tbl funcs
 
@@ -100,5 +133,8 @@ int tbl_walk(table_t *, walktree_f_t *, void *);
 int tbl_destroy(table_t **, void *);
 int tbl_less(table_t *, const char *, int, walktree_f_t *, void *);
 int tbl_more(table_t *, const char *, int, walktree_f_t *, void *);
+int tbl_stackpush(table_t *, int, void *);
+int tbl_stackpop(table_t *);
+
 
 #endif

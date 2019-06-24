@@ -32,6 +32,7 @@ static int *ud_create(int);                // userdata stored as entry->value
 static void usr_delete(void *, void **);    // usr_delete(L, &ud)
 static int iter_kv(lua_State *);
 static int iter_hosts(lua_State *);
+static int iter_radix(lua_State *);
 static int cb_collect(struct radix_node *, void *);
 
 // iptable module functions
@@ -58,6 +59,7 @@ static int _pairs(lua_State *);
 static int counts(lua_State *);
 static int more(lua_State *);
 static int less(lua_State *);
+static int radixes(lua_State *);
 
 // iptable module function array
 
@@ -87,6 +89,7 @@ static const struct luaL_Reg meths [] = {
     {"counts", counts},
     {"more", more},
     {"less", less},
+    {"radixes", radixes},
     {NULL, NULL}
 };
 
@@ -103,10 +106,25 @@ luaopen_iptable (lua_State *L)
     lua_setfield(L, -2, "__index");         // [.., {__index={}} ]
     luaL_setfuncs(L, meths, 0);             // [.., {__index={m's}} ]
     luaL_newlib(L, funcs);                  // [.., {__index={m's}, f's} ]
-    lua_pushinteger(L, AF_INET);            // lib constant
+
+    // lib AF constants
+    lua_pushinteger(L, AF_INET);
     lua_setfield(L, -2, "AF_INET");
-    lua_pushinteger(L, AF_INET6);           // lib constant
+    lua_pushinteger(L, AF_INET6);
     lua_setfield(L, -2, "AF_INET6");
+
+    // lib RDX node type constants
+    lua_pushinteger(L, TRDX_NODE_HEAD);
+    lua_setfield(L, -2, "RDX_NODE_HEAD");
+    lua_pushinteger(L, TRDX_MASK_HEAD);
+    lua_setfield(L, -2, "RDX_MASK_HEAD");
+    lua_pushinteger(L, TRDX_NODE);
+    lua_setfield(L, -2, "RDX_NODE");
+    lua_pushinteger(L, TRDX_MASK);
+    lua_setfield(L, -2, "RDX_MASK");
+    lua_pushinteger(L, TRDX_HEAD);
+    lua_setfield(L, -2, "RDX_HEAD");
+
 
     dbg_stack("out(1) ==>");
 
@@ -174,6 +192,448 @@ usr_delete(void *L, void **refp)
     }
     *refp = NULL;
 }
+
+static int
+cb_collect(struct radix_node *rn, void *LL)
+{
+    // collect prefixes into table on top <-- [t_ud, pfx bool* ref]
+    // - where bool* may be absent.
+    // - Order of args follows walktree_f_t definition
+    lua_State *L = LL;
+    dbg_stack("cb_more()");                         // after *L=LL (it needs L)
+
+    char addr[MAX_STRKEY];
+    int mlen = -1, tlen = 0;
+
+    if (! lua_istable(L, -1)) return 1;
+    if (! key_tostr(rn->rn_key, addr)) return 1;
+    mlen = key_tolen(rn->rn_mask);
+
+    lua_len(L, -1);                                 // get table length
+    tlen = lua_tointeger(L, -1) + 1;                // new array index
+    lua_pop(L,1);
+
+    lua_pushfstring(L, "%s/%d", addr, mlen);        // more specific pfx
+    lua_seti(L, -2, tlen);                          // insert in array
+
+    dbg_stack("out(0) ==>");
+
+    return 1;                                       // ignored return value
+}
+
+static int
+iter_kv(lua_State *L)
+{
+    // iter_kv() <-- [ud k] (key k is nil if first call)
+    // - returns next [k' v']-pair or nil [] to stop iteration
+    dbg_stack("inc(.) <--");
+
+    table_t *t = check_table(L, 1);
+    struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
+    entry_t *e = NULL;
+    char saddr[MAX_STRKEY];
+
+    if (rn == NULL || RDX_ISROOT(rn)) return 0; // we're done
+
+    // push k',v' onto stack
+    key_tostr(rn->rn_key, saddr);
+    e = (entry_t *)rn;
+    lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [t_ud k k']
+    lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value); // [t_ud k k' v']
+
+    // get next node & save it for next time around
+    rn = rdx_nextleaf(rn);
+    if (rn == NULL && KEY_IS_IP4(e->rn[0].rn_key))
+        rn = rdx_firstleaf(t->head6);
+    lua_pushlightuserdata(L, rn);                       // [t_ud k k' v' lud]
+    lua_replace(L, lua_upvalueindex(1));                // [t_ud k k' v']
+
+    dbg_stack("out(2) ==>");
+
+    return 2;                                           // [.., k', v']
+}
+
+static int push_rdx_node_head(lua_State *L, struct radix_node_head *rnh);
+static int push_rdx_head(lua_State *L, struct radix_head *rh);
+static int push_rdx_node(lua_State *L, struct radix_node *rn);
+static int push_rdx_mask_head(lua_State *L, struct radix_mask_head *rmh);
+static int push_rdx_mask(lua_State *L, struct radix_mask *rm);
+
+static int
+push_rdx_node_head(lua_State *L, struct radix_node_head *rnh)
+{
+    // create table and populate its fields for rnh
+    dbg_stack("inc(.) <--");
+    lua_newtable(L);
+    dbg_msg("-%d-", 1);
+
+    lua_pushliteral(L, "_MEM_");
+    lua_pushfstring(L, "%p", rnh);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_TYPE_");
+    lua_pushinteger(L, TRDX_NODE_HEAD);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_NAME_");
+    lua_pushliteral(L, "RADIX_NODE_HEAD");
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rh");
+    push_rdx_head(L, &rnh->rh);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rnh_nodes");
+    lua_newtable(L);
+
+    lua_pushliteral(L, "_MEM_");
+    lua_pushfstring(L, "%p", rnh->rnh_nodes);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_NAME_");
+    lua_pushliteral(L, "RNH_NODES[3]");
+    lua_settable(L, -3);
+
+    lua_pushinteger(L, 1);
+    push_rdx_node(L, &rnh->rnh_nodes[0]);
+    lua_settable(L, -3);
+    lua_pushinteger(L, 2);
+    push_rdx_node(L, &rnh->rnh_nodes[1]);
+    lua_settable(L, -3);
+    lua_pushinteger(L, 3);
+    push_rdx_node(L, &rnh->rnh_nodes[2]);
+    lua_settable(L, -3);
+    dbg_stack("tbl array >");
+
+    lua_settable(L, -3);
+
+
+    dbg_stack("out(1) ==>");
+    return 1;
+}
+
+static int
+push_rdx_node(lua_State *L, struct radix_node *rn)
+{
+    // create table and populate its fields for rn
+    // - uses the convenience rn->field_names
+    char key[MAX_STRKEY];
+    dbg_stack("inc(.) <--");
+    lua_newtable(L);
+
+    lua_pushliteral(L, "_MEM_");
+    lua_pushfstring(L, "%p", rn);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_TYPE_");
+    lua_pushinteger(L, TRDX_NODE);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_NAME_");
+    lua_pushliteral(L, "RADIX_NODE");
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rn_mklist");
+    lua_pushfstring(L, "%p", rn->rn_mklist);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rn_parent");
+    lua_pushfstring(L, "%p", rn->rn_parent);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rn_bit");
+    lua_pushinteger(L, rn->rn_bit);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rn_bmask");
+    lua_pushinteger(L, rn->rn_bmask);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rn_flags");
+    lua_pushinteger(L, rn->rn_flags);
+    lua_settable(L, -3);
+
+    // set _RNF_FLAGs_
+    if (rn->rn_flags & RNF_NORMAL) {
+        lua_pushliteral(L, "_NORMAL_");
+        lua_pushinteger(L, 1);
+        lua_settable(L, -3);
+    }
+
+    if (rn->rn_flags & RNF_ROOT) {
+        lua_pushliteral(L, "_ROOT_");
+        lua_pushinteger(L, 1);
+        lua_settable(L, -3);
+    }
+
+    if (rn->rn_flags & RNF_ACTIVE) {
+        lua_pushliteral(L, "_ACTIVE_");
+        lua_pushinteger(L, 1);
+        lua_settable(L, -3);
+    }
+
+    if(RDX_ISLEAF(rn)) {
+      lua_pushliteral(L, "_LEAF_");
+      lua_pushinteger(L, 1);
+      lua_settable(L, -3);
+
+      lua_pushliteral(L, "rn_key");
+      lua_pushfstring(L, "%s", key_tostr(rn->rn_key, key));
+      lua_settable(L, -3);
+      // also push its address in C memory
+      lua_pushliteral(L, "rn_key_p");
+      lua_pushfstring(L, "%p", rn->rn_key);
+      lua_settable(L, -3);
+
+      // TODO: a mask in a ipv4/ipv6 tree has LEN(k) set to num of non-zero 
+      //       bytes, not the length of the byte array.  So differentiating
+      //       between ipv4 mask vs ipv6 mask is impossible ?
+      lua_pushliteral(L, "rn_mask");
+      lua_pushfstring(L, "%s", key_tostr(rn->rn_mask, key));
+      lua_settable(L, -3);
+      // also push its address in C memory
+      lua_pushliteral(L, "rn_mask_p");
+      lua_pushfstring(L, "%p", rn->rn_mask);
+      lua_settable(L, -3);
+
+      lua_pushliteral(L, "rn_prefix");
+      lua_pushfstring(L, "%s/%d",
+          key_tostr(rn->rn_key, key),
+          key_tolen(rn->rn_mask));
+      lua_settable(L, -3);
+
+      lua_pushliteral(L, "rn_dupedkey");
+      lua_pushfstring(L, "%p", rn->rn_dupedkey);
+      lua_settable(L, -3);
+
+    } else {
+      lua_pushliteral(L, "_INTERNAL_");
+      lua_pushinteger(L, 1);
+      lua_settable(L, -3);
+
+      lua_pushliteral(L, "rn_offset");
+      lua_pushinteger(L, rn->rn_offset);
+      lua_settable(L, -3);
+
+      lua_pushliteral(L, "rn_left");
+      lua_pushfstring(L, "%p", rn->rn_left);
+      lua_settable(L, -3);
+
+      lua_pushliteral(L, "rn_right");
+      lua_pushfstring(L, "%p", rn->rn_right);
+      lua_settable(L, -3);
+
+    }
+
+    dbg_stack("out ==>");
+
+    return 1;
+}
+
+static int
+push_rdx_head(lua_State *L, struct radix_head *rh)
+{
+    // create table and populate its fields for rn
+    dbg_stack("inc(.) <--");
+    lua_newtable(L);
+
+    lua_pushliteral(L, "_MEM_");
+    lua_pushfstring(L, "%p", rh);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_TYPE_");
+    lua_pushinteger(L, TRDX_HEAD);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_NAME_");
+    lua_pushliteral(L, "RADIX_HEAD");
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rnh_treetop");
+    lua_pushfstring(L, "%p", rh->rnh_treetop);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rnh_masks");
+    lua_pushfstring(L, "%p", rh->rnh_masks);
+    lua_settable(L, -3);
+
+    dbg_stack("out(1) ==>");
+
+    return 1;
+}
+
+static int
+push_rdx_mask_head(lua_State *L, struct radix_mask_head *rmh)
+{
+    // create table and populate its fields for rn
+    dbg_stack("inc(.) <--");
+
+    lua_newtable(L);
+
+    lua_pushliteral(L, "_MEM_");
+    lua_pushfstring(L, "%p", rmh);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_TYPE_");
+    lua_pushinteger(L, TRDX_MASK_HEAD);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_NAME_");
+    lua_pushliteral(L, "RADIX_MASK_HEAD");
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "head");
+    push_rdx_head(L, &rmh->head);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "mask_nodes");
+    lua_newtable(L);
+
+    lua_pushinteger(L, 1);
+    push_rdx_node(L, &rmh->mask_nodes[0]);
+    lua_settable(L, -3);
+    lua_pushinteger(L, 2);
+
+    push_rdx_node(L, &rmh->mask_nodes[1]);
+    lua_settable(L, -3);
+    lua_pushinteger(L, 3);
+
+    push_rdx_node(L, &rmh->mask_nodes[2]);
+    lua_settable(L, -3);
+    dbg_stack("tbl array >");
+
+    lua_settable(L, -3);
+
+    dbg_stack("out(1) ==>");
+
+    return 1;
+}
+
+static int
+push_rdx_mask(lua_State *L, struct radix_mask *rm)
+{
+    // create table and populate its fields for rn
+    dbg_stack("inc(.) <--");
+
+    char key[MAX_STRKEY];
+
+    lua_newtable(L);
+
+    lua_pushliteral(L, "_MEM_");
+    lua_pushfstring(L, "%p", rm);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_TYPE_");
+    lua_pushinteger(L, TRDX_MASK);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "_NAME_");
+    lua_pushliteral(L, "RADIX_MASK");
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rm_bit");
+    lua_pushinteger(L, rm->rm_bit);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rm_unused");
+    lua_pushinteger(L, rm->rm_unused);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rm_flags");
+    lua_pushinteger(L, rm->rm_flags);
+    dbg_stack("rm_flags +");
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rm_mklist");
+    lua_pushfstring(L, "%p", rm->rm_mklist);
+    lua_settable(L, -3);
+
+    lua_pushliteral(L, "rm_refs");
+    lua_pushinteger(L, rm->rm_refs);
+    lua_settable(L, -3);
+
+    /* dbg_msg("pushing rdx_mask, rm->rm_refs is %d", rm->rm_refs); */
+    /* dbg_msg("- rm->rm_mklist @ %p", (void *)rm->rm_mklist); */
+    /* dbg_msg("- rm            @ %p", (void *)rm); */
+    /* dbg_msg("- rm->rm_flags is %d", rm->rm_flags); */
+    /* dbg_msg("- rm->rm_flags & ROOT %d", rm->rm_flags & RNF_ROOT); */
+    /* dbg_msg("- rm->rm_flags & NORMAL %d", rm->rm_flags & RNF_NORMAL); */
+    /* dbg_msg("- rm->rm_flags & ACTIVE %d", rm->rm_flags & RNF_ACTIVE); */
+    /* dbg_msg("- rm->rm_bit is %d", rm->rm_bit); */
+
+    if (rm->rm_flags & RNF_NORMAL) {
+      // NOTE: if its a NORMAL 'radix_mask' -> rm_leaf else rm_mask!
+      // - see line 377 and 773 in radix.c
+      lua_pushliteral(L, "_LEAF_");
+      lua_pushinteger(L, 1);
+      lua_settable(L, -3);
+
+      lua_pushliteral(L, "rm_leaf");
+      lua_pushfstring(L, "%p", rm->rm_leaf);
+      lua_settable(L, -3);
+
+    } else {
+      lua_pushliteral(L, "_INTERNAL_");
+      lua_pushinteger(L, 1);
+      lua_settable(L, -3);
+
+      lua_pushliteral(L, "rm_mask");
+      lua_pushfstring(L, "%s", key_tostr(rm->rm_mask, key));
+      // lua_pushfstring(L, "%p", rm->rm_mask);
+      lua_settable(L, -3);
+      // also push its address in C memory
+      lua_pushliteral(L, "rm_mask_p");
+      lua_pushfstring(L, "%p", rm->rm_mask);
+      lua_settable(L, -3);
+    }
+
+
+    dbg_stack("out(1) ==>");
+
+    return 1;
+}
+
+static int
+iter_radix(lua_State *L)
+{
+    // iter_radix() <-- [ud k] ([nil nil] at first call)
+    // - return current node as a Lua table or nil to stop iteration
+    // - save next (type, node) as/in upvalues 1 resp. 2
+    dbg_stack("inc(.) <--");
+    table_t *t = check_table(L, 1);
+    void *node;
+    int type;
+
+    if (! rdx_nextnode(t, &type, &node)) return 0; // we're done
+
+    dbg_msg("processing type is %d", type);
+    switch (type) {
+        case TRDX_NODE_HEAD:
+            if (! push_rdx_node_head(L, node)) return 0;
+            break;
+        case TRDX_HEAD:
+            if (! push_rdx_head(L, node)) return 0;
+            break;
+        case TRDX_NODE:
+            if (! push_rdx_node(L, node)) return 0;
+            break;
+        case TRDX_MASK_HEAD:
+            if (! push_rdx_mask_head(L, node)) return 0;
+            break;
+        case TRDX_MASK:
+            if (! push_rdx_mask(L, node)) return 0;
+            break;
+        default:
+            return 0;
+    }
+
+    dbg_stack("out(1) ==>");
+
+    return 1;                                           // [.., k', v']
+}
+
+
+
 
 // iptable module functions
 
@@ -410,8 +870,8 @@ ipt_mask(lua_State *L)
 static int
 iter_hosts(lua_State *L)
 {
-    // actual iterator used by factory func ipt_iter_hosts
-    // [prev.value], which is nil the first time around
+    // iter_hosts() <-- [prev.value]  ([nil] on first call)
+    // actual iterator for ipt_iter_hosts()
     // we ignore prev.value, incr upvalue(1) instead till it equals upvalue(2)
     dbg_stack("inc(.) <--");
 
@@ -484,8 +944,13 @@ ipt_iter_hosts(lua_State *L)
 static int
 _gc(lua_State *L) {
     // __gc: utterly destroy the table
+    dbg_stack("inc(.) <--");
+
     table_t *ud = check_table(L, 1);
     tbl_destroy(&ud, L);
+
+    dbg_stack("out(0) ==>");
+
     return 0;  // Lua owns the memory for the pointer to-> *ud
 }
 
@@ -599,48 +1064,15 @@ counts(lua_State *L)
 }
 
 static int
-iter_kv(lua_State *L)
-{
-    // iter_kv() <-- [ud k] (key k is nil if first call)
-    // - returns next [k' v']-pair or nil [] to stop iteration
-    dbg_stack("inc(.) <--");
-
-    table_t *t = check_table(L, 1);
-    struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
-    entry_t *e = NULL;
-    char saddr[MAX_STRKEY];
-
-    if (rn == NULL || RDX_ISROOT(rn)) return 0; // we're done
-
-    // push k',v' onto stack
-    key_tostr(rn->rn_key, saddr);
-    e = (entry_t *)rn;
-    lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [t_ud k k']
-    lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value); // [t_ud k k' v']
-
-    // get next node & save it for next time around
-    rn = rdx_next(rn);
-    if (rn == NULL && KEY_IS_IP4(e->rn[0].rn_key))
-        rn = rdx_first(t->head6);
-    lua_pushlightuserdata(L, rn);                       // [t_ud k k' v' lud]
-    lua_replace(L, lua_upvalueindex(1));                // [t_ud k k' v']
-
-    dbg_stack("out(2) ==>");
-
-    return 2;                                           // [.., k', v']
-}
-
-
-static int
 _pairs(lua_State *L)
 {
     // __pairs(ipt) <-- [t_ud]
     dbg_stack("inc(.) <--");
 
     table_t *t = check_table(L, 1);
-    struct radix_node *rn = rdx_first(t->head4);
+    struct radix_node *rn = rdx_firstleaf(t->head4);
     if (rn == NULL)
-        rn = rdx_first(t->head6);
+        rn = rdx_firstleaf(t->head6);
 
     if (rn == NULL) return 0;
 
@@ -652,34 +1084,6 @@ _pairs(lua_State *L)
     dbg_stack("out(3) ==>");
 
     return 3;                           // [iter_f invariant ctl_var]
-}
-
-static int
-cb_collect(struct radix_node *rn, void *LL)
-{
-    // collect prefixes into table on top <-- [t_ud, pfx bool* ref]
-    // - where bool* may be absent.
-    // - Order of args follows walktree_f_t definition
-    lua_State *L = LL;
-    dbg_stack("cb_more()");                         // after *L=LL (it needs L)
-
-    char addr[MAX_STRKEY];
-    int mlen = -1, tlen = 0;
-
-    if (! lua_istable(L, -1)) return 1;
-    if (! key_tostr(rn->rn_key, addr)) return 1;
-    mlen = key_tolen(rn->rn_mask);
-
-    lua_len(L, -1);                                 // get table length
-    tlen = lua_tointeger(L, -1) + 1;                // new array index
-    lua_pop(L,1);
-
-    lua_pushfstring(L, "%s/%d", addr, mlen);        // more specific pfx
-    lua_seti(L, -2, tlen);                          // insert in array
-
-    dbg_stack("out(0) ==>");
-
-    return 1;                                       // ignored return value
 }
 
 static int
@@ -736,4 +1140,45 @@ less(lua_State *L)
     dbg_stack("out(1) ==>");
 
     return 1;
+}
+
+static int
+radixes(lua_State *L)
+{
+    // ipt:radix(AF)  <-- [t_ud af1, af2, ...]
+    // Iterate across all radix nodes in 1+ radix trees (iter_radix())
+    // - iter_radix() yields the radix tree's C-structs as Lua tables
+    dbg_stack("inc(.) <--");
+
+    int isnum = 0, af = AF_UNSPEC, afs = IPT_UNSPEC;
+    table_t *t = check_table(L, 1);
+
+    while(lua_gettop(L) > 1) {
+      af = lua_tointegerx(L, lua_gettop(L), &isnum);
+      if (! isnum) return 0;
+      switch (af) {
+        case AF_INET:
+          afs |= IPT_INET;
+          dbg_msg("added %d for IPT_INET", IPT_INET);
+          break;
+        case AF_INET6:
+          afs |= IPT_INET6;
+          dbg_msg("added %d for IPT_INET6", IPT_INET6);
+          break;
+        default:
+          return 0;
+      }
+      lua_pop(L, 1);
+      dbg_stack("popped af -");
+    }
+
+    if (! rdx_firstnode(t, afs)) return 0;
+
+    dbg_stack("upvalues(0)");
+    lua_pushcclosure(L, iter_radix, 0);             // [t_ud iter_f]
+    lua_rotate(L, 1, 1);                            // [iter_f t_ud]
+
+    dbg_stack("out(2) ==>");
+
+    return 2;                                       // [iter_f invariant]
 }

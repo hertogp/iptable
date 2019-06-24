@@ -34,6 +34,25 @@ describe("iptable module: ", function()
       assert.is_equal(10, iptable.AF_INET6);
     end)
 
+    it("has an RDX_NODE_HEAD constant", function()
+      assert.is_equal(0, iptable.RDX_NODE_HEAD);
+    end)
+
+    it("has an RDX_HEAD constant", function()
+      assert.is_equal(1, iptable.RDX_HEAD);
+    end)
+
+    it("has an RDX_NODE constant", function()
+      assert.is_equal(2, iptable.RDX_NODE);
+    end)
+
+    it("has an RDX_MASK_HEAD constant", function()
+      assert.is_equal(3, iptable.RDX_MASK_HEAD);
+    end)
+
+    it("has an RDX_MASK constant", function()
+      assert.is_equal(4, iptable.RDX_MASK);
+    end)
 
   end)
 end)

@@ -182,10 +182,15 @@ key_tostr(void *k, char *s)
 
     if (s == NULL || k == NULL) return NULL;
 
-    if(KEY_IS_IP6(key)) {
+    if((*((uint8_t *)(k)) > 5))
         return inet_ntop(AF_INET6, IPT_KEYPTR(key), s, INET6_ADDRSTRLEN);
-    }
+
     return inet_ntop(AF_INET, IPT_KEYPTR(key), s, INET_ADDRSTRLEN);
+
+    /* if(KEY_IS_IP6(key)) { */
+    /*     return inet_ntop(AF_INET6, IPT_KEYPTR(key), s, INET6_ADDRSTRLEN); */
+    /* } */
+    /* return inet_ntop(AF_INET, IPT_KEYPTR(key), s, INET_ADDRSTRLEN); */
 }
 
 int
@@ -348,7 +353,7 @@ rdx_flush(struct radix_node *rn, void *args)
 }
 
 struct radix_node *
-rdx_first(struct radix_node_head *rnh)
+rdx_firstleaf(struct radix_node_head *rnh)
 {
     // find first leaf in tree
     struct radix_node *rn = NULL;
@@ -371,7 +376,7 @@ rdx_first(struct radix_node_head *rnh)
 }
 
 struct radix_node *
-rdx_next(struct radix_node *rn)
+rdx_nextleaf(struct radix_node *rn)
 {
     // find next leaf, given a leaf
     if (rn == NULL) return NULL;
@@ -382,12 +387,108 @@ rdx_next(struct radix_node *rn)
     while(RDX_ISRIGHT_CHILD(rn))
         rn = rn->rn_parent;
 
-    for(rn = rn->rn_parent->rn_right; rn->rn_bit >=0;)
+    for(rn = rn->rn_parent->rn_right; !RDX_ISLEAF(rn);)
       rn = rn->rn_left;
 
     if (RDX_ISROOT(rn)) rn = NULL;
 
     return rn;
+}
+
+int
+rdx_firstnode(table_t *t, int af_fams)
+{
+    // initialize the stack with the radix head nodes
+
+    // ensure a clean stack
+    while (t->top) tbl_stackpop(t);
+
+    // need at least 1 supported IPT protocol
+    if (! IPT_VALID_PROTO(af_fams)) return 0;
+
+    if(af_fams & IPT_INET6)
+        tbl_stackpush(t, TRDX_NODE_HEAD, t->head6);
+
+    if(af_fams & IPT_INET)
+        tbl_stackpush(t, TRDX_NODE_HEAD, t->head4);
+
+    return 1;
+}
+
+int
+rdx_nextnode(table_t *t, int *type, void **ptr)
+{
+    // pop top and set type & node, push its progeny
+    // - stackpush will ignore NULL pointers, so its safe to push those
+    // return 1 on success with type,ptr set
+    // return 0 on failure (eg stack exhausted or unknown type)
+
+    *ptr = NULL;
+    *type = TRDX_NONE;
+
+    // node types used
+    struct radix_node_head *rnh = NULL;
+    struct radix_node *rn = NULL;
+    struct radix_mask_head *rmh = NULL;
+    struct radix_mask *rm = NULL;
+
+    if (t->top == NULL) return 0;  // no more work to be done
+
+    // set return values
+    *type = t->top->type;
+    *ptr = t->top->elm;
+
+    tbl_stackpop(t);
+
+    // ensure popped node's progeny will be next
+    switch (*type) {
+
+        case TRDX_NODE_HEAD:
+            rnh = *ptr;
+            tbl_stackpush(t, TRDX_MASK_HEAD, rnh->rh.rnh_masks);
+            rn = &rnh->rnh_nodes[1]; // aka treetop
+            // never push ROOT radix nodes
+            if (! RDX_ISROOT(rn->rn_right))
+                tbl_stackpush(t, TRDX_NODE, rn->rn_right);
+            if (! RDX_ISROOT(rn->rn_left))
+                tbl_stackpush(t, TRDX_NODE, rn->rn_left);
+            break;
+
+        case TRDX_NODE:
+            rn = *ptr;
+            // XXX: new
+            if (RDX_ISLEAF(rn)) {
+                tbl_stackpush(t, TRDX_NODE, rn->rn_dupedkey);
+            } else {
+                tbl_stackpush(t, TRDX_MASK, rn->rn_mklist);
+                // never push ROOT radix nodes
+                if (! RDX_ISROOT(rn->rn_right))
+                    tbl_stackpush(t, TRDX_NODE, rn->rn_right);
+                if (! RDX_ISROOT(rn->rn_left))
+                    tbl_stackpush(t, TRDX_NODE, rn->rn_left);
+            }
+            break;
+
+        case TRDX_MASK_HEAD:
+            rmh = *ptr;
+            tbl_stackpush(t, TRDX_MASK_HEAD, rmh->head.rnh_masks);
+            rn = &rmh->mask_nodes[1]; // aka treetop
+            // never push ROOT radix nodes
+            if (! RDX_ISROOT(rn->rn_right))
+                tbl_stackpush(t, TRDX_NODE, rn->rn_right);
+            if (! RDX_ISROOT(rn->rn_left))
+                tbl_stackpush(t, TRDX_NODE, rn->rn_left);
+            break;
+
+        case TRDX_MASK:
+            rm = *ptr;
+            tbl_stackpush(t, TRDX_MASK, rm->rm_mklist);
+            break;
+
+        default: return 0;
+    }
+
+    return 1;
 }
 
 // tbl functions
@@ -436,16 +537,22 @@ tbl_destroy(table_t **t, void *pargs)
 
     if (t == NULL || *t == NULL) return 0;  // nothing to free
 
-    args.purge = (*t)->purge;          // the user callback to free userdata
-    args.args = pargs;                 // context for purge callback
+    // pickup user purge callback & its contextual args
+    args.purge = (*t)->purge;
+    args.args = pargs;
 
+    // clear ipv4 table
     args.head = (*t)->head4;
     (*t)->head4->rnh_walktree(&(*t)->head4->rh, rdx_flush, &args);
     rn_detachhead((void **)&(*t)->head4);
 
+    // clear ipv6 table
     args.head = (*t)->head6;
     (*t)->head6->rnh_walktree(&(*t)->head6->rh, rdx_flush, &args);
     rn_detachhead((void **)&(*t)->head6);
+
+    // clear the stack
+    while ((*t)->top != NULL) tbl_stackpop(*t);
 
     free(*t);
     *t = NULL;
@@ -733,6 +840,43 @@ tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
 
         done = RDX_ISROOT(rn);
     }
+
+    return 1;
+}
+
+int
+tbl_stackpush(table_t *t, int type, void *elm)
+{
+    // insert element into stack
+    stackElm_t *node = NULL;
+
+    if (elm == NULL) return 0;   // ignore NULL elements
+
+    node = calloc(1, sizeof(stackElm_t));
+
+    if (! node) return 0;
+
+    node->type = type;
+    node->elm = elm;
+    node->next = t->top;
+    t->top = node;
+    t->size += 1;
+
+    return 1;
+}
+
+int
+tbl_stackpop(table_t *t)
+{
+    // pop & free top element
+    stackElm_t *node;
+
+    if (t->top == NULL) return 0;
+
+    node = t->top;
+    t->top = node->next;
+    free(node);
+    t->size -= 1;
 
     return 1;
 }
