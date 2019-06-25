@@ -451,17 +451,23 @@ rdx_nextnode(table_t *t, int *type, void **ptr)
         case TRDX_NODE_HEAD:
             rnh = *ptr;
             tbl_stackpush(t, TRDX_MASK_HEAD, rnh->rh.rnh_masks);
-            rn = &rnh->rnh_nodes[1]; // aka treetop
+
+            // rnh_nodes[0] and [2] are LEAF nodes
+            tbl_stackpush(t, TRDX_NODE, rnh->rnh_nodes[0].rn_dupedkey);
+            tbl_stackpush(t, TRDX_NODE, rnh->rnh_nodes[2].rn_dupedkey);
+
+            // rnh_nodes[1] aka treetop is an INTERNAL node
+            rn = &rnh->rnh_nodes[1];
             // never push ROOT radix nodes
             if (! RDX_ISROOT(rn->rn_right))
                 tbl_stackpush(t, TRDX_NODE, rn->rn_right);
             if (! RDX_ISROOT(rn->rn_left))
                 tbl_stackpush(t, TRDX_NODE, rn->rn_left);
+            tbl_stackpush(t, TRDX_MASK, rn->rn_mklist);
             break;
 
         case TRDX_NODE:
             rn = *ptr;
-            // XXX: new
             if (RDX_ISLEAF(rn)) {
                 tbl_stackpush(t, TRDX_NODE, rn->rn_dupedkey);
             } else {
@@ -520,7 +526,6 @@ tbl_create(purge_f_t *fp)
 
     return tbl;
 }
-
 
 int
 tbl_walk(table_t *t, walktree_f_t *f, void *fargs)
@@ -771,7 +776,6 @@ tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
     uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
     int mlen = -1, af = AF_UNSPEC, done = 0;
     include = include > 0 ? 0 : -1;
-    /* char buf[MAX_STRKEY]; // TODO: delme after debugging */
 
     // sanity checks
     if (t == NULL || s == NULL) return 0;
@@ -794,11 +798,12 @@ tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
     mlen += IPT_KEYOFFSET;
 
     // descend tree while key-bits are non-masked
-    for (top = head->rh.rnh_treetop; !RDX_ISLEAF(top) && (top->rn_bit < mlen);)
+    for (top = head->rh.rnh_treetop; !RDX_ISLEAF(top) && (top->rn_bit < mlen);) {
         if (addr[top->rn_offset] & top->rn_bmask)
             top = top->rn_right;  // bit is on
         else
             top = top->rn_left;   // bit is off
+    }
 
     if (top == NULL) return 0;
 
@@ -808,28 +813,16 @@ tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
 
     // ensure we're in the right subtree (prefix s may not be in the tree)
     if (!key_isin(addr, rn->rn_key, mask)) return 0;
-    /* if(rn) { */
-    /*     printf("Subtree @ %s ", key_tostr(rn->rn_key, buf)); */
-    /*     if (rn->rn_mask) printf("%s\n", key_tostr(rn->rn_mask, buf)); */
-    /*     else printf("\n"); */
-    /* } */
 
     done = 0;
     while (!done) {
         base = rn;
         // process leaf & its duplicates
         for(; rn; rn = rn->rn_dupedkey) {
-            if (!RDX_ISROOT(rn) && rn->rn_bit + mlen < include) {
-                /* printf("- visiting %s\n", key_tostr(rn->rn_key, buf)); */
+            if (!RDX_ISROOT(rn) && rn->rn_bit + mlen < include)
                 f(rn, fargs);
-            } else if (!RDX_ISROOT(rn) && mlen + include == 8) {
-                // TODO: this is a hack for when:
-                // - 0/0 is present in the tree, and
-                // - 0/0 is used as search key (ehmm...), and
-                // - include-flag is on -> 0/0 should be included in results
-                // After dotify is added => re-investigate this!
+            else if (!RDX_ISROOT(rn) && mlen + include == 8)
                 f(rn, fargs);
-            }
         }
         if (base == top) break;  // no more leaves to visit
         rn = base;

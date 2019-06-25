@@ -342,8 +342,8 @@ function dotify(ipt, af_fam)
         lines[#lines+1] = F("%s:%s -> %s:%s %s",
                             snode, sport, dnode, dport, style)
       else
-        --lines[#lines+1] = F("%s:%s -> %s:%s [style=%s]",
-        --                    snode, sport, dnode, dport, style))
+        lines[#lines+1] = F("%s:%s -> %s:%s %s",
+                            snode, sport, dnode, dport, style)
       end
     else
       lines[#lines+1] = F("%s:%s -> %s", snode, sport, dport)

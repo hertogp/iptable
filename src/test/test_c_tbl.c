@@ -582,23 +582,20 @@ test_tbl_more_good(void)
 
     snprintf(pfx, MAX_STRKEY, "0.0.0.0/0");
     mu_assert(tbl_set(ipt, pfx, number+0, NULL));
-
     snprintf(pfx, MAX_STRKEY, "10.0.0.0/8");
     mu_assert(tbl_set(ipt, pfx, number+1, NULL));
-    snprintf(pfx, MAX_STRKEY, "11.0.0.0/8");
-    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
-
     snprintf(pfx, MAX_STRKEY, "10.10.0.0/16");
     mu_assert(tbl_set(ipt, pfx, number+2, NULL));
-    snprintf(pfx, MAX_STRKEY, "11.10.0.0/16");
-    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
-
     snprintf(pfx, MAX_STRKEY, "10.10.10.0/24");
     mu_assert(tbl_set(ipt, pfx, number+3, NULL));
-    snprintf(pfx, MAX_STRKEY, "11.10.10.0/24");
+    snprintf(pfx, MAX_STRKEY, "10.10.10.128/32");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
 
-    snprintf(pfx, MAX_STRKEY, "10.10.10.128/32");
+    snprintf(pfx, MAX_STRKEY, "11.0.0.0/8");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+    snprintf(pfx, MAX_STRKEY, "11.10.0.0/16");
+    mu_assert(tbl_set(ipt, pfx, number+4, NULL));
+    snprintf(pfx, MAX_STRKEY, "11.10.10.0/24");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));
     snprintf(pfx, MAX_STRKEY, "11.10.10.128/32");
     mu_assert(tbl_set(ipt, pfx, number+4, NULL));

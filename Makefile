@@ -105,6 +105,9 @@ $(BLDDIR)/%.d: $(SRCDIR)/%.c | $(BLDDIR)
 install: $(TARGET)
 	$(INSTALL) $(TARGET) $(INST_LIBDIR)
 
+local_install: $(TARGET)
+	cp $(TARGET) ~/.luarocks/lib/lua/5.3/
+
 uninstall: $(TARGET)
 	$(RM) $(INST_LIBDIR)/$(TARGET)
 
