@@ -268,6 +268,21 @@ describe("ipt:more(pfx) ", function()
       assert.are.equal(0, #t);
       t = ipt:more("1.1.1.0/26", true);  -- inclusive search
       assert.are.equal(1, #t);
+    end)
+
+    it("allows for search prefix itself to be absent", function()
+      local ipt = iptable.new()
+      ipt["1.1.1.128/25"] = 25;
+      ipt["1.1.1.64/26"] = 26;
+      ipt["1.1.1.128/26"] = 26;
+      ipt["1.1.1.192/26"] = 26;
+      assert.is_truthy(4 == #ipt);
+
+      -- 1.1.1.0/24 is not in table
+      t = ipt:more("1.1.1.0/24");
+      assert.are.equal(4, #t);
+      t = ipt:more("1.1.1.0/24", true);  -- inclusive search
+      assert.are.equal(4, #t);
 
     end)
   end)
@@ -367,9 +382,7 @@ describe("ipt:radixes(AF) ", function()
           assert.is_truthy(node.rn_flags);
           if (node._LEAF_) then
             assert.is_truthy(node.rn_key);
-            assert.is_truthy(node.rn_key_p);
             assert.is_truthy(node.rn_mask);
-            assert.is_truthy(node.rn_mask_p);
             assert.is_truthy(node.rn_dupedkey);
           elseif (node._INTERNAL_) then
             assert.is_truthy(node.rn_offset);

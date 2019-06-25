@@ -176,13 +176,18 @@ int key_tolen(void *key)
 const char *
 key_tostr(void *k, char *s)
 {
-    // uses void *k so rn-keys (char *) are handled as well
+    // k is byte array; 1st byte is total length of the array.
+    //  - iptable.c keys/masks are uint8_t *'s (unsigned)
+    //  - radix.c keys/masks  are char *'s. (may be signed; sys dependent)
+    //  - radix.c keys/masks's KEYLEN may deviate: for masks it may indicate
+    //    the total of non-zero bytes i/t array instead of its total length.
+    // char *key avoids signedness problems
     // user supplied buffer s must be large enough to hold an IPv6 prefix
-    uint8_t *key = k;
+    char *key = k;
 
     if (s == NULL || k == NULL) return NULL;
 
-    if((*((uint8_t *)(k)) > 5))
+    if(IPT_KEYLEN(key) > 5)
         return inet_ntop(AF_INET6, IPT_KEYPTR(key), s, INET6_ADDRSTRLEN);
 
     return inet_ntop(AF_INET, IPT_KEYPTR(key), s, INET_ADDRSTRLEN);
@@ -773,7 +778,9 @@ tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
     if (f == NULL) return 0;
     if (! key_bystr(s, &mlen, &af, addr)) return 0;
 
-    if (mlen < 0 && include == -1) return 1; // host ip, no include -> done
+    // a non-inclusive search for a host address will never yield a result
+    if (mlen < 0 && include == -1) return 1;
+
     if (af == AF_INET) {
         head = t->head4;
         mlen = mlen < 0 ? IP4_MAXMASK : mlen;
