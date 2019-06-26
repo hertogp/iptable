@@ -56,11 +56,11 @@ typedef struct table_t {
     (KEY_IS_IP4(k) ? AF_INET : KEY_IS_IP6(k) ? AF_INET6 : AF_UNSPEC)
 
 // max size for key byte array (1+IPx_KEYLEN)
-#define MAX_BINKEY 17
+#define MAX_BINKEY 1 + IP6_KEYLEN
 // max size for string key (fits IP6 with /mask)
 #define MAX_STRKEY IP6_PFXSTRLEN
 // exact KEYBUF length by FAM
-#define FAM_BINKEY(af) (af==AF_INET ? (uint8_t)(1+IP4_KEYLEN) \
+#define FAM_KEYLEN(af) (af==AF_INET ? (uint8_t)(1+IP4_KEYLEN) \
         : af==AF_INET6 ? (uint8_t)(1+IP6_KEYLEN) : 0x00)
 
 // radix tree macros
@@ -125,8 +125,9 @@ int rdx_nextnode(table_t *, int *, void **);
 // -- tbl funcs
 
 table_t *tbl_create(purge_f_t *);
-entry_t * tbl_get(table_t *, const char *);
-entry_t * tbl_lpm(table_t *, const char *);
+entry_t *tbl_get(table_t *, const char *);
+entry_t *tbl_lpm(table_t *, const char *);
+entry_t *tbl_lsm(table_t *, const char *);
 int tbl_set(table_t *, const char *, void *, void *);
 int tbl_del(table_t *, const char *, void *);
 int tbl_walk(table_t *, walktree_f_t *, void *);

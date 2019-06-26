@@ -41,7 +41,7 @@ const char *MU_FUNC=NULL;
 #define mu_equal(a, b, fmt, ...) \
     do { if (a == b) MU_OK else MU_FAIL(fmt, ##__VA_ARGS__); } while(0)
 
-// note: fmt is format specifier required for complaint string
+// fmt is format specifier required for complaint string
 #define mu_eq(a, b, fmt) \
     do { if (a == b) MU_OK else MU_FAIL("expected " fmt ", got " fmt, a, b); } while(0)
 
@@ -53,6 +53,8 @@ const char *MU_FUNC=NULL;
 
 #define mu_false(exp) \
     do { if (exp) MU_FAIL("expected '%s' to be false", #exp) else MU_OK} while (0)
+
+#define mu_failed MU_FAIL
 
 // MU FUNCTIONS
 

@@ -20,9 +20,8 @@ uint8_t  all_ones[RDX_MAX_KEYLEN] = {
     -1, -1, -1, -1, -1, -1, -1, -1,
 };
 
-// -- helpers
+// -- helpers - KEY functions
 
-// -- KEY funcs
 uint8_t *
 key_alloc(int af)
 {
@@ -65,12 +64,14 @@ key_bystr(const char *s, int *mlen, int *af, uint8_t *dst)
     int a, b, c, d, n;
     char *slash;
 
-    if (dst == NULL) return NULL;                 // lame dst buffer check
-    if (s == NULL) return NULL;                   // need prefix string
-    if (strlen(s) > MAX_STRKEY) return NULL;   // invalid string length
-    if (strlen(s) < 1) return NULL;               // invalid string length
+    // sanity checks
+    if (dst == NULL) return NULL;
+    if (s == NULL) return NULL;
+    if (strlen(s) > MAX_STRKEY) return NULL;      // invalid string
+    if (strlen(s) < 1) return NULL;               // invalid string
 
-    slash = strchr(s, '/');                       // pick up mask, if any
+    // pick up mask, if present it must be valid
+    slash = strchr(s, '/');
     if (slash) {
         sscanf(slash, "/%i%n", mlen, &n);
         if (*(slash + n)) return NULL;            // no valid /mask ending
@@ -81,7 +82,7 @@ key_bystr(const char *s, int *mlen, int *af, uint8_t *dst)
         if (*mlen > IP6_MAXMASK) return NULL;
         strncpy(buf, s, INET6_ADDRSTRLEN);
         if(slash) buf[slash - s]='\0';
-        IPT_KEYLEN(dst) = FAM_BINKEY(AF_INET6);
+        IPT_KEYLEN(dst) = FAM_KEYLEN(AF_INET6);
         inet_pton(AF_INET6, buf, IPT_KEYPTR(dst));
         *af = AF_INET6;
         return dst;
@@ -104,7 +105,7 @@ key_bystr(const char *s, int *mlen, int *af, uint8_t *dst)
         if(c < 0 || c > 255) return NULL;
         if(d < 0 || d > 255) return NULL;
 
-        IPT_KEYLEN(dst) = FAM_BINKEY(AF_INET);
+        IPT_KEYLEN(dst) = FAM_KEYLEN(AF_INET);
         *(dst+1) = a;  // bigendian, so 'a' goes first
         *(dst+2) = b;
         *(dst+3) = c;
@@ -176,13 +177,13 @@ int key_tolen(void *key)
 const char *
 key_tostr(void *k, char *s)
 {
-    // k is byte array; 1st byte is total length of the array.
-    //  - iptable.c keys/masks are uint8_t *'s (unsigned)
-    //  - radix.c keys/masks  are char *'s. (may be signed; sys dependent)
-    //  - radix.c keys/masks's KEYLEN may deviate: for masks it may indicate
-    //    the total of non-zero bytes i/t array instead of its total length.
-    // char *key avoids signedness problems
-    // user supplied buffer s must be large enough to hold an IPv6 prefix
+    /*
+     * k is byte array; 1st byte is usually total length of the array.
+     *   - iptable.c keys/masks are uint8_t *'s (unsigned)
+     *   - radix.c keys/masks  are char *'s. (may be signed; sys dependent)
+     *   - radix.c keys/masks's KEYLEN may deviate: for masks it may indicate
+     *     the total of non-zero bytes i/t array instead of its total length.
+     */
     char *key = k;
 
     if (s == NULL || k == NULL) return NULL;
@@ -201,7 +202,7 @@ key_tostr(void *k, char *s)
 int
 key_incr(void *key)
 {
-    // 1 on success, 0 on failure (incr key, flips around from max to 0)
+    /* 1 on success, 0 on failure: increments key, wraps from max to 0 */
     uint8_t *k = key;
     if (k == NULL) return 0;
 
@@ -217,7 +218,7 @@ key_incr(void *key)
 int
 key_decr(void *key)
 {
-    // decrement the key, flips around from 0 to max
+    /* 1 on success, 0 on failure; decrements key, wraps from 0 to max */
     uint8_t *k = key;
     if (k == NULL) return 0;
 
@@ -623,8 +624,9 @@ tbl_set(table_t *t, const char *s, void *v, void *pargs)
     entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
     if (entry) {
         // update existing entry
-        if(entry->value) t->purge(pargs, &entry->value); // free userdata
-        entry->value = v;                                // set new userdata
+        if(entry->value && t->purge)
+            t->purge(pargs, &entry->value); // free userdata, if needed
+        entry->value = v;                   // set new userdata
 
     } else {
         // add new entry, need to donate a new key for the tree to keep
@@ -634,7 +636,8 @@ tbl_set(table_t *t, const char *s, void *v, void *pargs)
 
         rn = head->rnh_addaddr(treekey, mask, &head->rh, entry->rn);
         if (!rn) {
-            t->purge(pargs, &entry->value);
+            if (t->purge != NULL)
+                t->purge(pargs, &entry->value);
             free(entry);
             free(treekey); // t'was not stored
             return 0;
@@ -674,7 +677,8 @@ tbl_del(table_t *t, const char *s, void *pargs)
     else t->count6--;
 
     free(e->rn[0].rn_key);                      // free the key
-    if(e->value) t->purge(pargs, &e->value);    // free the user data
+    if(e->value != NULL && t->purge != NULL)
+        t->purge(pargs, &e->value);    // free the user data
     free(e);                                    // free the entry
 
     return 1;
@@ -701,6 +705,100 @@ tbl_lpm(table_t *t, const char *s)
     return rv;
 }
 
+entry_t *
+tbl_lsm(table_t *t, const char *s)
+{
+    /* least specific match for address and masklength */
+    /*
+     * rn_bit = -1 - IPT_KEYOFFSET - masklen, so:
+     * /24 rn_bit = -33
+     * /25 rn_bit = -34
+     * /32 rn_bit = -41
+     *
+     */
+    struct radix_node_head *head = NULL;
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
+    int mlen = -1, af = AF_UNSPEC; //, done = 0;
+    struct radix_node *top, *base, *rn = NULL, *lsm = NULL;
+
+    if (t == NULL || s == NULL) return NULL;
+    if (! key_bystr(s, &mlen, &af, addr)) return NULL;
+
+    if (af == AF_INET) {
+      head = t->head4;
+      mlen = mlen < 0 ? IP4_MAXMASK : mlen;
+    } else if (af == AF_INET6) {
+      head = t->head6;
+      mlen = mlen < 0 ? IP6_MAXMASK : mlen;
+    } else return NULL;
+    if (! key_bylen(af, mlen, mask)) return NULL;
+    if (! key_network(addr, mask)) return NULL;
+
+    // can't beat 0/0 for least specific match
+    if (head->rnh_nodes[0].rn_dupedkey) {
+      lsm = head->rnh_nodes[0].rn_dupedkey;
+      return (entry_t *)lsm;
+    }
+
+    /* search for TOP of subtree holding all the prefixes that might match */
+    for(rn = head->rh.rnh_treetop; rn->rn_bit >= 0;) {
+        if (RDX_ISLEAF(rn->rn_left) && !RDX_ISROOT(rn->rn_left)) break;
+        if (RDX_ISLEAF(rn->rn_right) && !RDX_ISROOT(rn->rn_right)) break;
+        if (addr[rn->rn_offset] & rn->rn_bmask)
+            rn = rn->rn_right;
+        else
+            rn = rn->rn_left;
+    }
+
+    top = RDX_ISLEAF(rn) ? rn->rn_parent : rn;  /* top is an INTERNAL node */
+    lsm = NULL;
+
+    /* goto first LEFT LEAF, needed for the while-loop */
+    for (rn = top; !RDX_ISLEAF(rn); rn=rn->rn_left)
+        ;
+
+    /* Skip LEFT subtree if LEAF is no match and switch to RIGHT subtree */
+    if (!key_isin(addr, rn->rn_key, mask))
+        for (rn = top; !RDX_ISLEAF(rn); rn=rn->rn_left)
+            ;
+
+    int done = 0;
+    while (!done) {
+        base = rn;
+        if (lsm == NULL) lsm = rn;
+        /* check LEAF & its duplicate-chain for a less specific match */
+        for(; rn; rn = rn->rn_dupedkey)
+            lsm = rn->rn_bit > lsm->rn_bit ? rn : lsm;
+        rn = base;
+
+        // go up while "I am a right->child" & "not a ROOT" node
+        while(RDX_ISRIGHT_CHILD(rn) && !RDX_ISROOT(rn)
+                && rn->rn_parent != top)
+            rn = rn->rn_parent;
+
+        /* If rn is top's right child, we're done */
+        if (rn == top->rn_right) done = 1;
+        for (rn = rn->rn_parent->rn_right; !RDX_ISLEAF(rn); )
+            rn = rn->rn_left;
+        if (RDX_ISROOT(rn->rn_parent)) done = 1;
+    }
+
+    /* Example implementation with t's stack
+     *
+     * while (t->top) tbl_stackpop(t);
+     * tbl_stackpush(t, TRDX_NODE, rn->rn_parent);
+     *
+     * while(rdx_nextnode(t, &type, (void **)&rn))
+     *     if (type == TRDX_NODE && RDX_ISLEAF(rn))
+     *         lsm = rn->rn_bit > lsm->rn_bit ? rn : lsm;
+     */
+
+    if (lsm != NULL && key_isin(addr, lsm->rn_key, lsm->rn_mask))
+        return (entry_t *)lsm;
+
+    return NULL;
+}
+
 int
 tbl_less(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
 {
@@ -711,7 +809,6 @@ tbl_less(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
     struct radix_node *rn = NULL, *base = NULL;
     uint8_t addr[MAX_BINKEY];
     int mlen = -1, af = AF_UNSPEC, done = 0;
-    // include = include > 0 ? -2 : -1;
     include = include > 0 ? -2 : -1;
 
     // sanity checks
@@ -727,7 +824,7 @@ tbl_less(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
         mlen = mlen < 0 ? IP6_MAXMASK : mlen;
     } else return 0;
 
-    if (mlen == 0 && include == -1) return 1;  // nothing is less specific than /0
+    if (mlen == 0 && include == -1) return 1;  // a /0 can't be beat
     mlen += IPT_KEYOFFSET;
 
     // goto left most leaf

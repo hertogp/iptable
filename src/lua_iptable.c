@@ -57,6 +57,7 @@ static int ipt_network(lua_State *);
 static int ipt_broadcast(lua_State *);
 static int ipt_mask(lua_State *);
 static int ipt_iter_hosts(lua_State *);
+// static int ipt_iter_more(lua_State *);
 
 // iptable instance methods
 
@@ -68,6 +69,7 @@ static int _tostring(lua_State *);
 static int _pairs(lua_State *);
 static int counts(lua_State *);
 static int more(lua_State *);
+// static int more2(lua_State *);
 static int less(lua_State *);
 static int radixes(lua_State *);
 
@@ -98,6 +100,7 @@ static const struct luaL_Reg meths [] = {
     {"__pairs", _pairs},
     {"counts", counts},
     {"more", more},
+    // {"more2", more2},
     {"less", less},
     {"radixes", radixes},
     {NULL, NULL}
@@ -262,6 +265,16 @@ iter_hosts(lua_State *L)
 
     return 1;
 }
+
+/* static int ipt_iter_more(lua_State *L) */
+/* { */
+/*     dbg_stack("inc(.) <--"); */
+/*     table_t *t = check_table(L, 1); */
+/*     void *node; */
+/*     int type; */
+
+/*     if (! rdx_nextnode(t, &type, &node)) return 0; // we're done */
+/* } */
 
 static int
 iter_radix(lua_State *L)
@@ -979,6 +992,48 @@ more(lua_State *L)
     return 1;
 }
 
+/* static int */
+/* more2(lua_State *L) */
+/* { */
+/*     // ipt:more(pfx, inclusive) <-- [t_ud pfx bool] */
+/*     // Return array of more specific prefixes in the iptable */
+/*     dbg_stack("inc(.) <--"); */
+
+/*     size_t len = 0; */
+/*     int af = AF_UNSPEC, mlen = -1, inclusive = 0; */
+/*     uint8_t addr[MAX_BINKEY]; */
+/*     const char *pfx = NULL; */
+
+/*     table_t *t = check_table(L, 1); */
+/*     pfx = check_pfxstr(L, 2, &len); */
+/*     if (! key_bystr(pfx, &mlen, &af, addr)) { */
+/*       lua_pushfstring(L, "more(): invalid prefix %s", lua_tostring(L, 2)); */
+/*       lua_error(L); */
+/*     } */
+/*     if (AF_UNKNOWN(af)) { */
+/*       lua_pushfstring(L, "more(): unknown AF_family for %s", lua_tostring(L, 2)); */
+/*       lua_error(L); */
+/*     } */
+
+/*     if (lua_gettop(L) == 3 && lua_isboolean(L, 3)) */
+/*         inclusive = lua_toboolean(L, 3);  // include search prefix (or not) */
+
+/*     // find TOP of subtree containing all more specific entries */
+/*     struct radix_node *rn = tbl_lsm(addr, mlen); */
+/*     if (rn == NULL) return 0; */
+
+/*     lua_pop(L, 2); // pops pfx bool */
+/*     lua_pushlightuserdata(L, rn);       // [t_ud rn] */
+/*     lua_pushinteger(L, inclusive);      // [t_ud rn incl] */
+/*     lua_pushcclosure(L, ipt_iter_more, 2);  // [t_ud iter_f] */
+/*     lua_rotate(L, 1, 1);                // [iter_f t_ud] */
+/*     lua_pushnil(L);                     // [iter_f t_ud nil] */
+
+/*     dbg_stack("out(1) ==>"); */
+
+/*     return 3; */
+/* } */
+
 static int
 less(lua_State *L)
 {
@@ -1018,17 +1073,22 @@ radixes(lua_State *L)
     int isnum = 0, af = AF_UNSPEC, afs = IPT_UNSPEC;
     table_t *t = check_table(L, 1);
 
+    if (lua_gettop(L) < 2) {
+        lua_pushfstring(L, "ipt:radixes(): need at least 1 of iptable.AF_INET or iptable.AF_INET6");
+        lua_error(L);
+    }
     while(lua_gettop(L) > 1) {
       af = lua_tointegerx(L, lua_gettop(L), &isnum);
-      if (! isnum) return 0;
+      if (!isnum || AF_UNKNOWN(af)) {
+        lua_pushfstring(L, "ipt:radixes(): unknown AF_family %d", af);
+        lua_error(L);
+      }
       switch (af) {
         case AF_INET:
           afs |= IPT_INET;
-          dbg_msg("added %d for IPT_INET", IPT_INET);
           break;
         case AF_INET6:
           afs |= IPT_INET6;
-          dbg_msg("added %d for IPT_INET6", IPT_INET6);
           break;
         default:
           return 0;

@@ -39,7 +39,7 @@ VERSION=$(MAJOR).$(MINOR).$(PATCH)
 LIB=iptable
 SONAME=lib$(LIB).so.$(MAJOR)
 TARGET=$(BLDDIR)/$(LIB).so
-CTARGET=$(BLDDIR)/lib$(LIB).so.$(VERSION)
+CTARGET=$(BLDDIR)/lib$(LIB).so
 
 # C/LUA file collections
 # note: lua_iptable.c must come last
@@ -84,7 +84,7 @@ $(TARGET): $(OBJS) $(DEPS)
 
 # C libary
 $(CTARGET): $(COBJS)
-	$(CC) $(LIBFLAG) $(LFLAGS) $(SOFLAG) $(COBJS) -o $(CTARGET)
+	$(CC) $(LIBFLAG) $(LFLAGS) $(SOFLAG) $(COBJS) -o $(CTARGET).$(VERSION)
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so.$(MAJOR)
 
@@ -141,7 +141,11 @@ c_test: $(CTARGET) $(MU_RUNNERS)
 
 # # run a single unit test
 $(MU_TARGETS): %: $(BLDDIR)/%.out
-	@valgrind --leak-check=yes ./$<
+	@echo "@ $@"
+	@echo "* $*"
+	@echo "< $<"
+	@echo "^ $^"
+	valgrind --leak-check=yes ./$<
 
 # build a unit test's mu-header
 $(MU_HEADERS): $(BLDDIR)/%.h: $(TSTDIR)/%.c

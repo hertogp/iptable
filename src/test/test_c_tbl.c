@@ -13,6 +13,28 @@
 #include "minunit.h"         // the mu_test macros
 #include "test_c_tbl.h"    // a generated header file for this test runner
 
+/*
+ * Test cases
+ *
+ * Tests store references to local numbers on the stack and thus use:
+ *   t = tbl_create(NULL)           - no purge function needed
+ *   tbl_set(t, pfx, &number, NULL) - and no purge args needed.
+ * to create an iptable t & fill it with prefixes.
+ */
+
+typedef struct testpfx_t {
+    const char *pfx;
+    int dta;
+} testpfx_t;
+
+/*
+ * INT_VALUE provides easy access to an entry_t's integer value
+ * SIZE_T casts an int to size_t to matchup with ipt->count{4,6} values
+ */
+
+#define INT_VALUE(x) (*(int *)x->value)
+#define SIZE_T(x) ((size_t)(x))
+
 // Helpers
 
 int *mk_data(int);
@@ -55,47 +77,61 @@ test_tbl_setup(void)
 void
 test_tbl_set_one(void)
 {
-    table_t *ipt;
-    char pfx4[] = "10.10.10.0/24";
-    char pfx6[] = "2f:aa:bb::/128";
+    table_t *t = tbl_create(NULL);
+    entry_t *itm = NULL;
+    testpfx_t pfx[] = {
+        {"1.2.3.0/24",  1},
+        {"2f::/104",    2},
+    };
 
-    ipt = tbl_create(purge);
-    mu_assert(tbl_set(ipt, pfx4, mk_data(42), NULL));
-    mu_assert(tbl_set(ipt, pfx6, mk_data(62), NULL));
+    for (size_t i=0; i < sizeof(pfx)/sizeof(pfx[0]); i++)
+        mu_assert(tbl_set(t, pfx[i].pfx, &pfx[i].dta, NULL));
 
-    tbl_destroy(&ipt, NULL);
+    mu_eq(SIZE_T(1), t->count4, "%lu");
+    mu_eq(SIZE_T(1), t->count6, "%lu");
+
+    itm = tbl_lpm(t, "1.2.3.0");
+    if (itm) mu_eq(1, INT_VALUE(itm), "%d");
+    else mu_failed("tbl_lpm should %s", "NOT have failed");
+
+    itm = tbl_lpm(t, "2f::");
+    if (itm) mu_eq(2, INT_VALUE(itm), "%d");
+    else mu_failed("tbl_lpm should %s", "NOT have failed");
+
+    tbl_destroy(&t, NULL);
 }
 
 void
 test_tbl_set_good(void)
 {
-    table_t *ipt;
-    char pfx[MAX_STRKEY];
+    table_t *t = tbl_create(NULL);
+    entry_t *itm = NULL;
+    testpfx_t pfx[6] = {
+        {"1.2.2.4/24",  1},
+        {"1.2.3.4/24",  2},
+        {"1.2.4.4/24",  4},
+        {"1.2.5.4/24",  8},
+        {"1.2.6.4/24",  16},
+        {"1.2.7.4/24",  32},
+    };
 
-    ipt = tbl_create(purge);
+    for (size_t i=0; i < sizeof(pfx)/sizeof(pfx[0]); i++)
+        mu_assert(tbl_set(t, pfx[i].pfx, &pfx[i].dta, NULL));
 
-    snprintf(pfx, MAX_STRKEY, "1.2.3.4/32");
-    mu_assert(tbl_set(ipt, pfx, mk_data(1234), NULL));
-    mu_assert(ipt->count4 == 1);
-
-    snprintf(pfx, MAX_STRKEY, "4.3.2.1/32");
-    mu_assert(tbl_set(ipt, pfx, mk_data(4321), NULL));
-    mu_assert(ipt->count4 == 2);
-
-    snprintf(pfx, MAX_STRKEY, "10.11.12.13/24");
-    mu_assert(tbl_set(ipt, pfx, mk_data(1213), NULL));
-    mu_assert(ipt->count4 == 3);
-
-    snprintf(pfx, MAX_STRKEY, "10.11.12.14");
-    mu_assert(tbl_set(ipt, pfx, mk_data(1214), NULL));
-    mu_assert(ipt->count4 == 4);
+    mu_assert(SIZE_T(6) == t->count4);
+    mu_eq(SIZE_T(0), t->count6, "%lu");
 
     // adding an existing entry, wont increase the count
-    snprintf(pfx, MAX_STRKEY, "1.2.3.4/32");
-    mu_assert(tbl_set(ipt, pfx, mk_data(1235), NULL));
-    mu_assert(ipt->count4 == 4);
+    mu_assert(tbl_set(t, pfx[1].pfx, &pfx[1].dta, NULL));
+    mu_eq(SIZE_T(6), t->count4, "%lu");
 
-    tbl_destroy(&ipt, NULL);
+    // assign to an existing entry, overwrites its data
+    mu_assert(tbl_set(t, pfx[1].pfx, &pfx[2].dta, NULL));
+    itm = tbl_lpm(t, pfx[1].pfx);
+    if (itm) mu_eq(pfx[2].dta, INT_VALUE(itm), "%d");
+    else mu_failed("lpm shoud %s", "NOT have failed");
+
+    tbl_destroy(&t, NULL);
 }
 
 void

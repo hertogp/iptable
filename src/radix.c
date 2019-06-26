@@ -53,16 +53,20 @@
 #include <stdio.h>
 #include <strings.h>
 #include <stdlib.h>
-// #define log(x, arg...) fprintf(stderr, ## arg)
-// ipt: redefine log() without named variadic (not allowed in ANSI-C)
+
+/* ipt: redefine log() without named variadic (not allowed in ANSI-C)
+ *  #define log(x, arg...) fprintf(stderr, ## arg)
+ */
 #define log(x, ...) fprintf(stderr, ##__VA_ARGS__)
 #define panic(x)    fprintf(stderr, "PANIC: %s", x), exit(1)
 #define min(a, b) ((a) < (b) ? (a) : (b) )
-#include <sys/types.h>                // ipt: needed for u_char
+#define KASSERT(val, sdm) assert(val)   // ipt: fake KASSERT, since its missing
+
+#include <sys/types.h>                  // ipt: needed for u_char
 #include <sys/socket.h>                 // ipt: XXX temp for debug printf's
 #include <arpa/inet.h>                  // ipt: XXX temp for debug printf's
 #include <assert.h>                     // ipt: to redefine KASSERT
-#define KASSERT(val, sdm) assert(val)   // ipt: fake KASSERT, since its missing
+
 #include "radix.h"
 #endif /* !_KERNEL */
 
