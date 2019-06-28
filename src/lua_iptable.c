@@ -71,8 +71,8 @@ static int _len(lua_State *);
 static int _tostring(lua_State *);
 static int _pairs(lua_State *);
 static int counts(lua_State *);
-static int more(lua_State *);
 static int less(lua_State *);
+static int more(lua_State *);
 static int radixes(lua_State *);
 
 // iptable module function array
