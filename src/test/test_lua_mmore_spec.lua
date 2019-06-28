@@ -36,7 +36,7 @@ describe("ipt:more(pfx): ", function()
     it("finds more specifics, non-inclusive", function()
       local cnt = 0;
       local search_pfx = "1.2.3.0/24";
-      for pfx in ipt:more2(search_pfx) do
+      for pfx in ipt:more(search_pfx) do
         cnt = cnt + 1;
       end
       assert.are_equal(7, cnt);
@@ -45,7 +45,7 @@ describe("ipt:more(pfx): ", function()
     it("finds more specifics, inclusive", function()
       local cnt = 0;
       local search_pfx = "1.2.3.0/24";
-      for pfx in ipt:more2(search_pfx, true) do
+      for pfx in ipt:more(search_pfx, true) do
         cnt = cnt + 1;
       end
       assert.are_equal(8, cnt);
@@ -54,7 +54,7 @@ describe("ipt:more(pfx): ", function()
     it("handles non-existing search prefixes", function()
       local cnt = 0;
       local search_pfx = "10.10.10.0/24";
-      for pfx in ipt:more2(search_pfx, true) do
+      for pfx in ipt:more(search_pfx, true) do
         cnt = cnt + 1;
       end
       assert.are_equal(0, cnt);
@@ -62,7 +62,7 @@ describe("ipt:more(pfx): ", function()
 
     it("yields all entries for 0/0", function()
       local cnt = 0;
-      for pfx in ipt:more2("10.10.10.0/0") do
+      for pfx in ipt:more("10.10.10.0/0") do
         cnt = cnt + 1;
       end
       assert.are_equal(8, cnt);
@@ -75,14 +75,14 @@ describe("ipt:more(pfx): ", function()
       ipt["0.0.0.0/0"] = 256;
 
       -- non-inclusive does not return 0/0
-      for pfx in ipt:more2("10.10.10.0/0") do
+      for pfx in ipt:more("10.10.10.0/0") do
         cnt = cnt + 1;
       end
       assert.are_equal(8, cnt);
 
       -- inclusive will return 0/0
       cnt = 0;
-      for pfx in ipt:more2("10.10.10.0/0", true) do
+      for pfx in ipt:more("10.10.10.0/0", true) do
         cnt = cnt + 1;
       end
       assert.are_equal(9, cnt);
@@ -114,32 +114,32 @@ describe("ipt:more(pfx) ", function()
 
       -- non-inclusive
       cnt = 0
-      for p in ipt:more2("1.1.1.0/24") do cnt = cnt + 1 end
+      for p in ipt:more("1.1.1.0/24") do cnt = cnt + 1 end
       assert.are.equal(6, cnt);
 
       -- inclusive
       cnt = 0
-      for p in ipt:more2("1.1.1.0/24", true) do cnt = cnt + 1 end
+      for p in ipt:more("1.1.1.0/24", true) do cnt = cnt + 1 end
       assert.are.equal(7, cnt);
 
       -- should find two /26's
       cnt = 0
-      for p in ipt:more2("1.1.1.0/25") do cnt = cnt + 1 end
+      for p in ipt:more("1.1.1.0/25") do cnt = cnt + 1 end
       assert.are.equal(2, cnt);
 
       -- inclusive search
       cnt = 0
-      for p in ipt:more2("1.1.1.0/25", true) do cnt = cnt + 1 end
+      for p in ipt:more("1.1.1.0/25", true) do cnt = cnt + 1 end
       assert.are.equal(3, cnt);
 
       -- nothing more specific for 1.1.1.0/26
       cnt = 0
-      for p in ipt:more2("1.1.1.0/26") do cnt = cnt + 1 end
+      for p in ipt:more("1.1.1.0/26") do cnt = cnt + 1 end
       assert.are.equal(0, cnt);
 
       -- inclusive search
       cnt = 0
-      for p in ipt:more2("1.1.1.0/26", true) do cnt = cnt + 1 end
+      for p in ipt:more("1.1.1.0/26", true) do cnt = cnt + 1 end
       assert.are.equal(1, cnt);
     end)
 
@@ -154,11 +154,11 @@ describe("ipt:more(pfx) ", function()
 
       -- 1.1.1.0/24 is not in table, but more specific entries exist
       cnt = 0
-      for p in ipt:more2("1.1.1.0/24") do cnt = cnt + 1 end
+      for p in ipt:more("1.1.1.0/24") do cnt = cnt + 1 end
       assert.are.equal(4, cnt);
 
       cnt = 0
-      for p in ipt:more2("1.1.1.0/24", true) do cnt = cnt + 1 end
+      for p in ipt:more("1.1.1.0/24", true) do cnt = cnt + 1 end
       assert.are.equal(4, cnt);
     end)
 
@@ -181,35 +181,35 @@ describe("ipt:more(pfx): ", function()
       -- (non-)inclusive search finds nothing in an empty table
       for _,incl in ipairs{false, true} do
         local cnt = 0;
-        for pfx in t:more2("0.0.0.0", incl) do cnt = cnt + 1; end
+        for pfx in t:more("0.0.0.0", incl) do cnt = cnt + 1; end
         assert.are_equal(#t, cnt);
       end
 
       -- (non-)inclusive search finds nothing in an empty table
       for _,incl in ipairs{false, true} do
         local cnt = 0;
-        for pfx in t:more2("255.255.255.255", incl) do cnt = cnt + 1; end
+        for pfx in t:more("255.255.255.255", incl) do cnt = cnt + 1; end
         assert.are_equal(#t, cnt);
       end
 
       -- (non-)inclusive search finds nothing in an empty table
       for _,incl in ipairs{false, true} do
         local cnt = 0;
-        for pfx in t:more2("0.0.0.0/0", incl) do cnt = cnt + 1; end
+        for pfx in t:more("0.0.0.0/0", incl) do cnt = cnt + 1; end
         assert.are_equal(#t, cnt);
       end
 
       -- (non-)inclusive search finds nothing in an empty table
       for _,incl in ipairs{false, true} do
         local cnt = 0;
-        for pfx in t:more2("255.255.255.255/0", incl) do cnt = cnt + 1; end
+        for pfx in t:more("255.255.255.255/0", incl) do cnt = cnt + 1; end
         assert.are_equal(#t, cnt);
       end
 
       -- (non-)inclusive search finds nothing in an empty table
       for _,incl in ipairs{false, true} do
         local cnt = 0;
-        for pfx in t:more2("1.1.1.1/0", incl) do cnt = cnt + 1; end
+        for pfx in t:more("1.1.1.1/0", incl) do cnt = cnt + 1; end
         assert.are_equal(#t, cnt);
       end
 
@@ -236,12 +236,12 @@ describe("ipt:more(pfx): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask
@@ -262,12 +262,12 @@ describe("ipt:more(pfx): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask
@@ -288,12 +288,12 @@ describe("ipt:more(pfx): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask
@@ -314,12 +314,12 @@ describe("ipt:more(pfx): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask
@@ -348,12 +348,12 @@ describe("ipt:more(pfx): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask
@@ -373,12 +373,12 @@ describe("ipt:more(pfx): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask
@@ -398,12 +398,12 @@ describe("ipt:more(pfx): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask
@@ -423,12 +423,12 @@ describe("ipt:more(pfx): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask
@@ -457,12 +457,12 @@ describe("ipt:more(pfx6): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask
@@ -482,12 +482,12 @@ describe("ipt:more(pfx6): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask
@@ -507,12 +507,12 @@ describe("ipt:more(pfx6): ", function()
 
           -- non-inclusive
           local cnt = 0;
-          for p in t:more2(pfx) do cnt = cnt + 1; end
+          for p in t:more(pfx) do cnt = cnt + 1; end
           assert.are_equal(0, cnt);
 
           -- inclusive
           cnt = 0;
-          for p in t:more2(pfx, true) do cnt = cnt + 1; end
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
           assert.are_equal(1, cnt);
 
         end -- for mask

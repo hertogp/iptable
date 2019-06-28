@@ -30,11 +30,14 @@ static int check_binkey(lua_State *, int, uint8_t *, size_t *);
 const char *check_pfxstr(lua_State *, int, size_t *);
 static int *ud_create(int);                // userdata stored as entry->value
 static void usr_delete(void *, void **);    // usr_delete(L, &ud)
+static int iter_bail(lua_State *);
+static int iter_fail(lua_State *);
 static int iter_hosts(lua_State *);
 static int iter_kv(lua_State *);
+static int iter_less(lua_State *);
 static int iter_more(lua_State *);
 static int iter_radix(lua_State *);
-static int cb_collect(struct radix_node *, void *);
+static inline int subtree_fail(struct radix_node *, int);
 
 // radix iter helpers
 
@@ -68,8 +71,7 @@ static int _len(lua_State *);
 static int _tostring(lua_State *);
 static int _pairs(lua_State *);
 static int counts(lua_State *);
-// static int more(lua_State *);
-static int more2(lua_State *);
+static int more(lua_State *);
 static int less(lua_State *);
 static int radixes(lua_State *);
 
@@ -100,7 +102,7 @@ static const struct luaL_Reg meths [] = {
     {"__pairs", _pairs},
     {"counts", counts},
     // {"more", more},
-    {"more2", more2},
+    {"more", more},
     {"less", less},
     {"radixes", radixes},
     {NULL, NULL}
@@ -189,6 +191,7 @@ check_pfxstr(lua_State *L, int idx, size_t *len)
     if (! lua_isstring(L, idx)) return NULL;
     pfx = lua_tolstring(L, idx, len);  // donot use luaL_tolstring!
 
+    /* caller should check/accept results and decide her course of action */
     return pfx;
 }
 
@@ -211,6 +214,40 @@ usr_delete(void *L, void **refp)
     *refp = NULL;
 }
 
+
+static int
+iter_bail(lua_State *L)
+{
+  /*
+   * iter_bail(L) <-- [..]
+   *
+   * Helper function to bail out of an iteration setup.
+   *
+   */
+
+  lua_pop(L, lua_gettop(L));               /* clear the stack */
+  lua_pushcclosure(L, iter_fail, 0);       /* will stop any iteration */
+
+  return 1;
+}
+
+static int
+iter_fail(lua_State *L)
+{
+  /*
+   * iter_failed <-- [], stack is completely ignored
+   *
+   * An iteration func that immediately terminates any iteration.
+   * Can't just return 0 during an iteration setup, since that leads to
+   * Lua complaining about trying to call a nil value.  So, if some error just
+   * means there is nothting to iterate, simply return iter_bail(L) which sets
+   * this function as the iter_f.
+   *
+   */
+  if(L) return 0; /* L part of required signature, but no real use */
+
+  return 0;
+}
 
 static int
 iter_hosts(lua_State *L)
@@ -243,45 +280,75 @@ iter_hosts(lua_State *L)
 static int
 iter_kv(lua_State *L)
 {
-    // iter_kv() <-- [t k] (key k is nil if first call)
-    // - returns next [k' v']-pair or nil [] to stop iteration
+    /*
+     * iter_kv() <-- [t k], k is nil on first call
+     *
+     * Iterate across key,value pairs in both ipv4 and ipv6 table.
+     * - upvalue(1) is the leaf to process.
+     *
+     */
 
     dbg_stack("inc(.) <--");
 
+    char saddr[MAX_STRKEY];
+
     table_t *t = check_table(L, 1);
     struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
-    entry_t *e = NULL;
-    char saddr[MAX_STRKEY];
+    entry_t *e = (entry_t *)rn;
 
     if (rn == NULL || RDX_ISROOT(rn)) return 0; // we're done
 
-    // push k',v' onto stack
+    /* push the next key and value onto stack */
     key_tostr(rn->rn_key, saddr);
-    e = (entry_t *)rn;
-    lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [t_ud k k']
-    lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value); // [t_ud k k' v']
+    lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [t k k']
+    lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);        // [t k k' v']
 
-    // get next node & save it for next time around
+    /* get next node, switch to ipv6 tree when ipv4 has been traversed */
     rn = rdx_nextleaf(rn);
     if (rn == NULL && KEY_IS_IP4(e->rn[0].rn_key))
         rn = rdx_firstleaf(t->head6);
-    lua_pushlightuserdata(L, rn);                       // [t_ud k k' v' lud]
-    lua_replace(L, lua_upvalueindex(1));                // [t_ud k k' v']
+
+    lua_pushlightuserdata(L, rn);                            // [t k k' v' rn]
+    lua_replace(L, lua_upvalueindex(1));                     // [t_ud k k' v']
 
     dbg_stack("out(2) ==>");
 
     return 2;                                           // [.., k', v']
 }
 
-/* TODO:
- *
- * static int iter_less(lua_State *);
- *
- * Iterate across less specific prefixes relative to a given prefix.
- * (replace the current callback based version that returns all results at once
- * in an array, using tbl_walk in combination with cb_collect)
- *
- */
+static int
+iter_less(lua_State *L)
+{
+    /*
+     * iter_less()  <-- [t k], k is ignored
+     *
+     * Iterate across less specific prefixes relative to a given prefix.
+     *
+     */
+
+    char buf[MAX_STRKEY];
+    table_t *t = check_table(L, 1);
+    const char *pfx = lua_tostring(L, lua_upvalueindex(1));
+    int mlen = lua_tointeger(L, lua_upvalueindex(2));
+
+    /* negative mlen means no more matches to try */
+    if (mlen < 0) return 0;
+    if (pfx == NULL) return 0;
+
+    for(; mlen > 0; mlen--) {
+      snprintf(buf, sizeof(buf), "%s/%d", pfx, mlen);
+      buf[MAX_STRKEY-1] = '\0';
+
+      if (tbl_get(t, buf)) {
+        lua_pushstring(L, buf);
+        lua_pushinteger(L, mlen-1);
+        lua_replace(L, lua_upvalueindex(2));
+        return 1;
+      }
+    }
+    return 0;  // all done
+}
+
 
 /* TODO:
  *
@@ -399,6 +466,7 @@ iter_radix(lua_State *L)
     if (! rdx_nextnode(t, &type, &node)) return 0; // we're done
 
     dbg_msg(">> node %p, type %d", node, type);
+
     switch (type) {
         case TRDX_NODE_HEAD: return push_rdx_node_head(L, node);
         case TRDX_HEAD:      return push_rdx_head(L, node);
@@ -406,10 +474,13 @@ iter_radix(lua_State *L)
         case TRDX_MASK_HEAD: return push_rdx_mask_head(L, node);
         case TRDX_MASK:      return push_rdx_mask(L, node);
     }
+
     dbg_msg(" `-> unhandled node type %d!", type);
+
     return 0;
 }
 
+/*
 static int
 cb_collect(struct radix_node *rn, void *LL)
 {
@@ -437,6 +508,7 @@ cb_collect(struct radix_node *rn, void *LL)
 
     return 1;                                       // ignored return value
 }
+*/
 
 // iter_radix helpers
 
@@ -1087,8 +1159,16 @@ _pairs(lua_State *L)
     return 3;                            // [iter_f invariant ctl_var]
 }
 
+/* Older implementation of :more(), using the table's stack.
+ * - deprecated, since we can do it without using the stack so with less
+ *   overhead in terms of calloc/free'ing stack elements
+ *
+ * - once all tests pass reliably, this old implementation can go
+ *
+ */
+
 /* static int */
-/* more(lua_State *L) */
+/* _m_o_r_e_(lua_State *L) */
 /* { */
 /*     // ipt:more(pfx, inclusive) <-- [t_ud pfx bool] */
 /*     // Return array of more specific prefixes in the iptable */
@@ -1115,7 +1195,6 @@ _pairs(lua_State *L)
 /*     return 1; */
 /* } */
 
-static inline int subtree_fail(struct radix_node *, int);
 static inline int subtree_fail(struct radix_node *rn, int mlen) {
   return RDX_ISROOT(rn)
       && RDX_ISLEAF(rn)
@@ -1124,13 +1203,17 @@ static inline int subtree_fail(struct radix_node *rn, int mlen) {
 }
 
 static int
-more2(lua_State *L)
+more(lua_State *L)
 {
-    // ipt:more(pfx, inclusive) <-- [t_ud pfx bool], bool is optional
-    // iterate across more specific prefixes
+    /*
+     * ipt:more(pfx, inclusive) <-- [t pfx bool], bool is optional
+     *
+     * Iterate across more specific prefixes. AF_family is deduced from the
+     * prefix given.  This traverses the entire tree if pfx has a /0 mask.
+     *
+     */
 
     dbg_stack("inc(.) <--");
-
 
     size_t len = 0;
     int af = AF_UNSPEC, mlen = -1, maxb = -1;
@@ -1148,7 +1231,7 @@ more2(lua_State *L)
     if (lua_gettop(L) == 3 && lua_isboolean(L, 3))
         maxb = 0;
 
-    lua_pop(L, lua_gettop(L) - 1);  // [t_ud]
+    lua_pop(L, lua_gettop(L) - 1);  // [t]
 
     if (af == AF_INET) {
       head = t->head4;
@@ -1248,37 +1331,62 @@ more2(lua_State *L)
 static int
 less(lua_State *L)
 {
-    // ipt:less(pfx, inclusive) <-- [ud pfx bool*]
-    // Return array of less specific prefixes in the iptable
-    dbg_stack("inc(.) <--");
+    /*
+     * :less(pfx, incl)  <-- [t pfx incl]
+     *
+     * Iterate across prefixes in the tree that are less specific than pfx.
+     * - search may include pfx itself in the results, if incl is true.
+     * - iter_f takes (pfx, mlen, af)
+     */
+
+    dbg_stack("inc(.) <--");     // [t pfx incl], incl is an optional boolean
 
     size_t len = 0;
-    int af = AF_UNSPEC, mlen = -1, inclusive = 0;
+    int mlen = 0, inclusive = 0, af = AF_UNSPEC;
     uint8_t addr[MAX_BINKEY];
-    const char *pfx = NULL;
+    const char *pfx;
+    char buf[MAX_STRKEY];
 
-    table_t *t = check_table(L, 1);
+    // table_t *t = check_table(L, 1);
     pfx = check_pfxstr(L, 2, &len);
-    if (! key_bystr(pfx, &mlen, &af, addr)) return 0; // invalid prefix
-    if (af == AF_UNSPEC) return 0;                    // unknown family
+    if (pfx == NULL || len < 1) return iter_bail(L);
 
-    if (lua_gettop(L) == 3 && lua_isboolean(L, 3))
-        inclusive = lua_toboolean(L, 3);              // include search prefix (or not)
+    if (lua_gettop(L) > 2 && lua_isboolean(L, 3))
+      inclusive = lua_toboolean(L, 3);
 
-    lua_newtable(L);                                  // collector table
-    if (! tbl_less(t, pfx, inclusive, cb_collect, L)) return 0;
+    lua_pop(L, lua_gettop(L) - 1);                        // [t]
+    // while(lua_gettop(L) > 1) lua_pop(L, 1);               // [t]
 
-    dbg_stack("out(1) ==>");
+    if (! key_bystr(pfx, &mlen, &af, addr)) return iter_bail(L);
 
-    return 1;
+    if (af == AF_INET)
+      mlen = mlen < 0 ? IP4_MAXMASK : mlen;
+    else if (af == AF_INET6)
+      mlen = mlen < 0 ? IP6_MAXMASK : mlen;
+    mlen = inclusive ? mlen : mlen -1;
+
+    key_tostr(addr, buf);
+    lua_pushstring(L, buf);                              // [t pfx]
+    lua_pushinteger(L, mlen);                            // [t pfx mlen]
+    lua_pushcclosure(L, iter_less, 2);                   // [t f]
+    lua_rotate(L, 1, 1);                                 // [f t]
+
+    dbg_stack("out(2) ==>");
+
+    return 2;     // [iter_f invariant] (ctl_var not needed)
 }
 
 static int
 radixes(lua_State *L)
 {
-    // ipt:radix(AF)  <-- [t_ud af1, af2, ...]
-    // Iterate across all radix nodes in 1+ radix trees (iter_radix())
-    // - iter_radix() yields the radix tree's C-structs as Lua tables
+    /*
+     * ipt:radix(AF)  <-- [t af1 af2 ..], needs 1+ AF_family
+     *
+     * Iterate across all nodes of all types in a radix tree.
+     * - returns the C-structs as Lua tables.
+     *
+     */
+
     dbg_stack("inc(.) <--");
 
     int isnum = 0, af = AF_UNSPEC, afs = IPT_UNSPEC;
@@ -1288,12 +1396,16 @@ radixes(lua_State *L)
         lua_pushfstring(L, "ipt:radixes(): need AF_INET, AF_INET6 or both");
         lua_error(L);
     }
+
+    /* get all af families given */
     while(lua_gettop(L) > 1) {
       af = lua_tointegerx(L, lua_gettop(L), &isnum);
+      lua_pop(L, 1);
       if (!isnum || AF_UNKNOWN(af)) {
         lua_pushfstring(L, "ipt:radixes(): unknown AF_family %d", af);
         lua_error(L);
       }
+      /* translate AF_fam to IPT_fam, which are powers of two */
       switch (af) {
         case AF_INET:
           afs |= IPT_INET;
@@ -1302,10 +1414,11 @@ radixes(lua_State *L)
           afs |= IPT_INET6;
           break;
         default:
-          return 0;
+          dbg_msg("unknown AF_family (%d)", af);
+          lua_pushfstring(L, "Address family (%d) not supported", af);
+          lua_error(L);
       }
-      lua_pop(L, 1);
-      dbg_stack("popped af -");
+      dbg_stack("popped an AF_fam -");
     }
 
     if (! rdx_firstnode(t, afs)) return 0;

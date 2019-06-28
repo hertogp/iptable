@@ -65,19 +65,19 @@ local TBL_LABEL = [[
 -- Start of the table
 local TBL_START = [[
   <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
-]];
+]]
 
 -- TBL_HEAD params: PORT=head_id, bgcolor, title
 -- A title of the (sub)table
 local TBL_HEAD = [[
     <TR><TD%s COLSPAN="2" BGCOLOR="%s">%s</TD></TR>
-]];
+]]
 
 -- TBL_KEYVAL params: key, PORT=value_id, value
 -- A key, value pair; PORT="some_ID" in case value is a pointer to some node
 local TBL_KEYVAL = [[
     <TR><TD>%s</TD><TD%s>%s</TD></TR>
-]];
+]]
 -- TBL_END: no params
 -- Ends the table definition
 local TBL_END = [[
@@ -317,22 +317,21 @@ end
 
 local M = {}
 
-function dotify(ipt, af_fam)
+function dotify(ipt, ...)
   local lines = {}
-  local graph = {         -- collector for graph info
-    lines = {},     -- transient storage for lines of the current node
---    nodes = {},     -- array of nodes in the graph
-    edges = {},     -- register for (incomplete) edges (across the graph)
-    ports = {}      -- map (unique) port_id->node_id (across the graph)
+  -- handlers piggyback on graph (lines) while building a node
+  local graph = {   -- collector for graph info
+    edges = {},        -- register for (incomplete) edges (across the graph)
+    ports = {}         -- map (unique) port_id->node_id (across the graph)
   }
 
   -- start the graph
-  lines[#lines+1] = "digraph G {";
-  lines[#lines+1] = "  rankdir=\"LR\";";
-  lines[#lines+1] = "  ranksep=\"1.0 equally\";\n";
+  lines[#lines+1] = "digraph G {"
+  lines[#lines+1] = "  rankdir=\"LR\";"
+  lines[#lines+1] = "  ranksep=\"1.0 equally\";\n"
 
-  -- collect all RADIX node types
-  for radix in ipt:radixes(af_fam) do
+  -- collect all RADIX node types of AF_families given (...)
+  for radix in ipt:radixes(...) do
     lines[#lines+1] = tbl2dot(graph, radix)
   end
 
@@ -341,45 +340,42 @@ function dotify(ipt, af_fam)
     local dnode = graph.ports[dport]
     style = style or ""
     if (dnode) then
-      if (snode ~= dnode) then
-        lines[#lines+1] = F("%s:%s -> %s:%s %s",
-                            snode, sport, dnode, dport, style)
-      else
-        lines[#lines+1] = F("%s:%s -> %s:%s %s",
-                            snode, sport, dnode, dport, style)
-      end
+      lines[#lines+1] = F("%s:%s -> %s:%s %s",
+                           snode, sport, dnode, dport, style)
     else
       lines[#lines+1] = F("%s:%s -> %s", snode, sport, dport)
     end
   end
 
-  lines[#lines+1] = "}";
+  lines[#lines+1] = "}"
 
   return lines
 end
 
 return dotify
 
---[[ example usage ]]
+--[[ example usage
 
--- iptable = require("iptable")
--- dotify = require("ipt2dot")
+iptable = require("iptable")
+dotify = require("ipt2dot")
 
--- local iptable = require("iptable")
--- local ipt = iptable.new()
--- ipt["1.1.1.0/24"] = 24
+local iptable = require("iptable")
+local ipt = iptable.new()
+ipt["1.1.1.0/24"] = 24
 
--- ipt["1.1.1.0/25"] = 25
--- ipt["1.1.1.128/25"] = 25
+ipt["1.1.1.0/25"] = 25
+ipt["1.1.1.128/25"] = 25
 
--- ipt["1.1.1.0/26"] = 25
--- ipt["1.1.1.64/26"] = 25
--- ipt["1.1.1.128/26"] = 25
--- ipt["1.1.1.192/26"] = 25
+ipt["1.1.1.0/26"] = 25
+ipt["1.1.1.64/26"] = 25
+ipt["1.1.1.128/26"] = 25
+ipt["1.1.1.192/26"] = 25
 
--- ipt["3.1.1.0/24"] = 24
--- ipt["3.1.1.0/25"] = 24
--- ipt["3.1.1.128/25"] = 24
+ipt["3.1.1.0/24"] = 24
+ipt["3.1.1.0/25"] = 24
+ipt["3.1.1.128/25"] = 24
 
--- local mylines = dotify(ipt, iptable.AF_INET)
--- print(table.concat(mylines, "\n"))
+local mylines = dotify(ipt, iptable.AF_INET)
+print(table.concat(mylines, "\n"))
+
+]]

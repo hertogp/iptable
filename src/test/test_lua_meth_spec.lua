@@ -254,20 +254,33 @@ describe("ipt:less(pfx) ", function()
       ipt["1.1.1.128/26"] = 26;
       ipt["1.1.1.192/26"] = 26;
 
-      t = ipt:less("1.1.1.192/26");
-      assert.are.equal(2, #t);
-      t = ipt:less("1.1.1.192/26", true); -- inclusive search
-      assert.are.equal(3, #t);
+      t = {}
+      for p in ipt:less("1.1.1.192/26") do t[#t+1] = p end
+      assert.are.equal(2, #t)
 
-      t = ipt:less("1.1.1.128/25");
-      assert.are.equal(1, #t);
-      t = ipt:less("1.1.1.128/25", true);
-      assert.are.equal(2, #t);
+      t = {}
+      for p in ipt:less("1.1.1.192/26", true) do t[#t+1] = p end
+      assert.are.equal(3, #t)
 
-      t = ipt:less("1.1.1.0/24");
-      assert.are.equal(0, #t);
-      t = ipt:less("1.1.1.0/24", true);  -- inclusive search
-      assert.are.equal(1, #t);
+      t = {}
+      for p in ipt:less("1.1.1.128/25") do t[#t+1] = p end
+      assert.are.equal(1, #t)
+
+      t = {}
+      for p in ipt:less("1.1.1.128/25", true) do t[#t+1] = p end
+      assert.are.equal(2, #t)
+
+      t = {}
+      for p in ipt:less("1.1.1.0/24") do t[#t+1] = p end
+      assert.are.equal(0, #t)
+
+      t = {}
+      for p in ipt:less("1.1.1.0/24", true) do t[#t+1] = p end
+      assert.are.equal(1, #t)
+
+      t = {}
+      for p in ipt:less() do t[#t+1] = p end
+      assert.are.equal(0, #t)
 
     end)
   end)
