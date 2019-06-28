@@ -126,6 +126,7 @@ local function t_flags(t)
   tag = t._ACTIVE_ and tag.."A" or tag
   return tag
 end
+
 local function t_tag(t)
   if (type(t) ~= "table") then return nil end
   if t._LEAF_ then return "L" end
@@ -189,6 +190,7 @@ local function rn_dot_body(g, t)
   -- radix_node's body lines
   -- separated out since other structs contain radix_nodes as well
   --  in which case we donot want it wrapped in its own table
+  local size;
 
   trowkv(g, "rn_mklist", t.rn_mklist)
   trowkv(g, "rn_parent", t.rn_parent)
@@ -197,8 +199,13 @@ local function rn_dot_body(g, t)
   trowkv(g, "rn_flags", F("%s (%s)", t.rn_flags, t_flags(t)))
 
   if (t._LEAF_) then
-    trowkv(g, "rn_key", t.rn_key)
-    trowkv(g, "rn_mask", t.rn_mask)
+
+    size = F("[%s] ", t._rn_key_LEN)
+    trowkv(g, "rn_key", F("%s%s", size, t.rn_key))
+
+    size = F("[%s] ", t._rn_mask_LEN ~= -1 and t._rn_mask_LEN or "")
+    trowkv(g, "rn_mask", F("%s%s", size, t.rn_mask))
+
     trowkv(g, "rn_dupedkey", t.rn_dupedkey)
   else
     trowkv(g, "rn_offset", t.rn_offset)
@@ -215,7 +222,6 @@ local function rn_dot(g, t)
   rn_dot_body(g, t)
 
   local tbl = TBL_START..table.concat(g.lines)..TBL_END
---  g.nodes[#g.nodes+1] = F(TBL_LABEL, g.node_id, tbl)
   return F(TBL_LABEL, g.node_id, tbl)
 end
 
@@ -241,7 +247,6 @@ local function rnh_dot(g, t)
 
   -- create the node as string
   local tbl = TBL_START..table.concat(g.lines)..TBL_END
---  g.nodes[#g.nodes+1] = F(TBL_LABEL, g.node_id, tbl)
   return F(TBL_LABEL, g.node_id, tbl)
 end
 
@@ -267,7 +272,6 @@ local function rmh_dot(g, t)
 
   -- create the node
   local tbl = TBL_START..table.concat(g.lines)..TBL_END
--- g.nodes[#g.nodes+1] = F(TBL_LABEL, g.node_id, tbl)
   return F(TBL_LABEL, g.node_id, tbl)
 end
 
@@ -289,7 +293,6 @@ local function rm_dot(g, t)
   trowkv(g, "rm_refs", t.rm_refs)
 
   local tbl = TBL_START..table.concat(g.lines)..TBL_END
---  g.nodes[#g.nodes+1] = F(TBL_LABEL, g.node_id, tbl)
   return F(TBL_LABEL, g.node_id, tbl)
 end
 

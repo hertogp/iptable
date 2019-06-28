@@ -236,57 +236,6 @@ describe("iptable tostring: ", function()
   end)
 end)
 
-describe("ipt:more(pfx) ", function()
-
-  expose("instance: ", function()
-    iptable = require("iptable");
-    assert.is_truthy(iptable);
-    ipt = iptable.new();
-    assert.is_truthy(ipt);
-
-    it("gets array of more specific prefixes", function()
-      ipt["1.1.1.0/24"] = 24;
-      ipt["1.1.1.0/25"] = 25;
-      ipt["1.1.1.128/25"] = 25;
-      ipt["1.1.1.0/26"] = 26;
-      ipt["1.1.1.64/26"] = 26;
-      ipt["1.1.1.128/26"] = 26;
-      ipt["1.1.1.192/26"] = 26;
-      assert.is_truthy(7 == #ipt);
-
-      t = ipt:more("1.1.1.0/24");
-      assert.are.equal(6, #t);
-      t = ipt:more("1.1.1.0/24", true);  -- inclusive search
-      assert.are.equal(7, #t);
-
-      t = ipt:more("1.1.1.0/25");        -- should find two /26's
-      assert.are.equal(2, #t);
-      t = ipt:more("1.1.1.0/25", true);  -- inclusive search
-      assert.are.equal(3, #t);
-
-      t = ipt:more("1.1.1.0/26");        -- no more specifics
-      assert.are.equal(0, #t);
-      t = ipt:more("1.1.1.0/26", true);  -- inclusive search
-      assert.are.equal(1, #t);
-    end)
-
-    it("allows for search prefix itself to be absent", function()
-      local ipt = iptable.new()
-      ipt["1.1.1.128/25"] = 25;
-      ipt["1.1.1.64/26"] = 26;
-      ipt["1.1.1.128/26"] = 26;
-      ipt["1.1.1.192/26"] = 26;
-      assert.is_truthy(4 == #ipt);
-
-      -- 1.1.1.0/24 is not in table
-      t = ipt:more("1.1.1.0/24");
-      assert.are.equal(4, #t);
-      t = ipt:more("1.1.1.0/24", true);  -- inclusive search
-      assert.are.equal(4, #t);
-
-    end)
-  end)
-end)
 
 describe("ipt:less(pfx) ", function()
 

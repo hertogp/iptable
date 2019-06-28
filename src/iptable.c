@@ -55,7 +55,7 @@ key_bystr(const char *s, int *mlen, int *af, uint8_t *dst)
 {
     // Store string s' binary key in dst. Returns NULL on failure
     // Also sets mlen and  af. mlen=-1 when no mask was supplied
-    // assumes dst -> uint8_t dst[MAX_BINKEY], to fit both ipv4/ipv6
+    // assumes dst size MAX_BINKEY, which fits both ipv4/ipv6
 
     *mlen = -1;                                   // the mask as length
     *af = AF_UNSPEC;
@@ -121,7 +121,7 @@ uint8_t *
 key_bylen(int af, int mlen, uint8_t *buf)
 {
     // create key by masklength, store result in buf.  Retuns NULL on failure.
-    // buf is typically uint8_t buf[MAX_BINKEY]
+    // assumes buf size MAX_BINKEY
     uint8_t *cp;
     int keylen;
 
@@ -734,7 +734,7 @@ tbl_lsm(table_t *t, const char *s)
     if (! key_bylen(af, mlen, mask)) return NULL;
     if (! key_network(addr, mask)) return NULL;
 
-    // can't beat 0/0 for least specific match
+    // can't beat 0/0 for least specific match of all
     if (head->rnh_nodes[0].rn_dupedkey) {
       lsm = head->rnh_nodes[0].rn_dupedkey;
       return (entry_t *)lsm;
@@ -783,7 +783,7 @@ tbl_lsm(table_t *t, const char *s)
         if (RDX_ISROOT(rn->rn_parent)) done = 1;
     }
 
-    /* Example implementation with t's stack
+    /* Example implementation with iptable t's stack
      *
      * while (t->top) tbl_stackpop(t);
      * tbl_stackpush(t, TRDX_NODE, rn->rn_parent);
