@@ -261,7 +261,7 @@ local function rmh_dot(g, t)
   -- RADIX_HEAD part
   theader(g, t.head)
   trowkv(g, "rnh_treetop", t.head.rnh_treetop)
-  trowkv(g, "rnh_treetop", t.head.rnh_masks)
+  trowkv(g, "rnh_masks", t.head.rnh_masks)
 
   -- RADIX_NODES part
   theader(g, t.mask_nodes)

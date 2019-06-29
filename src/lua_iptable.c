@@ -157,18 +157,18 @@ check_table (lua_State *L, int index)
     return (table_t *)*ud;
 }
 
+/*
+ * Copy a binary key at given 'idx' into given 'buf'.
+ *
+ * 'buf' is assumed to have a size >= MAX_BINKEY.
+ * A binary key is a byte array [LEN | key bytes] and LEN is total length.
+ * However, radix masks may set LEN to the nr of non-zero bytes in the array.
+ *
+ */
+
 static int
 check_binkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
 {
-    /*
-     * Copy a binary key at index idx into buf whose size is MAX_BINKEY.
-     * Returns success (1) or failure (0).
-     *
-     * Note: a binary key is a byte array, 1st byte is LEN of the array.
-     * So no '\0' is added here.
-     *
-     */
-
     const char *key = NULL;
 
     if (!lua_isstring(L, idx)) return 0;
@@ -196,7 +196,8 @@ check_pfxstr(lua_State *L, int idx, size_t *len)
     return pfx;
 }
 
-static int *ud_create(int ref)
+static int *
+ud_create(int ref)
 {
     // store LUA_REGISTRYINDEX ref's in the radix tree as ptr->int
     int *p = calloc(1, sizeof(int));
@@ -226,6 +227,7 @@ usr_delete(void *L, void **refp)
 * the iteration in question will yield no results in Lua.
 *
 */
+
 static int
 iter_bail(lua_State *L)
 {
@@ -245,6 +247,7 @@ iter_bail(lua_State *L)
 * An iteration func that terminates any iteration.
 *
 */
+
 static int
 iter_fail(lua_State *L)
 {
@@ -261,6 +264,7 @@ iter_fail(lua_State *L)
  * is reached.  Ignores the stack: it uses upvalues for next, stop
  *
  */
+
 static int
 iter_hosts(lua_State *L)
 {
@@ -293,6 +297,7 @@ iter_hosts(lua_State *L)
  * - upvalue(1) is the leaf to process.
  *
  */
+
 static int
 iter_kv(lua_State *L)
 {
@@ -324,16 +329,16 @@ iter_kv(lua_State *L)
     return 2;                                                // [.., k', v']
 }
 
+/*
+ * iter_less()  <-- [t k], k is ignored
+ *
+ * Iterate across less specific prefixes relative to a given prefix.
+ *
+ */
+
 static int
 iter_less(lua_State *L)
 {
-    /*
-     * iter_less()  <-- [t k], k is ignored
-     *
-     * Iterate across less specific prefixes relative to a given prefix.
-     *
-     */
-
     char buf[MAX_STRKEY];
     table_t *t = check_table(L, 1);
     const char *pfx = lua_tostring(L, lua_upvalueindex(1));
@@ -364,6 +369,7 @@ iter_less(lua_State *L)
  * iter_f for :masks(af), yields all masks used in af's radix mask tree.
  *
  */
+
 static int iter_masks(lua_State *L)
 {
     dbg_stack("inc(.) <--");                       // [t m']
@@ -416,15 +422,16 @@ static int iter_masks(lua_State *L)
     return 2;                                      // [.., m l]
 }
 
+/*
+ * Iterate across more specific prefixes one at a time.
+ *
+ * - top points to subtree where possible matches are located
+ * - rn is the current leaf under consideration
+ */
+
 static int
 iter_more(lua_State *L)
 {
-    /*
-     * Iterate across more specific prefixes one at a time.
-     * - top points to subtree where possible matches are located
-     * - rn is the current leaf under consideration
-     */
-
     dbg_stack("inc(.) <--");
 
     char buf[MAX_STRKEY];
@@ -509,12 +516,17 @@ iter_more(lua_State *L)
     return 0;
 }
 
+/*
+ * iter_radix() <-- [ud k] ([nil nil] at first call)
+ *
+ * - return current node as a Lua table or nil to stop iteration
+ * - save next (type, node) as upvalues (1) resp. (2)
+ *
+ */
+
 static int
 iter_radix(lua_State *L)
 {
-    // iter_radix() <-- [ud k] ([nil nil] at first call)
-    // - return current node as a Lua table or nil to stop iteration
-    // - save next (type, node) as/in upvalues 1 resp. 2
     dbg_stack("inc(.) <--");
     table_t *t = check_table(L, 1);
     void *node;
@@ -581,7 +593,8 @@ void iptL_push_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
     lua_settable(L, -3);
 }
 
-void iptL_push_int(lua_State *L, const char *k, int v)
+void
+iptL_push_int(lua_State *L, const char *k, int v)
 {
     if (! lua_istable(L, -1)) {
         dbg_msg("need stack top to be a %s", "table");
@@ -1032,17 +1045,17 @@ ipt_mask(lua_State *L)
 }
 
 
+/*
+ * .hosts(prefix, incl) <-- [pfx incl], incl is optional.
+ *
+ * Iterate across host adresses in prefix pfx, if incl is true, the network
+ * and broadcast addresses are included as well.
+ *
+ */
+
 static int
 ipt_iter_hosts(lua_State *L)
 {
-    /*
-     * .hosts(prefix, incl) <-- [pfx incl], incl is optional.
-     *
-     * Iterate across host adresses in prefix pfx, if incl is true, the network
-     * and broadcast addresses are included as well.
-     *
-     */
-
     dbg_stack("inc(.) <--");
 
     size_t len = 0;
@@ -1335,7 +1348,7 @@ more(lua_State *L)
     dbg_msg("rn_bit <= maxb %d", maxb);
 
     /* descend the tree towards a possible matching leaf */
-    for(rn = head->rh.rnh_treetop; !RDX_ISLEAF(rn);) //rn->rn_bit >= 0;)
+    for(rn = head->rh.rnh_treetop; !RDX_ISLEAF(rn);)
         if (addr[rn->rn_offset] & rn->rn_bmask)
             rn = rn->rn_right;
         else
@@ -1453,20 +1466,23 @@ less(lua_State *L)
  *
  * Iterate across all masks used in AF_family's radix tree.
  * Notes:
- * - a mask tree doesn't store any other data than masks
- * - a mask's KEYLEN == nr of non-zero mask bytes, rather LEN of byte array
- * - a /0 (zeromask) is never stored in the radix mask tree, instead it can be
- *   seen only as a mask with KEYLEN==0 in the dupedkey chain of ROOT(0.0.0.0)
- *   leaf node.
- * All this means is the iter_f needs the AF to properly format masks for the
- * given family (a ipv6/24 mask would otherwise come out as 255.255.255.0) and
- * an explicit flag needs to be passed to iter_f that a zeromask is present.
+ * - a mask tree stores masks in rn_key fields.
+ * - a mask's KEYLEN == nr of non-zero mask bytes, rather LEN of byte array.
+ * - a /0 (zeromask) is never stored in the radix mask tree (!).
+ * - a /0 (zeromask) is stored in ROOT(0.0.0.0)'s *last* dupedkey-chain leaf.
+ * - the AF_family cannot be deduced from the mask in rn_key.
+ *
+ * So, the iter_f needs the AF to properly format masks for the given family
+ * (an ipv6/24 mask would otherwise come out as 255.255.255.0) and an explicit
+ * flag needs to be passed to iter_f that a zeromask entry is present.
  *
  */
-static int
-masks(lua_State *L)
-{
-    dbg_stack("inc(.) <--");
+
+static
+int masks(lua_State *L) { 
+
+    dbg_stack("inc(.) <--");                         // [t af]
+
     uint8_t binkey[MAX_BINKEY];
     char strkey[MAX_STRKEY];
 
@@ -1486,11 +1502,6 @@ masks(lua_State *L)
     rh = (af == AF_INET) ? &t->head4->rh : &t->head6->rh;
 
     /* explicit check for /0 mask in af family's radix tree */
-
-    /*
-     * TODO: make this clean with helper func: key_fstr(key, af, mlen, buf)
-     *
-     */
     key_bylen(af, 0, binkey);
     key_tostr(binkey, strkey);
     int slen = strlen(strkey);
