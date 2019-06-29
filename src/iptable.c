@@ -188,7 +188,7 @@ key_tostr(void *k, char *s)
 
     if (s == NULL || k == NULL) return NULL;
 
-    if(IPT_KEYLEN(key) > 5)
+    if(IPT_KEYLEN(key) > IP4_KEYLEN+1)
         return inet_ntop(AF_INET6, IPT_KEYPTR(key), s, INET6_ADDRSTRLEN);
 
     return inet_ntop(AF_INET, IPT_KEYPTR(key), s, INET_ADDRSTRLEN);
@@ -358,15 +358,23 @@ rdx_flush(struct radix_node *rn, void *args)
     return 0;
 }
 
+/*
+ * Find first non-ROOT leaf of in the prefix or mask tree
+ * Return NULL if none found.
+ *
+ * Note: the /0 mask is never stored in the mask tree even if stored explicitly
+ * using prefix/0.  Hence, the /0 mask won't be found by this function.
+ *
+ */
 struct radix_node *
-rdx_firstleaf(struct radix_node_head *rnh)
+rdx_firstleaf(struct radix_head *rh)
 {
     // find first leaf in tree
     struct radix_node *rn = NULL;
 
-    if (rnh == NULL) return rn;
+    if (rh == NULL) return NULL;
 
-    rn = rnh->rh.rnh_treetop;
+    rn = rh->rnh_treetop;
     while(rn->rn_bit >= 0)
         rn = rn->rn_left;
 
@@ -377,6 +385,7 @@ rdx_firstleaf(struct radix_node_head *rnh)
         rn = rn->rn_left;
 
     if(RDX_ISROOT(rn)) return NULL;
+    // if(RDX_ISROOT(rn)) rn = rn->rn_dupedkey;
 
     return rn;
 }

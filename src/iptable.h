@@ -62,6 +62,7 @@ typedef struct table_t {
 // exact KEYBUF length by FAM
 #define FAM_KEYLEN(af) (af==AF_INET ? (uint8_t)(1+IP4_KEYLEN) \
         : af==AF_INET6 ? (uint8_t)(1+IP6_KEYLEN) : 0x00)
+#define AF_UNKNOWN(f) (f != AF_INET && f!= AF_INET6)
 
 // radix tree macros
 #define RDX_ISLEAF(rn) (rn->rn_bit < 0)
@@ -117,7 +118,7 @@ int key_invert(void *);
 // -- rdx funcs
 
 int rdx_flush(struct radix_node *, void *);
-struct radix_node *rdx_firstleaf(struct radix_node_head *);
+struct radix_node *rdx_firstleaf(struct radix_head *);
 struct radix_node *rdx_nextleaf(struct radix_node *);
 int rdx_firstnode(table_t *, int);
 int rdx_nextnode(table_t *, int *, void **);

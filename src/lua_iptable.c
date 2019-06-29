@@ -17,7 +17,6 @@
 // lua_iptable defines
 
 #define LUA_IPTABLE_ID "iptable"
-#define AF_UNKNOWN(f) (f != AF_INET && f!= AF_INET6)
 
 // lua functions
 
@@ -28,18 +27,19 @@ int luaopen_iptable(lua_State *);
 table_t *check_table(lua_State *, int);
 static int check_binkey(lua_State *, int, uint8_t *, size_t *);
 const char *check_pfxstr(lua_State *, int, size_t *);
-static int *ud_create(int);                // userdata stored as entry->value
+static int *ud_create(int);                 // userdata stored as entry->value
 static void usr_delete(void *, void **);    // usr_delete(L, &ud)
 static int iter_bail(lua_State *);
 static int iter_fail(lua_State *);
 static int iter_hosts(lua_State *);
 static int iter_kv(lua_State *);
 static int iter_less(lua_State *);
+static int iter_masks(lua_State *);
 static int iter_more(lua_State *);
 static int iter_radix(lua_State *);
 static inline int subtree_fail(struct radix_node *, int);
 
-// radix iter helpers
+// iter helpers for iter_radix() specifically
 
 void iptL_push_fstr(lua_State *, const char *, const char *, const void *);
 void iptL_push_int(lua_State *, const char *, int);
@@ -72,6 +72,7 @@ static int _tostring(lua_State *);
 static int _pairs(lua_State *);
 static int counts(lua_State *);
 static int less(lua_State *);
+static int masks(lua_State *);
 static int more(lua_State *);
 static int radixes(lua_State *);
 
@@ -101,7 +102,7 @@ static const struct luaL_Reg meths [] = {
     {"__tostring", _tostring},
     {"__pairs", _pairs},
     {"counts", counts},
-    // {"more", more},
+    {"masks", masks},
     {"more", more},
     {"less", less},
     {"radixes", radixes},
@@ -215,53 +216,54 @@ usr_delete(void *L, void **refp)
 }
 
 
+/*
+* iter_bail(L) <-- [..]
+*
+* Helper function to bail out of an iteration factory function.
+*
+* An iteration factory function MUST return a valid [iter_f] and optionally
+* an invariant and ctl_var. By returning iter_fail as [iter_f] we ensure
+* the iteration in question will yield no results in Lua.
+*
+*/
 static int
 iter_bail(lua_State *L)
 {
-  /*
-   * iter_bail(L) <-- [..]
-   *
-   * Helper function to bail out of an iteration setup.
-   *
-   */
+    dbg_stack("inc(.) ->");
 
-  lua_pop(L, lua_gettop(L));               /* clear the stack */
-  lua_pushcclosure(L, iter_fail, 0);       /* will stop any iteration */
+    lua_pop(L, lua_gettop(L));               /* clear the stack */
+    lua_pushcclosure(L, iter_fail, 0);       /* the iteration blocker */
 
-  return 1;
+    dbg_stack("out(1) ==>");
+
+    return 1;
 }
 
+/*
+* iter_fail <-- [..], stack is ignored
+*
+* An iteration func that terminates any iteration.
+*
+*/
 static int
 iter_fail(lua_State *L)
 {
-  /*
-   * iter_failed <-- [], stack is completely ignored
-   *
-   * An iteration func that immediately terminates any iteration.
-   * Can't just return 0 during an iteration setup, since that leads to
-   * Lua complaining about trying to call a nil value.  So, if some error just
-   * means there is nothting to iterate, simply return iter_bail(L) which sets
-   * this function as the iter_f.
-   *
-   */
-  if(L) return 0; /* L part of required signature, but no real use */
+    dbg_stack("ignored ->");
 
-  return 0;
+    lua_pop(L, lua_gettop(L));
+    return 0;
 }
 
+/*
+ * iter_hosts() <-- [h], h is nil on first call.
+ *
+ * The iter_f for iptable.hosts(pfx), yields the next host ip until stop value
+ * is reached.  Ignores the stack: it uses upvalues for next, stop
+ *
+ */
 static int
 iter_hosts(lua_State *L)
 {
-    /*
-     * iter_hosts() <-- [h], h is nil on first call.
-     *
-     * Iterate across the host addresses in some prefix. The upvalues contain
-     * the current and stop values.  Any inclusiveness for network resp.
-     * broadcast address is handled by the iterator setup function 
-     * ipt_iter_hosts (as a module function).
-     *
-     */
-
     dbg_stack("inc(.) <--");
 
     size_t nlen = 0, slen = 0;
@@ -272,10 +274,10 @@ iter_hosts(lua_State *L)
     if (!check_binkey(L, lua_upvalueindex(2), stop, &slen)) return 0;
     if (key_cmp(next, stop) == 0) return 0;
 
-    key_tostr(next, buf);                               // return cur val
+    key_tostr(next, buf);                               /* return cur val */
     lua_pushstring(L, buf);
 
-    key_incr(next);                                     // setup next val
+    key_incr(next);                                     /* setup next val */
     lua_pushlstring(L, (const char *)next, (size_t)IPT_KEYLEN(next));
     lua_replace(L, lua_upvalueindex(1));
 
@@ -284,17 +286,16 @@ iter_hosts(lua_State *L)
     return 1;
 }
 
+/*
+ * iter_kv() <-- [t k]
+ *
+ * The iter_f for __pairs(), yields all k,v pairs in the tree(s).
+ * - upvalue(1) is the leaf to process.
+ *
+ */
 static int
 iter_kv(lua_State *L)
 {
-    /*
-     * iter_kv() <-- [t k], k is nil on first call
-     *
-     * Iterate across key,value pairs in both ipv4 and ipv6 table.
-     * - upvalue(1) is the leaf to process.
-     *
-     */
-
     dbg_stack("inc(.) <--");
 
     char saddr[MAX_STRKEY];
@@ -305,22 +306,22 @@ iter_kv(lua_State *L)
 
     if (rn == NULL || RDX_ISROOT(rn)) return 0; // we're done
 
-    /* push the next key and value onto stack */
+    /* push the next key, value onto stack */
     key_tostr(rn->rn_key, saddr);
     lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [t k k']
     lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);        // [t k k' v']
 
-    /* get next node, switch to ipv6 tree when ipv4 has been traversed */
+    /* get next leaf node, switch to ipv6 tree when ipv4 has been traversed */
     rn = rdx_nextleaf(rn);
     if (rn == NULL && KEY_IS_IP4(e->rn[0].rn_key))
-        rn = rdx_firstleaf(t->head6);
+        rn = rdx_firstleaf(&t->head6->rh);
 
     lua_pushlightuserdata(L, rn);                            // [t k k' v' rn]
     lua_replace(L, lua_upvalueindex(1));                     // [t_ud k k' v']
 
     dbg_stack("out(2) ==>");
 
-    return 2;                                           // [.., k', v']
+    return 2;                                                // [.., k', v']
 }
 
 static int
@@ -357,14 +358,63 @@ iter_less(lua_State *L)
 }
 
 
-/* TODO:
+/*
+ * iter_masks(lua_State *);
  *
- * static int iter_masks(lua_State *);
- *
- * Iterate across masks used in the tree. Takes 1 or 2 AF_family args to
- * indicate which type(s) of masks should be iterated
+ * iter_f for :masks(af), yields all masks used in af's radix mask tree.
  *
  */
+static int iter_masks(lua_State *L)
+{
+    dbg_stack("inc(.) <--");                       // [t m']
+
+    uint8_t binmask[MAX_BINKEY];
+    char strmask[MAX_STRKEY];
+    struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
+    int af = lua_tointeger(L, lua_upvalueindex(2));
+    int zeromaskp = lua_tointeger(L, lua_upvalueindex(3));
+    size_t numbytes = 0;
+
+    lua_pop(L, 1);                                 // [t]
+    /* a proper byte array for the mask */
+    for (int i = 0; i < MAX_BINKEY; i++)
+        binmask[i] = 0;
+    *binmask = FAM_KEYLEN(af);
+
+    if (zeromaskp) {
+        /* yield zeromask (once) as a first result */
+        key_tostr(binmask, strmask);
+        lua_pushstring(L, strmask);                // [t m]
+        lua_pushinteger(L, 0);                     // [t m 0 0]
+        lua_pushinteger(L, 0);                     // reset zeromaskp flag
+        lua_replace(L, lua_upvalueindex(3));       // [t m 0]
+
+    } else if (rn == NULL || RDX_ISROOT(rn)) {
+        return 0;                                  // we're done
+
+    } else {
+        /* note: the mask is the key in a radix mask tree */
+        numbytes = (size_t)IPT_KEYLEN(rn->rn_key);
+        if (numbytes > MAX_BINKEY) {
+            lua_pushliteral(L, "masks(): encounted an illegal mask");
+            lua_error(L);
+        }
+        memcpy(binmask, rn->rn_key, numbytes);
+        *binmask = FAM_KEYLEN(af);                 // ensure proper AF length
+        key_tostr(binmask, strmask);
+        lua_pushstring(L, strmask);                // [t m]
+        lua_pushinteger(L, key_tolen(rn->rn_key)); // [t m l]
+
+        /* get next leaf (mask) node */
+        rn = rdx_nextleaf(rn);
+        lua_pushlightuserdata(L, rn);              // [t m l rn]
+        lua_replace(L, lua_upvalueindex(1));       // [t m l]
+    }
+
+    dbg_stack("out(2) ==>");
+
+    return 2;                                      // [.., m l]
+}
 
 static int
 iter_more(lua_State *L)
@@ -1164,9 +1214,9 @@ _pairs(lua_State *L)
     dbg_stack("inc(.) <--");
 
     table_t *t = check_table(L, 1);
-    struct radix_node *rn = rdx_firstleaf(t->head4);
+    struct radix_node *rn = rdx_firstleaf(&t->head4->rh);
     if (rn == NULL)
-        rn = rdx_firstleaf(t->head6);
+        rn = rdx_firstleaf(&t->head6->rh);
 
     if (rn == NULL) return iter_bail(L);
 
@@ -1398,6 +1448,70 @@ less(lua_State *L)
     return 2;     // [iter_f invariant] (ctl_var not needed)
 }
 
+/*
+ * ipt:masks(af) <-- [t af]
+ *
+ * Iterate across all masks used in AF_family's radix tree.
+ * Notes:
+ * - a mask tree doesn't store any other data than masks
+ * - a mask's KEYLEN == nr of non-zero mask bytes, rather LEN of byte array
+ * - a /0 (zeromask) is never stored in the radix mask tree, instead it can be
+ *   seen only as a mask with KEYLEN==0 in the dupedkey chain of ROOT(0.0.0.0)
+ *   leaf node.
+ * All this means is the iter_f needs the AF to properly format masks for the
+ * given family (a ipv6/24 mask would otherwise come out as 255.255.255.0) and
+ * an explicit flag needs to be passed to iter_f that a zeromask is present.
+ *
+ */
+static int
+masks(lua_State *L)
+{
+    dbg_stack("inc(.) <--");
+    uint8_t binkey[MAX_BINKEY];
+    char strkey[MAX_STRKEY];
+
+    struct radix_head *rh;
+    struct radix_node *rn;
+    int isnum = 0, af = AF_UNSPEC, zeromaskp = 0;
+    table_t *t = check_table(L, 1);
+
+    if (lua_gettop(L) != 2)
+        return iter_bail(L);                         // no AF_family
+
+    af = lua_tointegerx(L, 2, &isnum);
+    if (!isnum || AF_UNKNOWN(af))
+        return iter_bail(L);                         // bad AF_family
+    lua_pop(L, 1);                                   // [t]
+
+    rh = (af == AF_INET) ? &t->head4->rh : &t->head6->rh;
+
+    /* explicit check for /0 mask in af family's radix tree */
+
+    /*
+     * TODO: make this clean with helper func: key_fstr(key, af, mlen, buf)
+     *
+     */
+    key_bylen(af, 0, binkey);
+    key_tostr(binkey, strkey);
+    int slen = strlen(strkey);
+    snprintf(strkey+slen, 3, "/%d", 0);
+    zeromaskp = tbl_get(t, strkey) != NULL;
+
+    /* find first leaf in mask tree */
+    rn = rdx_firstleaf(&rh->rnh_masks->head);
+    if (rn == NULL && zeromaskp == 0) return iter_bail(L);  // t empty
+
+    lua_pushlightuserdata(L, rn);                    // [t rn]
+    lua_pushinteger(L, af);                          // [t rn af]
+    lua_pushinteger(L, zeromaskp);                   // [t rn af zm]
+    lua_pushcclosure(L, iter_masks, 3);              // [t f]
+    lua_rotate(L, 1, 1);                             // [f t]
+
+    dbg_stack("out(2) ==>");
+
+    return 2;                                        // [(iter)f (invariant)t]
+}
+
 static int
 radixes(lua_State *L)
 {
@@ -1440,7 +1554,6 @@ radixes(lua_State *L)
           lua_pushfstring(L, "Address family (%d) not supported", af);
           lua_error(L);
       }
-      dbg_stack("popped an AF_fam -");
     }
 
     if (! rdx_firstnode(t, afs)) return iter_bail(L);
