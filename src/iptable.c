@@ -55,7 +55,7 @@ key_bystr(const char *s, int *mlen, int *af, uint8_t *dst)
 {
     // Store string s' binary key in dst. Returns NULL on failure
     // Also sets mlen and  af. mlen=-1 when no mask was supplied
-    // assumes dst size MAX_BINKEY, which fits both ipv4/ipv6
+    // Assumes dst size MAX_BINKEY, which fits both ipv4/ipv6
 
     *mlen = -1;                                   // the mask as length
     *af = AF_UNSPEC;

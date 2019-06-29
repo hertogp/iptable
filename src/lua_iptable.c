@@ -161,7 +161,7 @@ check_binkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
 {
     /*
      * Copy a binary key at index idx into buf whose size is MAX_BINKEY.
-     * Returns 1 on success, 0 on failure.
+     * Returns success (1) or failure (0).
      *
      * Note: a binary key is a byte array, 1st byte is LEN of the array.
      * So no '\0' is added here.
@@ -252,9 +252,16 @@ iter_fail(lua_State *L)
 static int
 iter_hosts(lua_State *L)
 {
-    // iter_hosts() <-- [prev.value]  ([nil] on first call)
-    // actual iterator for ipt_iter_hosts()
-    // we ignore prev.value, incr upvalue(1) instead till it equals upvalue(2)
+    /*
+     * iter_hosts() <-- [h], h is nil on first call.
+     *
+     * Iterate across the host addresses in some prefix. The upvalues contain
+     * the current and stop values.  Any inclusiveness for network resp.
+     * broadcast address is handled by the iterator setup function 
+     * ipt_iter_hosts (as a module function).
+     *
+     */
+
     dbg_stack("inc(.) <--");
 
     size_t nlen = 0, slen = 0;
@@ -938,12 +945,19 @@ ipt_broadcast(lua_State *L)
     return 3;
 }
 
+/*
+ * iptable.mask(af, mlen) <-- [num]
+ *
+ * Returns mask (as string) for mlen bits given, Nil on errors
+ * - mlen < 0 means inverse mask of mlen, so mlen = -8 -> 0.255.255.255
+ *
+ * TODO: normally mlen==-1 means 'no mask present so default to MAXMASK', but
+ * here we deviate.  Better to create imask(af, mlen) and maintain the notion
+ * of mlen==-1 and return an inverse mask of max mask.
+ */
 static int
 ipt_mask(lua_State *L)
 {
-    // iptable.mask(af, mlen) <-- [num]
-    // Returns mask (as string) for mlen bits given. Nil on errors
-    // - mlen < 0 means inverse mask of mlen, so mlen = -8 -> 0.255.255.255
     dbg_stack("inc(.) <--");
 
     int af = AF_UNSPEC, mlen = -1, isnum = 0;
@@ -971,8 +985,14 @@ ipt_mask(lua_State *L)
 static int
 ipt_iter_hosts(lua_State *L)
 {
-    // iptable.iter_hosts(pfx) <-- [str, incl] (inclusive is optional)
-    // Setup iteration across hosts in a given prefix.
+    /*
+     * .hosts(prefix, incl) <-- [pfx incl], incl is optional.
+     *
+     * Iterate across host adresses in prefix pfx, if incl is true, the network
+     * and broadcast addresses are included as well.
+     *
+     */
+
     dbg_stack("inc(.) <--");
 
     size_t len = 0;
@@ -1140,6 +1160,7 @@ static int
 _pairs(lua_State *L)
 {
     // __pairs(ipt) <-- [t_ud]
+
     dbg_stack("inc(.) <--");
 
     table_t *t = check_table(L, 1);
@@ -1147,7 +1168,7 @@ _pairs(lua_State *L)
     if (rn == NULL)
         rn = rdx_firstleaf(t->head6);
 
-    // if (rn == NULL) return 0;
+    if (rn == NULL) return iter_bail(L);
 
     lua_pushlightuserdata(L, rn);        // [t_ud lud], rn is 1st node
     lua_pushcclosure(L, iter_kv, 1);     // [t_ud f], rn as upvalue(1)
@@ -1195,6 +1216,15 @@ _pairs(lua_State *L)
 /*     return 1; */
 /* } */
 
+/* TODO:
+ *
+ * :masks(AF_fam) <-- [t af1 af2 ..]  at least 1 af_family needed
+ *
+ * Iterate across the masks in the tree(s).  A bit like k,v pair iteration
+ * except that only the masks (keys in the radix_mask_head tree) are returned
+ * and there no values.
+ *
+ */
 static inline int subtree_fail(struct radix_node *rn, int mlen) {
   return RDX_ISROOT(rn)
       && RDX_ISLEAF(rn)
@@ -1202,17 +1232,16 @@ static inline int subtree_fail(struct radix_node *rn, int mlen) {
       && !(rn->rn_dupedkey);
 }
 
+/*
+ * ipt:more(pfx, inclusive) <-- [t pfx bool], bool is optional
+ *
+ * Iterate across more specific prefixes. AF_family is deduced from the
+ * prefix given.  This traverses the entire tree if pfx has a /0 mask.
+ *
+ */
 static int
 more(lua_State *L)
 {
-    /*
-     * ipt:more(pfx, inclusive) <-- [t pfx bool], bool is optional
-     *
-     * Iterate across more specific prefixes. AF_family is deduced from the
-     * prefix given.  This traverses the entire tree if pfx has a /0 mask.
-     *
-     */
-
     dbg_stack("inc(.) <--");
 
     size_t len = 0;
@@ -1239,10 +1268,8 @@ more(lua_State *L)
     } else if (af == AF_INET6) {
       head = t->head6;
       mlen = mlen < 0 ? IP6_MAXMASK : mlen;
-    } else return 0;
+    } else return iter_bail(L);
 
-    /* if (! key_bylen(af, mlen, mask)) return 0; */
-    /* if (! key_network(addr, mask)) return 0; */
     if (! key_bylen(af, mlen, mask) || ! key_network(addr, mask)) {
       lua_pushliteral(L, "more(): error converting prefix");
       lua_error(L);
@@ -1286,19 +1313,14 @@ more(lua_State *L)
      * If the search ends up on the default ROOT 0/0 node, it has failed if
      * mlen != 0 and no matches are possible.  Note: ROOT's 0.0.0.0 rn_key has
      * a keylength of 0 bytes(!) and thus will always match any other key when
-     * using key_isin to check for a match.  Hence the first check is for
-     * ISROOT and mlen !=0;
+     * using key_isin to check for a match.  Hence the first check is for a
+     * subtree failure and then a key_isin check is done.
      *
      * If the search ends up on some 'real' LEAF node, key_isin can be used to
      * check the leaf actually matches.  Required since the trie is path
      * compressed.
      *
      */
-
-    /* int left_tree_fail = RDX_ISROOT(rn) */
-    /*   && RDX_ISLEAF(rn) */
-    /*   && mlen !=0 */
-    /*   && !(rn->rn_dupedkey); */
 
     if (subtree_fail(rn, mlen) || !key_isin(addr, rn->rn_key, mask)) {
         /* switch to RIGHT subtree */
@@ -1347,7 +1369,6 @@ less(lua_State *L)
     const char *pfx;
     char buf[MAX_STRKEY];
 
-    // table_t *t = check_table(L, 1);
     pfx = check_pfxstr(L, 2, &len);
     if (pfx == NULL || len < 1) return iter_bail(L);
 
@@ -1355,17 +1376,18 @@ less(lua_State *L)
       inclusive = lua_toboolean(L, 3);
 
     lua_pop(L, lua_gettop(L) - 1);                        // [t]
-    // while(lua_gettop(L) > 1) lua_pop(L, 1);               // [t]
 
     if (! key_bystr(pfx, &mlen, &af, addr)) return iter_bail(L);
+    if (! key_tostr(addr, buf)) return iter_bail(L);
 
     if (af == AF_INET)
       mlen = mlen < 0 ? IP4_MAXMASK : mlen;
     else if (af == AF_INET6)
       mlen = mlen < 0 ? IP6_MAXMASK : mlen;
+    else return iter_bail(L);                // unknown AF
     mlen = inclusive ? mlen : mlen -1;
+    if (mlen < 0) return iter_bail(L);       // non-inclusive less than /0
 
-    key_tostr(addr, buf);
     lua_pushstring(L, buf);                              // [t pfx]
     lua_pushinteger(L, mlen);                            // [t pfx mlen]
     lua_pushcclosure(L, iter_less, 2);                   // [t f]
@@ -1421,9 +1443,10 @@ radixes(lua_State *L)
       dbg_stack("popped an AF_fam -");
     }
 
-    if (! rdx_firstnode(t, afs)) return 0;
+    if (! rdx_firstnode(t, afs)) return iter_bail(L);
 
     dbg_stack("upvalues(0)");
+
     lua_pushcclosure(L, iter_radix, 0);             // [t_ud iter_f]
     lua_rotate(L, 1, 1);                            // [iter_f t_ud]
 
