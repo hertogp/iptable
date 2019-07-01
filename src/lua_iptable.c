@@ -29,17 +29,12 @@ static int check_binkey(lua_State *, int, uint8_t *, size_t *);
 const char *check_pfxstr(lua_State *, int, size_t *);
 static int *ud_create(int);                 // userdata stored as entry->value
 static void usr_delete(void *, void **);    // usr_delete(L, &ud)
+static int isvalid(struct radix_node *);
 static int iter_bail(lua_State *);
 static int iter_fail(lua_State *);
-static int iter_hosts(lua_State *);
-static int iter_kv(lua_State *);
-static int iter_less(lua_State *);
-static int iter_masks(lua_State *);
-static int iter_more(lua_State *);
-static int iter_radix(lua_State *);
 static inline int subtree_fail(struct radix_node *, int);
 
-// iter helpers for iter_radix() specifically
+// iter_radix() helpers
 
 void iptL_push_fstr(lua_State *, const char *, const char *, const void *);
 void iptL_push_int(lua_State *, const char *, int);
@@ -48,6 +43,17 @@ static int push_rdx_node(lua_State *, struct radix_node *);
 static int push_rdx_head(lua_State *, struct radix_head *);
 static int push_rdx_mask_head(lua_State *, struct radix_mask_head *);
 static int push_rdx_mask(lua_State *, struct radix_mask *);
+
+
+// iterators
+
+static int iter_hosts(lua_State *);
+static int iter_kv(lua_State *);
+static int iter_less(lua_State *);
+static int iter_masks(lua_State *);
+static int iter_merge(lua_State *);
+static int iter_more(lua_State *);
+static int iter_radix(lua_State *);
 
 // iptable module functions
 
@@ -73,6 +79,7 @@ static int _pairs(lua_State *);
 static int counts(lua_State *);
 static int less(lua_State *);
 static int masks(lua_State *);
+static int merge(lua_State *);
 static int more(lua_State *);
 static int radixes(lua_State *);
 
@@ -103,6 +110,7 @@ static const struct luaL_Reg meths [] = {
     {"__pairs", _pairs},
     {"counts", counts},
     {"masks", masks},
+    {"merge", merge},
     {"more", more},
     {"less", less},
     {"radixes", radixes},
@@ -216,6 +224,38 @@ usr_delete(void *L, void **refp)
     *refp = NULL;
 }
 
+/*
+ * check if rn is still a valid child and/or parent i/t tree
+ * - a valid child is pointed to by its parent
+ * - a valid parent is pointed to by its child(ren)
+ * this attempts to detect if rn was deleted; used by iter_xxx functions
+ *
+ */
+static int isvalid(struct radix_node *rn)
+{
+    int valid = 1;
+
+    // sanity check
+    if(rn == NULL || rn->rn_parent == NULL) return 0;
+
+    // rn is pointed to by its children (if any)
+    if (RDX_ISLEAF(rn)) {
+        if (rn->rn_dupedkey)
+            valid &= rn->rn_dupedkey->rn_parent == rn;
+    } else {
+        valid &= rn->rn_left->rn_parent == rn;
+        valid &= rn->rn_right->rn_parent == rn;
+    }
+
+    // and rn is pointed to by its parent
+    if(RDX_ISLEAF(rn->rn_parent))
+        valid &= rn->rn_parent->rn_dupedkey == rn;
+    else
+        valid &= (rn->rn_parent->rn_left == rn
+                  || rn->rn_parent->rn_right == rn);
+
+    return valid;
+}
 
 /*
 * iter_bail(L) <-- [..]
@@ -227,7 +267,6 @@ usr_delete(void *L, void **refp)
 * the iteration in question will yield no results in Lua.
 *
 */
-
 static int
 iter_bail(lua_State *L)
 {
@@ -310,6 +349,7 @@ iter_kv(lua_State *L)
     entry_t *e = (entry_t *)rn;
 
     if (rn == NULL || RDX_ISROOT(rn)) return 0; // we're done
+    if (!isvalid(rn)) return 0;                 // next rn got deleted
 
     /* push the next key, value onto stack */
     key_tostr(rn->rn_key, saddr);
@@ -398,6 +438,9 @@ static int iter_masks(lua_State *L)
     } else if (rn == NULL || RDX_ISROOT(rn)) {
         return 0;                                  // we're done
 
+    } else if (! isvalid(rn)) {
+        return 0;                                  // rn got deleted
+
     } else {
         /* note: the mask is the key in a radix mask tree */
         numbytes = (size_t)IPT_KEYLEN(rn->rn_key);
@@ -420,6 +463,81 @@ static int iter_masks(lua_State *L)
     dbg_stack("out(2) ==>");
 
     return 2;                                      // [.., m l]
+}
+
+/*
+ * Iterate across adjacent prefixes that may be combined.
+ *
+ * returns array of {{kc, vc}, {k0, v0}, {k1, v1}}
+ */
+static int
+iter_merge(lua_State *L)
+{
+    dbg_stack("inc(.) <--");                   // [t pfx]
+
+    table_t *t = check_table(L, 1);
+    struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
+    entry_t *ebot;
+
+    char upper[MAX_STRKEY], bottom[MAX_STRKEY], super[MAX_STRKEY];
+    // char dbuf[MAX_STRKEY];
+    uint8_t netw[MAX_BINKEY], mask[MAX_BINKEY];
+    int mlen = 0;
+
+    if (rn == NULL) return 0;     /* all done */
+    if (! isvalid(rn)) return 0;  /* TODO: error handling */
+    if (! RDX_ISLEAF(rn)) return 0; /* dito */
+    if (RDX_ISROOT(rn)) return 0; /* all done */
+
+    if (rn->rn_mask == NULL) return 0;
+
+    /* search for combinable prefix */
+    int found = 0;
+    while (rn && !found) {
+        mlen = key_tolen(rn->rn_mask);
+        dbg_msg("topic is %s/%d", key_tostr(rn->rn_key, dbuf), mlen);
+        if (mlen == 1) return 0; // TODO: not combining to /0
+
+        /* get network address for rn_key for mlen-1 */
+        for (int i = 0; i <= IPT_KEYLEN(rn->rn_key) && i < MAX_BINKEY; i++)
+            netw[i] = rn->rn_key[i];
+        if (! key_bylen(KEY_AF_FAM(rn->rn_key), mlen-1, mask)) return 0;
+        dbg_msg("new mask         %s", key_tostr(mask, dbuf));
+        dbg_msg("netw before mask %s", key_tostr(netw, dbuf));
+        if (! key_network(netw, mask)) return 0;
+        dbg_msg("netw after  mask %s", key_tostr(netw, dbuf));
+        dbg_msg("rn->rn_key       %s", key_tostr(rn->rn_key, dbuf));
+        dbg_msg("key_cmp says     %d", key_cmp(rn->rn_key, netw));
+
+        if (key_cmp(rn->rn_key, netw) != 0) {
+            /* rn_key is upper half, so check for bottom half */
+            if (! key_tostr(netw, super)) return 0; // TODO: err hdlr
+            snprintf(bottom, sizeof(bottom), "%s/%d", super, mlen);
+            dbg_msg("upper  is %s/%d", key_tostr(rn->rn_key, dbuf), mlen);
+            dbg_msg("bottom is %s", bottom);
+            if ((ebot = tbl_get(t, bottom))) {
+                found = 1;
+                lua_pushfstring(L, "%s/%d", super, mlen-1);
+                lua_pushstring(L, bottom);
+                lua_pushfstring(L, "%s/%d", key_tostr(rn->rn_key, upper), mlen);
+            }
+        } else {
+            dbg_msg("%s/%d is bottom half", key_tostr(rn->rn_key, dbuf), mlen);
+        }
+
+
+        if (!found)
+            rn = rdx_nextleaf(rn);
+    }
+
+    /* tmp placeholder for real algorithm */
+    rn = rdx_nextleaf(rn);
+    lua_pushlightuserdata(L, rn);
+    lua_replace(L, lua_upvalueindex(1));
+
+    if (found) return 3;
+
+    return 0;
 }
 
 /*
@@ -450,10 +568,12 @@ iter_more(lua_State *L)
       return 0;
     }
 
-    dbg_msg("search %s/%d\n", key_tostr(addr, buf), key_tolen(mask));
+    dbg_msg("search msp %s/%d\n", key_tostr(addr, buf), key_tolen(mask));
+    dbg_msg("candidate  %s/%d\n", key_tostr(rn->rn_key, buf), key_tolen(rn->rn_mask));
     dbg_msg("    rn %p\n", (void*)rn);
 
     if (rn == NULL) return 0;  /* we're done */
+    if (!isvalid(rn)) return 0; /* TODO: error handling */
 
     /* check LEAF and duplicates for more specific prefixes */
     int matched = 0, done = 0;
@@ -509,6 +629,7 @@ iter_more(lua_State *L)
         } else if (matched) {
             lua_pushlightuserdata(L, rn);
             lua_replace(L, lua_upvalueindex(2));
+            dbg_msg("next candidate  %s/%d\n", key_tostr(rn->rn_key, buf), key_tolen(rn->rn_mask));
         }
     }
 
@@ -537,11 +658,17 @@ iter_radix(lua_State *L)
     dbg_msg(">> node %p, type %d", node, type);
 
     switch (type) {
-        case TRDX_NODE_HEAD: return push_rdx_node_head(L, node);
-        case TRDX_HEAD:      return push_rdx_head(L, node);
-        case TRDX_NODE:      return push_rdx_node(L, node);
-        case TRDX_MASK_HEAD: return push_rdx_mask_head(L, node);
-        case TRDX_MASK:      return push_rdx_mask(L, node);
+        case TRDX_NODE_HEAD:
+            return push_rdx_node_head(L, node);
+        case TRDX_HEAD:
+            return push_rdx_head(L, node);
+        case TRDX_NODE:
+            if (! isvalid(node)) return 0;         // rn got deleted
+            return push_rdx_node(L, node);
+        case TRDX_MASK_HEAD:
+            return push_rdx_mask_head(L, node);
+        case TRDX_MASK:
+            return push_rdx_mask(L, node);
     }
 
     dbg_msg(" `-> unhandled node type %d!", type);
@@ -1520,7 +1647,41 @@ int masks(lua_State *L) {
 
     dbg_stack("out(2) ==>");
 
-    return 2;                                        // [(iter)f (invariant)t]
+    return 2;                                        // [iter_f invariant]
+}
+
+/*
+ * ipt:merge(af)  <-- [t, af]
+ *
+ * Iterate across adjacent prefixes that may be combined
+ */
+static int
+merge(lua_State *L)
+{
+    dbg_stack("inc(.) <--");
+
+    struct radix_node *rn;
+    struct radix_node_head *head;
+    table_t *t = check_table(L, 1);
+    int af = lua_tointeger(L, 2);
+
+    if (af == AF_INET)
+        head = t->head4;
+    else if (af == AF_INET6)
+        head = t->head6;
+    else return iter_bail(L);
+
+    rn = rdx_firstleaf(&head->rh);
+
+    lua_pop(L, lua_gettop(L) - 1);            // [t]
+    lua_pushlightuserdata(L, rn);             // [t rn]
+    dbg_stack("firstleaf");
+    lua_pushcclosure(L, iter_merge, 1);       // [t f]
+    lua_rotate(L, 1, 1);                      // [f t]
+
+    dbg_stack("out(2) ==>");
+
+    return 2;                                 // [iter_f invariant]
 }
 
 static int

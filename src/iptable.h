@@ -55,8 +55,8 @@ typedef struct table_t {
 #define KEY_AF_FAM(k) \
     (KEY_IS_IP4(k) ? AF_INET : KEY_IS_IP6(k) ? AF_INET6 : AF_UNSPEC)
 
-// max size for key byte array (1+IPx_KEYLEN)
-#define MAX_BINKEY 1 + IP6_KEYLEN
+// binary key buffer = [LEN-byte IP6_KEYLEN] = 1 + 16 = 17
+#define MAX_BINKEY (1 + IP6_KEYLEN)
 // max size for string key (fits IP6 with /mask)
 #define MAX_STRKEY IP6_PFXSTRLEN
 // exact KEYBUF length by FAM
@@ -103,6 +103,7 @@ enum IPT_PROTOS {
 
 uint8_t *key_alloc(int);
 uint8_t *key_copy(uint8_t *);
+
 uint8_t *key_bystr(const char *, int *, int *, uint8_t *);
 uint8_t *key_bylen(int, int, uint8_t *);
 const char *key_tostr(void *, char *);
