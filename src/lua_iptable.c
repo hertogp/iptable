@@ -320,7 +320,7 @@ iter_hosts(lua_State *L)
     if (!check_binkey(L, lua_upvalueindex(2), stop, &slen)) return 0;
     if (key_cmp(next, stop) == 0) return 0;
 
-    key_tostr(next, buf);                               /* return cur val */
+    key_tostr(buf, next);                               /* return cur val */
     lua_pushstring(L, buf);
 
     key_incr(next);                                     /* setup next val */
@@ -355,7 +355,7 @@ iter_kv(lua_State *L)
     if (!isvalid(rn)) return 0;                 // next rn got deleted
 
     /* push the next key, value onto stack */
-    key_tostr(rn->rn_key, saddr);
+    key_tostr(saddr, rn->rn_key);
     lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [t k k']
     lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);        // [t k k' v']
 
@@ -445,7 +445,7 @@ static int iter_masks(lua_State *L)
     /* process current mask leaf node */
     mlen = key_tolen(rn->rn_key);              // contiguous masks only
     key_bylen(binmask, mlen, af);              // fresh mask due to deviating
-    key_tostr(binmask, strmask);               // keylen's of masks
+    key_tostr(strmask, binmask);               // keylen's of masks
 
     lua_pushstring(L, strmask);                // [t m]
     lua_pushinteger(L, mlen);                  // [t m l]
@@ -494,34 +494,34 @@ iter_merge(lua_State *L)
     int found = 0;
     while (rn && !found) {
         mlen = key_tolen(rn->rn_mask);
-        dbg_msg("topic is %s/%d", key_tostr(rn->rn_key, dbuf), mlen);
+        dbg_msg("topic is %s/%d", key_tostr(dbuf, rn->rn_key), mlen);
         if (mlen == 1) return 0; // TODO: not combining to /0
 
         /* get network address for rn_key for mlen-1 */
         for (int i = 0; i <= IPT_KEYLEN(rn->rn_key) && i < MAX_BINKEY; i++)
             netw[i] = rn->rn_key[i];
         if (! key_bylen(mask, mlen-1, KEY_AF_FAM(rn->rn_key))) return 0;
-        dbg_msg("new mask         %s", key_tostr(mask, dbuf));
-        dbg_msg("netw before mask %s", key_tostr(netw, dbuf));
+        dbg_msg("new mask         %s", key_tostr(dbuf, mask));
+        dbg_msg("netw before mask %s", key_tostr(dbuf, netw));
         if (! key_network(netw, mask)) return 0;
-        dbg_msg("netw after  mask %s", key_tostr(netw, dbuf));
-        dbg_msg("rn->rn_key       %s", key_tostr(rn->rn_key, dbuf));
+        dbg_msg("netw after  mask %s", key_tostr(dbuf, netw));
+        dbg_msg("rn->rn_key       %s", key_tostr(dbuf, rn->rn_key));
         dbg_msg("key_cmp says     %d", key_cmp(rn->rn_key, netw));
 
         if (key_cmp(rn->rn_key, netw) != 0) {
             /* rn_key is upper half, so check for bottom half */
-            if (! key_tostr(netw, super)) return 0; // TODO: err hdlr
+            if (! key_tostr(super, netw)) return 0; // TODO: err hdlr
             snprintf(bottom, sizeof(bottom), "%s/%d", super, mlen);
-            dbg_msg("upper  is %s/%d", key_tostr(rn->rn_key, dbuf), mlen);
+            dbg_msg("upper  is %s/%d", key_tostr(dbuf, rn->rn_key), mlen);
             dbg_msg("bottom is %s", bottom);
             if ((ebot = tbl_get(t, bottom))) {
                 found = 1;
                 lua_pushfstring(L, "%s/%d", super, mlen-1);
                 lua_pushstring(L, bottom);
-                lua_pushfstring(L, "%s/%d", key_tostr(rn->rn_key, upper), mlen);
+                lua_pushfstring(L, "%s/%d", key_tostr(upper, rn->rn_key), mlen);
             }
         } else {
-            dbg_msg("%s/%d is bottom half", key_tostr(rn->rn_key, dbuf), mlen);
+            dbg_msg("%s/%d is bottom half", key_tostr(dbuf, rn->rn_key), mlen);
         }
 
 
@@ -567,8 +567,8 @@ iter_more(lua_State *L)
       return 0;
     }
 
-    dbg_msg("search msp %s/%d\n", key_tostr(addr, buf), key_tolen(mask));
-    dbg_msg("candidate  %s/%d\n", key_tostr(rn->rn_key, buf), key_tolen(rn->rn_mask));
+    dbg_msg("search msp %s/%d\n", key_tostr(buf, addr), key_tolen(mask));
+    dbg_msg("candidate  %s/%d\n", key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask));
     dbg_msg("    rn %p\n", (void*)rn);
 
     if (rn == NULL) return 0;  /* we're done */
@@ -583,7 +583,7 @@ iter_more(lua_State *L)
             && rn->rn_bit <= maxb
             && key_isin(addr, rn->rn_key, mask)) {
 
-            if (! key_tostr(rn->rn_key, buf)) return 0;
+            if (! key_tostr(buf, rn->rn_key)) return 0;
             lua_pushfstring(L, "%s/%d", buf, key_tolen(rn->rn_mask));
             matched = 1;
         }
@@ -628,7 +628,7 @@ iter_more(lua_State *L)
         } else if (matched) {
             lua_pushlightuserdata(L, rn);
             lua_replace(L, lua_upvalueindex(2));
-            dbg_msg("next candidate  %s/%d\n", key_tostr(rn->rn_key, buf), key_tolen(rn->rn_mask));
+            dbg_msg("next candidate  %s/%d\n", key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask));
         }
     }
 
@@ -804,8 +804,8 @@ push_rdx_node(lua_State *L, struct radix_node *rn)
 
     if(RDX_ISLEAF(rn)) {
       iptL_push_int(L, "_LEAF_", 1);
-      iptL_push_fstr(L, "rn_key", "%s", key_tostr(rn->rn_key, key));
-      iptL_push_fstr(L, "rn_mask", "%s", key_tostr(rn->rn_mask, key));
+      iptL_push_fstr(L, "rn_key", "%s", key_tostr(key, rn->rn_key));
+      iptL_push_fstr(L, "rn_mask", "%s", key_tostr(key, rn->rn_mask));
       iptL_push_fstr(L, "rn_dupedkey", "%p", rn->rn_dupedkey);
 
       /* additional diagnostics */
@@ -922,7 +922,7 @@ push_rdx_mask(lua_State *L, struct radix_mask *rm)
 
     } else {
       iptL_push_int(L, "_INTERNAL_", 1);
-      iptL_push_fstr(L, "rm_mask", "%s", key_tostr(rm->rm_mask, key));
+      iptL_push_fstr(L, "rm_mask", "%s", key_tostr(key, rm->rm_mask));
     }
 
     dbg_stack("out(1) ==>");
@@ -993,7 +993,7 @@ ipt_tostr(lua_State *L)
 
     if (!check_binkey(L, 1, key, &len)) return 0;
     if (len != (size_t)IPT_KEYLEN(key)) return 0; // illegal binary
-    if (key_tostr(key, str) == NULL) return 0;
+    if (key_tostr(str, key) == NULL) return 0;
 
     lua_pushstring(L, str);
 
@@ -1068,7 +1068,7 @@ ipt_address(lua_State *L)
     pfx = check_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (! key_bylen(mask, mlen, af)) return 0;
-    if (! key_tostr(addr, buf)) return 0;
+    if (! key_tostr(buf, addr)) return 0;
 
     lua_pushstring(L, buf);
     lua_pushinteger(L, mlen);
@@ -1096,7 +1096,7 @@ ipt_network(lua_State *L)
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_network(addr, mask)) return 0;
-    if (! key_tostr(addr, buf)) return 0;
+    if (! key_tostr(buf, addr)) return 0;
 
     lua_pushstring(L, buf);
     lua_pushinteger(L, mlen);
@@ -1123,7 +1123,7 @@ ipt_broadcast(lua_State *L)
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_broadcast(addr, mask)) return 0;
-    if (! key_tostr(addr, buf)) return 0;
+    if (! key_tostr(buf, addr)) return 0;
 
     lua_pushstring(L, buf);
     lua_pushinteger(L, mlen);
@@ -1161,7 +1161,7 @@ ipt_mask(lua_State *L)
     if (! isnum) return 0;
     if (! key_bylen(mask, mlen < 0 ? -mlen : mlen, af)) return 0;
     if (mlen < 0 && ! key_invert(mask)) return 0;
-    if (! key_tostr(mask, buf)) return 0;
+    if (! key_tostr(buf, mask)) return 0;
 
     lua_pushstring(L, buf);
 
@@ -1533,7 +1533,7 @@ less(lua_State *L)
     lua_pop(L, lua_gettop(L) - 1);                        // [t]
 
     if (! key_bystr(addr, &mlen, &af, pfx)) return iter_bail(L);
-    if (! key_tostr(addr, buf)) return iter_bail(L);
+    if (! key_tostr(buf, addr)) return iter_bail(L);
 
     if (af == AF_INET)
       mlen = mlen < 0 ? IP4_MAXMASK : mlen;
@@ -1607,7 +1607,7 @@ int masks(lua_State *L) {
         rn = rn->rn_dupedkey;
     if (!RDX_ISROOT(rn) && rn->rn_bit == -1) {
         key_bylen(binmask, 0, af);
-        key_tostr(binmask, strmask);
+        key_tostr(strmask, binmask);
     } else {
         strmask[0] = '\0';
     }

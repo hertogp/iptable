@@ -176,28 +176,23 @@ int key_tolen(void *key)
 }
 
 const char *
-key_tostr(void *k, char *s)
+key_tostr(char *dst, void *src)
 {
     /*
-     * k is byte array; 1st byte is usually total length of the array.
+     * src is byte array; 1st byte is usually total length of the array.
      *   - iptable.c keys/masks are uint8_t *'s (unsigned)
      *   - radix.c keys/masks  are char *'s. (may be signed; sys dependent)
      *   - radix.c keys/masks's KEYLEN may deviate: for masks it may indicate
      *     the total of non-zero bytes i/t array instead of its total length.
      */
-    char *key = k;
+    char *key = src;
 
-    if (s == NULL || k == NULL) return NULL;
+    if (dst == NULL || src == NULL) return NULL;
 
     if(IPT_KEYLEN(key) > IP4_KEYLEN+1)
-        return inet_ntop(AF_INET6, IPT_KEYPTR(key), s, INET6_ADDRSTRLEN);
+        return inet_ntop(AF_INET6, IPT_KEYPTR(key), dst, INET6_ADDRSTRLEN);
 
-    return inet_ntop(AF_INET, IPT_KEYPTR(key), s, INET_ADDRSTRLEN);
-
-    /* if(KEY_IS_IP6(key)) { */
-    /*     return inet_ntop(AF_INET6, IPT_KEYPTR(key), s, INET6_ADDRSTRLEN); */
-    /* } */
-    /* return inet_ntop(AF_INET, IPT_KEYPTR(key), s, INET_ADDRSTRLEN); */
+    return inet_ntop(AF_INET, IPT_KEYPTR(key), dst, INET_ADDRSTRLEN);
 }
 
 int
@@ -342,7 +337,7 @@ void _dumprn(const char *s, struct radix_node *rn)
     printf("%10s rn @ %p", s, (void*)rn);
     if(rn!=NULL) {
         if(RDX_ISLEAF(rn)) {
-            printf(" %s", key_tostr(rn->rn_key, dbuf));
+            printf(" %s", key_tostr(dbuf, rn->rn_key));
             printf("/%d", key_tolen(rn->rn_mask));
             printf(", keylen %d", IPT_KEYLEN(rn->rn_key));
         }

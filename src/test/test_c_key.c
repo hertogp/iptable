@@ -373,7 +373,7 @@ test_key_bylen_good(void)
 
     // ipv4 masks
 
-    if (key_bylen(AF_INET, 0, addr)) {
+    if (key_bylen(addr, 0, AF_INET)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0x00);  // 0
         mu_true(*(addr+2) == 0x00);  // 0
@@ -381,7 +381,7 @@ test_key_bylen_good(void)
         mu_true(*(addr+4) == 0x00);  // 0
     }
 
-    if (key_bylen(AF_INET, 1, addr)) {
+    if (key_bylen(addr, 1, AF_INET)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0x80);  // 128
         mu_true(*(addr+2) == 0x00);  // 0
@@ -389,7 +389,7 @@ test_key_bylen_good(void)
         mu_true(*(addr+4) == 0x00);  // 0
     }
 
-    if (key_bylen(AF_INET, 9, addr)) {
+    if (key_bylen(addr, 9, AF_INET)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0xff);  // 255
         mu_true(*(addr+2) == 0x80);  // 128
@@ -397,7 +397,7 @@ test_key_bylen_good(void)
         mu_true(*(addr+4) == 0x00);  // 0
     }
 
-    if (key_bylen(AF_INET, 24, addr)) {
+    if (key_bylen(addr, 24, AF_INET)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0xff);  // 255
         mu_true(*(addr+2) == 0xff);  // 255
@@ -405,7 +405,7 @@ test_key_bylen_good(void)
         mu_true(*(addr+4) == 0x00);  //   0
     }
 
-    if (key_bylen(AF_INET, 30, addr)) {
+    if (key_bylen(addr, 30, AF_INET)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0xff);  // 255
         mu_true(*(addr+2) == 0xff);  // 255
@@ -413,7 +413,7 @@ test_key_bylen_good(void)
         mu_true(*(addr+4) == 0xfc);  // 252
     }
 
-    if (key_bylen(AF_INET, 31, addr)) {
+    if (key_bylen(addr, 31, AF_INET)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0xff);  // 255
         mu_true(*(addr+2) == 0xff);  // 255
@@ -421,7 +421,7 @@ test_key_bylen_good(void)
         mu_true(*(addr+4) == 0xfe);  // 254
     }
 
-    if (key_bylen(AF_INET, 32, addr)) {
+    if (key_bylen(addr, 32, AF_INET)) {
         mu_true(*(addr+0) == 0x05);  // length byte
         mu_true(*(addr+1) == 0xff);  // 255
         mu_true(*(addr+2) == 0xff);  // 255
@@ -438,24 +438,24 @@ test_key_bylen_bad(void)
 
     // invalid ipv4 masks
 
-    addr = key_bylen(AF_INET, -32, buf);
+    addr = key_bylen(buf, -32, AF_INET);
     mu_true(addr == NULL);
 
-    addr = key_bylen(AF_INET, 33, buf);
+    addr = key_bylen(buf, 33, AF_INET);
     mu_true(addr == NULL);
 
-    addr = key_bylen(AF_INET, 64, buf);
+    addr = key_bylen(buf, 64, AF_INET);
     mu_true(addr == NULL);
 
     // invalid ipv6 masks
 
-    addr = key_bylen(AF_INET6, -128, buf);
+    addr = key_bylen(buf, -128, AF_INET6);
     mu_true(addr == NULL);
 
-    addr = key_bylen(AF_INET6, 129, buf);
+    addr = key_bylen(buf, 129, AF_INET6);
     mu_true(addr == NULL);
 
-    addr = key_bylen(AF_INET6, 256, buf);
+    addr = key_bylen(buf, 256, AF_INET6);
     mu_true(addr == NULL);
 }
 
@@ -597,19 +597,19 @@ test_key_tostr_good(void)
 
     snprintf(sp, IP6_PFXSTRLEN, "0.0.0.0");
     key_bystr(addr, &mlen, &af, sp);
-    mu_true(key_tostr(addr, buf));
+    mu_true(key_tostr(buf, addr));
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
 
     snprintf(sp, IP6_PFXSTRLEN, "1.128.192.255");
     key_bystr(addr, &mlen, &af, sp);
-    mu_true(key_tostr(addr, buf));
+    mu_true(key_tostr(buf, addr));
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
 
     snprintf(sp, IP6_PFXSTRLEN, "255.255.255.255");
     key_bystr(addr, &mlen, &af, sp);
-    mu_true(key_tostr(addr, buf));
+    mu_true(key_tostr(buf, addr));
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
 
@@ -617,7 +617,7 @@ test_key_tostr_good(void)
     snprintf(sp, IP6_PFXSTRLEN, "0xa.0xb.014.015");
     key_bystr(addr, &mlen, &af, sp);
     snprintf(sp, IP6_PFXSTRLEN, "10.11.12.13");
-    mu_true(key_tostr(addr, buf));
+    mu_true(key_tostr(buf, addr));
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
 
@@ -625,7 +625,7 @@ test_key_tostr_good(void)
     snprintf(sp, IP6_PFXSTRLEN, "0xa.0xb");
     key_bystr(addr, &mlen, &af, sp);
     snprintf(sp, IP6_PFXSTRLEN, "10.11.0.0");
-    mu_true(key_tostr(addr, buf));
+    mu_true(key_tostr(buf, addr));
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
 
@@ -633,7 +633,7 @@ test_key_tostr_good(void)
     snprintf(sp, IP6_PFXSTRLEN, "1.2.3.4/32");
     key_bystr(addr, &mlen, &af, sp);
     snprintf(sp, IP6_PFXSTRLEN, "1.2.3.4");
-    mu_true(key_tostr(addr, buf));
+    mu_true(key_tostr(buf, addr));
     mu_true(mlen == 32);
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
@@ -644,7 +644,7 @@ test_key_tostr_good(void)
     snprintf(sp, IP6_PFXSTRLEN, "2f:aa:00:00:00::");
     key_bystr(addr, &mlen, &af, sp);
     snprintf(sp, IP6_PFXSTRLEN, "2f:aa::");
-    mu_true(key_tostr(addr, buf));
+    mu_true(key_tostr(buf, addr));
     mu_eq(-1, mlen, "%i");
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
@@ -653,7 +653,7 @@ test_key_tostr_good(void)
     snprintf(sp, IP6_PFXSTRLEN, "2f:aa:00:00:00:aa::");
     key_bystr(addr, &mlen, &af, sp);
     snprintf(sp, IP6_PFXSTRLEN, "2f:aa::aa:0:0");
-    mu_true(key_tostr(addr, buf));
+    mu_true(key_tostr(buf, addr));
     mu_eq(-1, mlen, "%i");
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
