@@ -99,6 +99,8 @@ enum IPT_PROTOS {
 
 // -- PROTOTYPES
 
+void _dumprn(const char *s, struct radix_node *rn);
+
 // -- key funcs
 
 uint8_t *key_alloc(int);

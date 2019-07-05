@@ -392,6 +392,9 @@ iter_less(lua_State *L)
       snprintf(buf, sizeof(buf), "%s/%d", pfx, mlen);
       buf[MAX_STRKEY-1] = '\0';
 
+      /* TODO: return actual prefix found, not sought which does not have the
+       * key applied (yet)
+       */
       if (tbl_get(t, buf)) {
         lua_pushstring(L, buf);
         lua_pushinteger(L, mlen-1);
@@ -414,51 +417,40 @@ static int iter_masks(lua_State *L)
 {
     dbg_stack("inc(.) <--");                       // [t m']
 
-    uint8_t binmask[MAX_BINKEY];
-    char strmask[MAX_STRKEY];
     struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
     int af = lua_tointeger(L, lua_upvalueindex(2));
-    int zeromaskp = lua_tointeger(L, lua_upvalueindex(3));
-    size_t numbytes = 0;
+    const char *zeromask = lua_tostring(L, lua_upvalueindex(3));
+    uint8_t binmask[MAX_BINKEY];
+    char strmask[MAX_STRKEY];
+    int mlen;
 
     lua_pop(L, 1);                                 // [t]
-    /* a proper byte array for the mask */
-    for (int i = 0; i < MAX_BINKEY; i++)
-        binmask[i] = 0;
-    *binmask = FAM_KEYLEN(af);
 
-    if (zeromaskp) {
-        /* yield zeromask (once) as a first result */
-        key_tostr(binmask, strmask);
-        lua_pushstring(L, strmask);                // [t m]
-        lua_pushinteger(L, 0);                     // [t m 0 0]
-        lua_pushinteger(L, 0);                     // reset zeromaskp flag
-        lua_replace(L, lua_upvalueindex(3));       // [t m 0]
-
-    } else if (rn == NULL || RDX_ISROOT(rn)) {
-        return 0;                                  // we're done
-
-    } else if (! isvalid(rn)) {
-        return 0;                                  // rn got deleted
-
-    } else {
-        /* note: the mask is the key in a radix mask tree */
-        numbytes = (size_t)IPT_KEYLEN(rn->rn_key);
-        if (numbytes > MAX_BINKEY) {
-            lua_pushliteral(L, "masks(): encounted an illegal mask");
-            lua_error(L);
-        }
-        memcpy(binmask, rn->rn_key, numbytes);
-        *binmask = FAM_KEYLEN(af);                 // ensure proper AF length
-        key_tostr(binmask, strmask);
-        lua_pushstring(L, strmask);                // [t m]
-        lua_pushinteger(L, key_tolen(rn->rn_key)); // [t m l]
-
-        /* get next leaf (mask) node */
-        rn = rdx_nextleaf(rn);
-        lua_pushlightuserdata(L, rn);              // [t m l rn]
-        lua_replace(L, lua_upvalueindex(1));       // [t m l]
+    /* return zeromask as first result, if available */
+    if (zeromask && strlen(zeromask)) {
+        lua_pushstring(L, zeromask);
+        lua_pushinteger(L, 0);
+        /* once is enough */
+        lua_pushliteral(L, "");
+        lua_replace(L, lua_upvalueindex(3));
+        return 2;
     }
+
+    if (rn == NULL || !isvalid(rn) || RDX_ISROOT(rn))
+        return 0;          // we're done (or next rn was deleted ...)
+
+    /* process current mask leaf node */
+    mlen = key_tolen(rn->rn_key);              // contiguous masks only
+    key_bylen(af, mlen, binmask);              // fresh mask due to deviating
+    key_tostr(binmask, strmask);               // keylen's of masks
+
+    lua_pushstring(L, strmask);                // [t m]
+    lua_pushinteger(L, mlen);                  // [t m l]
+
+    /* get next leaf (mask) node */
+    rn = rdx_nextleaf(rn);
+    lua_pushlightuserdata(L, rn);              // [t m l rn]
+    lua_replace(L, lua_upvalueindex(1));       // [t m l]
 
     dbg_stack("out(2) ==>");
 
@@ -480,7 +472,11 @@ iter_merge(lua_State *L)
     entry_t *ebot;
 
     char upper[MAX_STRKEY], bottom[MAX_STRKEY], super[MAX_STRKEY];
-    // char dbuf[MAX_STRKEY];
+
+#ifdef DEBUG
+    char dbuf[MAX_STRKEY];
+#endif
+
     uint8_t netw[MAX_BINKEY], mask[MAX_BINKEY];
     int mlen = 0;
 
@@ -1224,17 +1220,19 @@ ipt_iter_hosts(lua_State *L)
 
 // iptable instance methods
 
+/*
+ * Garbage collect the table: free all resources
+ */
 static int
 _gc(lua_State *L) {
-    // __gc: utterly destroy the table
     dbg_stack("inc(.) <--");
 
-    table_t *ud = check_table(L, 1);
-    tbl_destroy(&ud, L);
+    table_t *t = check_table(L, 1);
+    tbl_destroy(&t, L);
 
     dbg_stack("out(0) ==>");
 
-    return 0;  // Lua owns the memory for the pointer to-> *ud
+    return 0;
 }
 
 static int
@@ -1610,12 +1608,12 @@ int masks(lua_State *L) {
 
     dbg_stack("inc(.) <--");                         // [t af]
 
-    uint8_t binkey[MAX_BINKEY];
-    char strkey[MAX_STRKEY];
+    uint8_t binmask[MAX_BINKEY];
+    char strmask[MAX_STRKEY];
 
-    struct radix_head *rh;
+    struct radix_node_head *rnh;
     struct radix_node *rn;
-    int isnum = 0, af = AF_UNSPEC, zeromaskp = 0;
+    int isnum = 0, af = AF_UNSPEC;
     table_t *t = check_table(L, 1);
 
     if (lua_gettop(L) != 2)
@@ -1626,22 +1624,37 @@ int masks(lua_State *L) {
         return iter_bail(L);                         // bad AF_family
     lua_pop(L, 1);                                   // [t]
 
-    rh = (af == AF_INET) ? &t->head4->rh : &t->head6->rh;
+    rnh = (af == AF_INET) ? t->head4 : t->head6;
 
-    /* explicit check for /0 mask in af family's radix tree */
-    key_bylen(af, 0, binkey);
-    key_tostr(binkey, strkey);
-    int slen = strlen(strkey);
-    snprintf(strkey+slen, 3, "/%d", 0);
-    zeromaskp = tbl_get(t, strkey) != NULL;
+    /*
+     * Do an explicit check for a /0 mask in af_family's key-radix tree
+     *
+     * The mask_tree stores all the masks used in the radix tree (for actual
+     * keys), except for the /0 mask itself. Its use is only visible as the
+     * last dupedkey key child of the left-end marker having rn_bit == -1.
+     * (i.e. -1 - networkindex (of 0) == -1).
+     *
+     */
+    rn = &rnh->rnh_nodes[0];
+    while (rn->rn_dupedkey)
+        rn = rn->rn_dupedkey;
+    if (!RDX_ISROOT(rn) && rn->rn_bit == -1) {
+        key_bylen(af, 0, binmask);
+        key_tostr(binmask, strmask);
+    } else {
+        strmask[0] = '\0';
+    }
 
-    /* find first leaf in mask tree */
-    rn = rdx_firstleaf(&rh->rnh_masks->head);
-    if (rn == NULL && zeromaskp == 0) return iter_bail(L);  // t empty
-
+    /*
+     * find first leaf in mask tree, maybe NULL if all that is stored in the
+     * tree is a single, explicit 0/0 entry in which case only the zero-mask
+     * needs to be returned by iter_masks
+     *
+     */
+    rn = rdx_firstleaf(&rnh->rh.rnh_masks->head);
     lua_pushlightuserdata(L, rn);                    // [t rn]
     lua_pushinteger(L, af);                          // [t rn af]
-    lua_pushinteger(L, zeromaskp);                   // [t rn af zm]
+    lua_pushstring(L, strmask);                      // [t rn af zm]
     lua_pushcclosure(L, iter_masks, 3);              // [t f]
     lua_rotate(L, 1, 1);                             // [f t]
 

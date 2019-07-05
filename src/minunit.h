@@ -39,11 +39,11 @@ const char *MU_FUNC=NULL;
 // TEST MACRO's
 
 #define mu_equal(a, b, fmt, ...) \
-    do { if (a == b) MU_OK else MU_FAIL(fmt, ##__VA_ARGS__); } while(0)
+    do { if ((a) == (b)) MU_OK else MU_FAIL(fmt, ##__VA_ARGS__); } while(0)
 
 // fmt is format specifier required for complaint string
 #define mu_eq(a, b, fmt) \
-    do { if (a == b) MU_OK else MU_FAIL("expected " fmt ", got " fmt, a, b); } while(0)
+    do { if ((a) == (b)) MU_OK else MU_FAIL("expected " fmt ", got " fmt, a, b); } while(0)
 
 #define mu_assert(exp) \
     do { if (exp) MU_OK else MU_FAIL("assertion error '%s'", #exp)} while (0)

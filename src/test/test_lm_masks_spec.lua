@@ -105,7 +105,7 @@ describe("t:masks(af): ", function()
       for mlen=0, 32 do t[F("1.1.1.1/%s", mlen)] = mlen end
 
       cnt = 0
-      for mask in t:masks(AF_INET) do cnt = cnt + 1 end
+      for mask, mlen in t:masks(AF_INET) do cnt = cnt + 1 end
       assert.are_equal(33, cnt);
     end)
 

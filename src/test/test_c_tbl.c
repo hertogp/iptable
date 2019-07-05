@@ -48,7 +48,7 @@ int *mk_data(int num) {
 
 void purge(void *args, void **dta)
 {
-  // mandatory user purge data callback func
+  // user purge data callback func
   // args not needed to free dta (in this case)
   args = args ? args : args;  // no 'unused' args
   if (*dta) free(*dta);

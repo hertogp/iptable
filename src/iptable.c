@@ -335,6 +335,25 @@ key_isin(void *a, void *b, void *m)
 }
 
 // radix node functions
+void _dumprn(const char *s, struct radix_node *rn)
+{
+    char dbuf[MAX_STRKEY];
+    printf("%10s rn @ %p", s, (void*)rn);
+    if(rn!=NULL) {
+        if(RDX_ISLEAF(rn)) {
+            printf(" %s", key_tostr(rn->rn_key, dbuf));
+            printf("/%d", key_tolen(rn->rn_mask));
+            printf(", keylen %d", IPT_KEYLEN(rn->rn_key));
+        }
+        printf(", isroot %d", rn->rn_flags & RNF_ROOT);
+        printf(", isleaf %d", RDX_ISLEAF(rn));
+        printf(", isNORM %d", rn->rn_flags & RNF_NORMAL);
+        printf(", flags  %d", rn->rn_flags);
+        printf(", rn_bit %d", rn->rn_bit);
+    }
+    printf("\n");
+
+}
 
 int
 rdx_flush(struct radix_node *rn, void *args)
@@ -366,6 +385,7 @@ rdx_flush(struct radix_node *rn, void *args)
  * using prefix/0.  Hence, the /0 mask won't be found by this function.
  *
  */
+
 struct radix_node *
 rdx_firstleaf(struct radix_head *rh)
 {
@@ -374,18 +394,25 @@ rdx_firstleaf(struct radix_head *rh)
 
     if (rh == NULL) return NULL;
 
-    rn = rh->rnh_treetop;
-    while(rn->rn_bit >= 0)
+    /* goto treetop's left */
+    rn = rh->rnh_treetop->rn_left;
+
+    while(! RDX_ISLEAF(rn))
         rn = rn->rn_left;
 
-    while(RDX_ISRIGHT_CHILD(rn))
-        rn = rn->rn_parent;
+    /* if 1 or more 0/msk's were inserted, return the first one */
+    if(rn->rn_dupedkey)
+        return rn->rn_dupedkey;
 
-    for(rn = rn->rn_parent->rn_right; rn->rn_bit >=0;)
+    /* otherwise, go up & right and then go straight left */
+    rn = rn->rn_parent->rn_right;
+    while(!RDX_ISLEAF(rn))
         rn = rn->rn_left;
 
-    if(RDX_ISROOT(rn)) return NULL;
-    // if(RDX_ISROOT(rn)) rn = rn->rn_dupedkey;
+    /* if now at right-end marker, it may have a dupedkey (max 1),
+     * if not we're done anyway since the tree is empty otherwise */
+    if(RDX_ISROOT(rn) && RDX_ISLEAF(rn))
+        rn = rn->rn_dupedkey;
 
     return rn;
 }
@@ -393,19 +420,45 @@ rdx_firstleaf(struct radix_head *rh)
 struct radix_node *
 rdx_nextleaf(struct radix_node *rn)
 {
-    // find next leaf, given a leaf
-    if (rn == NULL) return NULL;
+    /* given a leaf, find next leaf */
 
-    if (rn->rn_dupedkey)
+    if (rn == NULL || !RDX_ISLEAF(rn)) return NULL;
+
+    /*
+     * Edge case: the right-end marker may have a dupedkey.
+     *
+     * The right-end marker is the only (root)leaf with a keylen of 255 since
+     * the key, including its keylen byte, is all-ones.  It takes a full mask
+     * to create a 'normal' leaf with the all-broadcast address, hence the
+     * right-end marker root-leaf can have at most 1 dupedkey child.
+     *
+     */
+
+    if(RDX_ISLEAF(rn->rn_parent)
+            && RDX_ISROOT(rn->rn_parent)
+            && 0xff == (0xff & IPT_KEYLEN(rn->rn_parent->rn_key))) {
+        return NULL;
+    }
+
+    /* return the (less specific dupedkey(s), if any */
+    if (RDX_ISLEAF(rn) && rn->rn_dupedkey)
         return rn->rn_dupedkey;
 
-    while(RDX_ISRIGHT_CHILD(rn))
+    /* go back to start of dupedkey-chain */
+    while(RDX_ISLEAF(rn->rn_parent))
         rn = rn->rn_parent;
 
+    /* go up while rn is a right child */
+    while(!RDX_ISLEAF(rn->rn_parent) && RDX_ISRIGHT_CHILD(rn))
+        rn = rn->rn_parent;
+
+    /* go up&right, then straight left */
     for(rn = rn->rn_parent->rn_right; !RDX_ISLEAF(rn);)
       rn = rn->rn_left;
 
-    if (RDX_ISROOT(rn)) rn = NULL;
+    /* if at RightEnd-marker, return dupedkey if any */
+    if (rn && RDX_ISROOT(rn) && RDX_ISLEAF(rn))
+        rn = rn->rn_dupedkey;
 
     return rn;
 }
@@ -548,11 +601,14 @@ tbl_walk(table_t *t, walktree_f_t *f, void *fargs)
    return 1;
 }
 
+/*
+ * Destroy table, free all resources owned by table and user
+ * - return 1 on success, 0 on failure
+ *
+ */
 int
 tbl_destroy(table_t **t, void *pargs)
 {
-    // utterly destroy the entire table; 1 on success, 0 on errors
-
     purge_t args;  // args to flush radix nodes & free userdata
 
     if (t == NULL || *t == NULL) return 0;  // nothing to free
@@ -564,11 +620,22 @@ tbl_destroy(table_t **t, void *pargs)
     // clear ipv4 table
     args.head = (*t)->head4;
     (*t)->head4->rnh_walktree(&(*t)->head4->rh, rdx_flush, &args);
+
+    /* walktree misses out on RightEnd-marker's dupedkey, of which it can 
+     * have only 1
+     * */
+    if((*t)->head4->rnh_nodes[2].rn_dupedkey)
+        rdx_flush((*t)->head4->rnh_nodes[2].rn_dupedkey, &args);
+
     rn_detachhead((void **)&(*t)->head4);
 
     // clear ipv6 table
     args.head = (*t)->head6;
     (*t)->head6->rnh_walktree(&(*t)->head6->rh, rdx_flush, &args);
+
+    /* walktree misses RightEnd-marker's dupedkey */
+    if ((*t)->head6->rnh_nodes[2].rn_dupedkey)
+        rdx_flush(((*t)->head6->rnh_nodes)[2].rn_dupedkey, &args);
     rn_detachhead((void **)&(*t)->head6);
 
     // clear the stack
