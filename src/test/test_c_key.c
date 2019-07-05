@@ -152,7 +152,7 @@ test_key_bystr_good(void)
 
     // ipv4 with mask
     str = mk_strptr("10.10.10.0/24");
-    key_bystr(str, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == 24);
     mu_true(addr != NULL);
     mu_true(af == AF_INET);
@@ -165,7 +165,7 @@ test_key_bystr_good(void)
 
     // ipv4 without mask
     str = mk_strptr("10.10.10.0");
-    key_bystr(str, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == -1);
     mu_true(addr != NULL);
     mu_true(af == AF_INET);
@@ -178,7 +178,7 @@ test_key_bystr_good(void)
 
     // ipv4 hexadecimal notation
     str = mk_strptr("0xa.0xa.0xa.0");
-    key_bystr(str, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == -1);
     mu_true(addr != NULL);
     mu_true(af == AF_INET);
@@ -191,7 +191,7 @@ test_key_bystr_good(void)
 
     // ipv4 octal notation
     str = mk_strptr("012.012.012.00");
-    key_bystr(str, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == -1);
     mu_true(addr != NULL);
     mu_true(af == AF_INET);
@@ -213,13 +213,13 @@ test_key_bystr_bad(void)
     // -- ipv4 with bad masks
 
     str = mk_strptr("10.10.10.0/33");
-    addr = key_bystr(str, &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, str);
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
     free(str);
 
     str = mk_strptr("10.10.10.0/-1");
-    addr = key_bystr(str, &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, str);
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
     free(str);
@@ -228,58 +228,58 @@ test_key_bystr_bad(void)
 
     // base 10 notation
     str = mk_strptr("256.10.10.0/32");
-    addr = key_bystr(str, &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, str);
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
     free(str);
 
     // too many digits
     str = mk_strptr("1.2.3.4.5/32");
-    addr = key_bystr(str, &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, str);
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
     free(str);
 
     // malformed digits (trailing dots)
     str = mk_strptr("1.2.3./32");
-    addr = key_bystr(str, &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, str);
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
     free(str);
 
     // malformed digits (embedded letter
     str = mk_strptr("1a.2.3.4/32");
-    addr = key_bystr(str, &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, str);
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
     free(str);
 
     // bad hexadecimal notation
     str = mk_strptr("0x0g.0x0a.0x0a.0/24");
-    addr = key_bystr(str, &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, str);
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
     free(str);
 
     // bad octal notation
     str = mk_strptr("008.10.10.0/24");
-    addr = key_bystr(str, &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, str);
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
     free(str);
 
     // empty string
-    addr = key_bystr("", &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, "");
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
 
     // empty string
-    addr = key_bystr("a_name", &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, "a_name");
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
 
     // NULL
-    addr = key_bystr(NULL, &mlen, &af, buf);
+    addr = key_bystr(buf, &mlen, &af, NULL);
     mu_true(addr == NULL);
     mu_true(af == AF_UNSPEC);
 
@@ -295,7 +295,7 @@ test_key_bystr_shorthand_good(void)
     // ipv4 with mask
 
     str = mk_strptr("10/8");
-    key_bystr(str, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == 8);
     mu_true(af == AF_INET);
     mu_true(*(addr+0) == 0x05);  // length byte
@@ -307,7 +307,7 @@ test_key_bystr_shorthand_good(void)
 
     // no automasking of the key
     str = mk_strptr("10.10/8");
-    key_bystr(str, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == 8);
     mu_true(af == AF_INET);
     mu_true(*(addr+0) == 0x05);  // length byte
@@ -318,7 +318,7 @@ test_key_bystr_shorthand_good(void)
     free(str);
 
     str = mk_strptr("10.10/14");
-    key_bystr(str, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == 14);
     mu_true(af == AF_INET);
     mu_true(*(addr+0) == 0x05);  // length byte
@@ -329,7 +329,7 @@ test_key_bystr_shorthand_good(void)
     free(str);
 
     str = mk_strptr("10.10/24");
-    key_bystr(str, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == 24);
     mu_true(af == AF_INET);
     mu_true(*(addr+0) == 0x05);  // length byte
@@ -343,7 +343,7 @@ test_key_bystr_shorthand_good(void)
     // 10 -> 10.0.0.0
 
     str = mk_strptr("10");
-    key_bystr(str, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == -1);
     mu_true(af == AF_INET);
     mu_true(*(addr+0) == 0x05);  // length byte
@@ -355,7 +355,7 @@ test_key_bystr_shorthand_good(void)
 
     // 10.10 -> 10.10.0.0, not 10.0.0.10
     str = mk_strptr("10.10");
-    key_bystr(str, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == -1);
     mu_true(af == AF_INET);
     mu_true(*(addr+0) == 0x05);  // length byte
@@ -596,26 +596,26 @@ test_key_tostr_good(void)
     char sp[IP6_PFXSTRLEN];   // dito
 
     snprintf(sp, IP6_PFXSTRLEN, "0.0.0.0");
-    key_bystr(sp, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, sp);
     mu_true(key_tostr(addr, buf));
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
 
     snprintf(sp, IP6_PFXSTRLEN, "1.128.192.255");
-    key_bystr(sp, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, sp);
     mu_true(key_tostr(addr, buf));
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
 
     snprintf(sp, IP6_PFXSTRLEN, "255.255.255.255");
-    key_bystr(sp, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, sp);
     mu_true(key_tostr(addr, buf));
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
 
     // octal and/or hexadecimal turns into normal dotted quad
     snprintf(sp, IP6_PFXSTRLEN, "0xa.0xb.014.015");
-    key_bystr(sp, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, sp);
     snprintf(sp, IP6_PFXSTRLEN, "10.11.12.13");
     mu_true(key_tostr(addr, buf));
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
@@ -623,7 +623,7 @@ test_key_tostr_good(void)
 
     // shorthand turns into normal dotted quad
     snprintf(sp, IP6_PFXSTRLEN, "0xa.0xb");
-    key_bystr(sp, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, sp);
     snprintf(sp, IP6_PFXSTRLEN, "10.11.0.0");
     mu_true(key_tostr(addr, buf));
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
@@ -631,7 +631,7 @@ test_key_tostr_good(void)
 
     // mask is read, but not part of returned string
     snprintf(sp, IP6_PFXSTRLEN, "1.2.3.4/32");
-    key_bystr(sp, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, sp);
     snprintf(sp, IP6_PFXSTRLEN, "1.2.3.4");
     mu_true(key_tostr(addr, buf));
     mu_true(mlen == 32);
@@ -642,7 +642,7 @@ test_key_tostr_good(void)
 
     // ipv6 zero's collapse
     snprintf(sp, IP6_PFXSTRLEN, "2f:aa:00:00:00::");
-    key_bystr(sp, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, sp);
     snprintf(sp, IP6_PFXSTRLEN, "2f:aa::");
     mu_true(key_tostr(addr, buf));
     mu_eq(-1, mlen, "%i");
@@ -651,7 +651,7 @@ test_key_tostr_good(void)
 
     // ipv6 longest series of zero's collapse
     snprintf(sp, IP6_PFXSTRLEN, "2f:aa:00:00:00:aa::");
-    key_bystr(sp, &mlen, &af, addr);
+    key_bystr(addr, &mlen, &af, sp);
     snprintf(sp, IP6_PFXSTRLEN, "2f:aa::aa:0:0");
     mu_true(key_tostr(addr, buf));
     mu_eq(-1, mlen, "%i");

@@ -966,7 +966,7 @@ ipt_tobin(lua_State *L)
     size_t len = 0;
     const char *pfx = check_pfxstr(L, 1, &len);
 
-    if (! key_bystr(pfx, &mlen, &af, addr)) return 0;
+    if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
 
     lua_pushlstring(L, (const char*)addr, IPT_KEYLEN(addr));
     lua_pushinteger(L, mlen);
@@ -1036,7 +1036,7 @@ ipt_size(lua_State *L)
     const char *pfx = NULL;
 
     pfx = check_pfxstr(L, 1, &len);
-    if (! key_bystr(pfx, &mlen, &af, addr)) return 0;
+    if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (AF_UNKNOWN(af)) return 0;
 
     hlen = af == AF_INET ? IP4_MAXMASK : IP6_MAXMASK;
@@ -1063,7 +1063,7 @@ ipt_address(lua_State *L)
     const char *pfx = NULL;
 
     pfx = check_pfxstr(L, 1, &len);
-    if (! key_bystr(pfx, &mlen, &af, addr)) return 0;
+    if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (! key_bylen(af, mlen, mask)) return 0;
     if (! key_tostr(addr, buf)) return 0;
 
@@ -1090,7 +1090,7 @@ ipt_network(lua_State *L)
     const char *pfx = NULL;
 
     pfx = check_pfxstr(L, 1, &len);
-    if (! key_bystr(pfx, &mlen, &af, addr)) return 0;
+    if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (! key_bylen(af, mlen, mask)) return 0;
     if (! key_network(addr, mask)) return 0;
     if (! key_tostr(addr, buf)) return 0;
@@ -1117,7 +1117,7 @@ ipt_broadcast(lua_State *L)
     const char *pfx = NULL;
 
     pfx = check_pfxstr(L, 1, &len);
-    if (! key_bystr(pfx, &mlen, &af, addr)) return 0;
+    if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (! key_bylen(af, mlen, mask)) return 0;
     if (! key_broadcast(addr, mask)) return 0;
     if (! key_tostr(addr, buf)) return 0;
@@ -1191,8 +1191,8 @@ ipt_iter_hosts(lua_State *L)
         inclusive = lua_toboolean(L, 2);  // include netw/bcast (or not)
 
     pfx = check_pfxstr(L, 1, &len);
-    if (! key_bystr(pfx, &mlen, &af, addr)) fail = 1;
-    if (! key_bystr(pfx, &mlen, &af, stop)) fail = 1;
+    if (! key_bystr(addr, &mlen, &af, pfx)) fail = 1;
+    if (! key_bystr(stop, &mlen, &af, pfx)) fail = 1;
     if (! key_bylen(af, mlen, mask)) fail = 1;
     if (! key_network(addr, mask)) fail = 1;           // start = network
     if (! key_broadcast(stop, mask)) fail = 1;         // stop = bcast
@@ -1368,42 +1368,6 @@ _pairs(lua_State *L)
     return 3;                            // [iter_f invariant ctl_var]
 }
 
-/* Older implementation of :more(), using the table's stack.
- * - deprecated, since we can do it without using the stack so with less
- *   overhead in terms of calloc/free'ing stack elements
- *
- * - once all tests pass reliably, this old implementation can go
- *
- */
-
-/* static int */
-/* _m_o_r_e_(lua_State *L) */
-/* { */
-/*     // ipt:more(pfx, inclusive) <-- [t_ud pfx bool] */
-/*     // Return array of more specific prefixes in the iptable */
-/*     dbg_stack("inc(.) <--"); */
-
-/*     size_t len = 0; */
-/*     int af = AF_UNSPEC, mlen = -1, inclusive = 0; */
-/*     uint8_t addr[MAX_BINKEY]; */
-/*     const char *pfx = NULL; */
-
-/*     table_t *t = check_table(L, 1); */
-/*     pfx = check_pfxstr(L, 2, &len); */
-/*     if (! key_bystr(pfx, &mlen, &af, addr)) return 0; // invalid prefix */
-/*     if (af == AF_UNSPEC) return 0;                    // unknown family */
-
-/*     if (lua_gettop(L) == 3 && lua_isboolean(L, 3)) */
-/*         inclusive = lua_toboolean(L, 3);  // include search prefix (or not) */
-
-/*     lua_newtable(L);                     // collector table on top */
-/*     if (! tbl_more(t, pfx, inclusive, cb_collect, L)) return 0; */
-
-/*     dbg_stack("out(1) ==>"); */
-
-/*     return 1; */
-/* } */
-
 /* TODO:
  *
  * :masks(AF_fam) <-- [t af1 af2 ..]  at least 1 af_family needed
@@ -1441,7 +1405,7 @@ more(lua_State *L)
     table_t *t = check_table(L, 1);
     const char *pfx = check_pfxstr(L, 2, &len);
 
-    if (! key_bystr(pfx, &mlen, &af, addr)) {
+    if (! key_bystr(addr, &mlen, &af, pfx)) {
       lua_pushfstring(L, "more(): invalid prefix %s", lua_tostring(L, 2));
       lua_error(L);
     }
@@ -1565,7 +1529,7 @@ less(lua_State *L)
 
     lua_pop(L, lua_gettop(L) - 1);                        // [t]
 
-    if (! key_bystr(pfx, &mlen, &af, addr)) return iter_bail(L);
+    if (! key_bystr(addr, &mlen, &af, pfx)) return iter_bail(L);
     if (! key_tostr(addr, buf)) return iter_bail(L);
 
     if (af == AF_INET)

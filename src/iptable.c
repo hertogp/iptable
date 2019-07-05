@@ -51,7 +51,7 @@ key_copy(uint8_t *src)
 }
 
 uint8_t *
-key_bystr(const char *s, int *mlen, int *af, uint8_t *dst)
+key_bystr(uint8_t *dst, int *mlen, int *af, const char *s)
 {
     // Store string s' binary key in dst. Returns NULL on failure
     // Also sets mlen and  af. mlen=-1 when no mask was supplied
@@ -660,7 +660,7 @@ tbl_get(table_t *t, const char *s)
 
     // get head, af, addr, mask, or bail on error
     if (t == NULL || s == NULL) return NULL;
-    if (! key_bystr(s, &mlen, &af, addr)) return NULL;
+    if (! key_bystr(addr, &mlen, &af, s)) return NULL;
 
     if (af == AF_INET) head = t->head4;
     else if (af == AF_INET6) head = t->head6;
@@ -689,7 +689,7 @@ tbl_set(table_t *t, const char *s, void *v, void *pargs)
 
     // get head, af, addr, mask, or bail on error
     if (t == NULL || s == NULL) return 0;
-    if (! key_bystr(s, &mlen, &af, addr)) return 0;
+    if (! key_bystr(addr, &mlen, &af, s)) return 0;
     if (! key_bylen(af, mlen, mask)) return 0;
     if (! key_network(addr, mask)) return 0;
 
@@ -738,7 +738,7 @@ tbl_del(table_t *t, const char *s, void *pargs)
 
     // get head, af, addr, mask, or bail on error
     if (t == NULL || s == NULL) return 0;
-    if (! key_bystr(s, &mlen, &af, addr)) return 0;
+    if (! key_bystr(addr, &mlen, &af, s)) return 0;
     if (! key_bylen(af, mlen, mask)) return 0;
     if (! key_network(addr, mask)) return 0;
 
@@ -770,7 +770,7 @@ tbl_lpm(table_t *t, const char *s)
     entry_t *rv = NULL;
 
     if (t == NULL || s == NULL) return NULL;
-    if (! key_bystr(s, &mlen, &af, addr)) return NULL;
+    if (! key_bystr(addr, &mlen, &af, s)) return NULL;
 
     if (af == AF_INET) head = t->head4;
     else if (af == AF_INET6) head = t->head6;
@@ -798,7 +798,7 @@ tbl_lsm(table_t *t, const char *s)
     struct radix_node *top, *base, *rn = NULL, *lsm = NULL;
 
     if (t == NULL || s == NULL) return NULL;
-    if (! key_bystr(s, &mlen, &af, addr)) return NULL;
+    if (! key_bystr(addr, &mlen, &af, s)) return NULL;
 
     if (af == AF_INET) {
       head = t->head4;
@@ -890,7 +890,7 @@ tbl_less(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
     // sanity checks
     if (t == NULL || s == NULL) return 0;
     if (f == NULL) return 0;
-    if (! key_bystr(s, &mlen, &af, addr)) return 0;
+    if (! key_bystr(addr, &mlen, &af, s)) return 0;
 
     if (af == AF_INET) {
         head = t->head4;
@@ -953,7 +953,7 @@ tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
     // sanity checks
     if (t == NULL || s == NULL) return 0;
     if (f == NULL) return 0;
-    if (! key_bystr(s, &mlen, &af, addr)) return 0;
+    if (! key_bystr(addr, &mlen, &af, s)) return 0;
 
     // a non-inclusive search for a host address will never yield a result
     if (mlen < 0 && include == -1) return 1;
