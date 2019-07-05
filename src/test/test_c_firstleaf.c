@@ -10,8 +10,8 @@
 #include "radix.h"           // the radix tree
 #include "iptable.h"         // iptable layered on top of radix.c
 
-#include "minunit.h"         // the mu_test macros
-#include "test_firstleaf.h"  // a generated header file for this test runner
+#include "minunit.h"          // the mu_test macros
+#include "test_c_firstleaf.h" // a generated header file for this test runner
 
 typedef struct testpfx_t {
     const char *pfx;
