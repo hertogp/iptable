@@ -117,11 +117,12 @@ key_bystr(uint8_t *dst, int *mlen, int *af, const char *s)
     return NULL;  // failed
 }
 
+// key_bylen(int af, int mlen, uint8_t *buf)
 uint8_t *
-key_bylen(int af, int mlen, uint8_t *buf)
+key_bylen(uint8_t *binkey, int mlen, int af)
 {
-    // create key by masklength, store result in buf.  Retuns NULL on failure.
-    // assumes buf size MAX_BINKEY
+    // create key by masklength, store result in binkey.  Retuns NULL on failure.
+    // assumes binkey size MAX_BINKEY
     uint8_t *cp;
     int keylen;
 
@@ -136,14 +137,14 @@ key_bylen(int af, int mlen, uint8_t *buf)
         keylen = 1 + IP4_KEYLEN;
     } else return NULL;
 
-    IPT_KEYLEN(buf) = keylen;
-    cp = IPT_KEYPTR(buf);
+    IPT_KEYLEN(binkey) = keylen;
+    cp = IPT_KEYPTR(binkey);
     while (--keylen > 0) {                              // set all key bytes
         *(cp++) = mlen > 8 ? 0xff : ~((1 << (8 - mlen))-1);
         mlen = mlen > 8 ? mlen - 8 : 0;
     }
 
-    return buf;
+    return binkey;
 }
 
 int key_tolen(void *key)
@@ -666,7 +667,7 @@ tbl_get(table_t *t, const char *s)
     else if (af == AF_INET6) head = t->head6;
     else return NULL;
 
-    if (! key_bylen(af, mlen, mask)) return NULL;
+    if (! key_bylen(mask, mlen, af)) return NULL;
     if (! key_network(addr, mask)) return NULL;
 
     entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match for pfx
@@ -690,7 +691,7 @@ tbl_set(table_t *t, const char *s, void *v, void *pargs)
     // get head, af, addr, mask, or bail on error
     if (t == NULL || s == NULL) return 0;
     if (! key_bystr(addr, &mlen, &af, s)) return 0;
-    if (! key_bylen(af, mlen, mask)) return 0;
+    if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_network(addr, mask)) return 0;
 
     if (af == AF_INET) head = t->head4;
@@ -739,7 +740,7 @@ tbl_del(table_t *t, const char *s, void *pargs)
     // get head, af, addr, mask, or bail on error
     if (t == NULL || s == NULL) return 0;
     if (! key_bystr(addr, &mlen, &af, s)) return 0;
-    if (! key_bylen(af, mlen, mask)) return 0;
+    if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_network(addr, mask)) return 0;
 
     if (af == AF_INET) head = t->head4;
@@ -807,7 +808,7 @@ tbl_lsm(table_t *t, const char *s)
       head = t->head6;
       mlen = mlen < 0 ? IP6_MAXMASK : mlen;
     } else return NULL;
-    if (! key_bylen(af, mlen, mask)) return NULL;
+    if (! key_bylen(mask, mlen, af)) return NULL;
     if (! key_network(addr, mask)) return NULL;
 
     // can't beat 0/0 for least specific match of all
@@ -965,7 +966,7 @@ tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
         head = t->head6;
         mlen = mlen < 0 ? IP6_MAXMASK : mlen;
     } else return 0;
-    if (! key_bylen(af, mlen, mask)) return 0;
+    if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_network(addr, mask)) return 0;
 
     mlen += IPT_KEYOFFSET;

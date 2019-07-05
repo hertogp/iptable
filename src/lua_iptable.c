@@ -225,17 +225,20 @@ usr_delete(void *L, void **refp)
 }
 
 /*
- * check if rn is still a valid child and/or parent i/t tree
+ * isvalid(rn) -> checks if rn is still a valid child and parent i/t tree
+ *
  * - a valid child is pointed to by its parent
  * - a valid parent is pointed to by its child(ren)
+ *
  * this attempts to detect if rn was deleted; used by iter_xxx functions
+ * which store the *next* leaf node to process, which might get deleted by some
+ * user action during iteration.  Not fullproof, but better than nothing.
  *
  */
 static int isvalid(struct radix_node *rn)
 {
     int valid = 1;
 
-    // sanity check
     if(rn == NULL || rn->rn_parent == NULL) return 0;
 
     // rn is pointed to by its children (if any)
@@ -441,7 +444,7 @@ static int iter_masks(lua_State *L)
 
     /* process current mask leaf node */
     mlen = key_tolen(rn->rn_key);              // contiguous masks only
-    key_bylen(af, mlen, binmask);              // fresh mask due to deviating
+    key_bylen(binmask, mlen, af);              // fresh mask due to deviating
     key_tostr(binmask, strmask);               // keylen's of masks
 
     lua_pushstring(L, strmask);                // [t m]
@@ -497,7 +500,7 @@ iter_merge(lua_State *L)
         /* get network address for rn_key for mlen-1 */
         for (int i = 0; i <= IPT_KEYLEN(rn->rn_key) && i < MAX_BINKEY; i++)
             netw[i] = rn->rn_key[i];
-        if (! key_bylen(KEY_AF_FAM(rn->rn_key), mlen-1, mask)) return 0;
+        if (! key_bylen(mask, mlen-1, KEY_AF_FAM(rn->rn_key))) return 0;
         dbg_msg("new mask         %s", key_tostr(mask, dbuf));
         dbg_msg("netw before mask %s", key_tostr(netw, dbuf));
         if (! key_network(netw, mask)) return 0;
@@ -1064,7 +1067,7 @@ ipt_address(lua_State *L)
 
     pfx = check_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
-    if (! key_bylen(af, mlen, mask)) return 0;
+    if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_tostr(addr, buf)) return 0;
 
     lua_pushstring(L, buf);
@@ -1091,7 +1094,7 @@ ipt_network(lua_State *L)
 
     pfx = check_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
-    if (! key_bylen(af, mlen, mask)) return 0;
+    if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_network(addr, mask)) return 0;
     if (! key_tostr(addr, buf)) return 0;
 
@@ -1118,7 +1121,7 @@ ipt_broadcast(lua_State *L)
 
     pfx = check_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
-    if (! key_bylen(af, mlen, mask)) return 0;
+    if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_broadcast(addr, mask)) return 0;
     if (! key_tostr(addr, buf)) return 0;
 
@@ -1156,7 +1159,7 @@ ipt_mask(lua_State *L)
 
     mlen = lua_tointegerx(L, 2, &isnum);
     if (! isnum) return 0;
-    if (! key_bylen(af, mlen < 0 ? -mlen : mlen, mask)) return 0;
+    if (! key_bylen(mask, mlen < 0 ? -mlen : mlen, af)) return 0;
     if (mlen < 0 && ! key_invert(mask)) return 0;
     if (! key_tostr(mask, buf)) return 0;
 
@@ -1193,7 +1196,7 @@ ipt_iter_hosts(lua_State *L)
     pfx = check_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) fail = 1;
     if (! key_bystr(stop, &mlen, &af, pfx)) fail = 1;
-    if (! key_bylen(af, mlen, mask)) fail = 1;
+    if (! key_bylen(mask, mlen, af)) fail = 1;
     if (! key_network(addr, mask)) fail = 1;           // start = network
     if (! key_broadcast(stop, mask)) fail = 1;         // stop = bcast
 
@@ -1422,7 +1425,7 @@ more(lua_State *L)
       mlen = mlen < 0 ? IP6_MAXMASK : mlen;
     } else return iter_bail(L);
 
-    if (! key_bylen(af, mlen, mask) || ! key_network(addr, mask)) {
+    if (! key_bylen(mask, mlen, af) || ! key_network(addr, mask)) {
       lua_pushliteral(L, "more(): error converting prefix");
       lua_error(L);
     }
@@ -1603,7 +1606,7 @@ int masks(lua_State *L) {
     while (rn->rn_dupedkey)
         rn = rn->rn_dupedkey;
     if (!RDX_ISROOT(rn) && rn->rn_bit == -1) {
-        key_bylen(af, 0, binmask);
+        key_bylen(binmask, 0, af);
         key_tostr(binmask, strmask);
     } else {
         strmask[0] = '\0';
