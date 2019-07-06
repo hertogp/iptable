@@ -27,8 +27,8 @@ int luaopen_iptable(lua_State *);
 table_t *check_table(lua_State *, int);
 static int check_binkey(lua_State *, int, uint8_t *, size_t *);
 const char *check_pfxstr(lua_State *, int, size_t *);
-static int *ud_create(int);                 // userdata stored as entry->value
-static void usr_delete(void *, void **);    // usr_delete(L, &ud)
+static int *refp_create(lua_State *);
+static void refp_delete(void *, void **);
 static int isvalid(struct radix_node *);
 static int iter_bail(lua_State *);
 static int iter_fail(lua_State *);
@@ -130,7 +130,6 @@ static const struct luaL_Reg meths [] = {
 int
 luaopen_iptable (lua_State *L)
 {
-    // require("iptable") <-- ['iptable', '<path>/iptable.so' ]
     dbg_stack("inc(.) <--");
 
     luaL_newmetatable(L, LUA_IPTABLE_ID);   // [.., {} ]
@@ -166,7 +165,7 @@ luaopen_iptable (lua_State *L)
 /* helpers */
 
 /*
- * check_table(L, idx)  <--  [.. t ..]
+ * check_table()  <--  [ .. t ..]
  *
  * Check element at given idx is table with the correct metatable and thus is
  * an iptable.  May throw an error through luaL_argcheck back to caller.
@@ -182,7 +181,7 @@ check_table (lua_State *L, int index)
 }
 
 /*
- * check_binkey()  <--  [.. k ..]
+ * check_binkey()  <--  [ .. k ..]
  *
  * Copy a binary key, either an address or a mask, at given 'idx' into given
  * 'buf'.  'buf' size is assumed to be MAX_BINKEY.  A binary key is a byte
@@ -242,23 +241,38 @@ check_pfxstr(lua_State *L, int idx, size_t *len)
  *
  */
 
+/*
+ * refp_create()  <--  [.. v ..]
+ *
+ * Store value at given index in the LUA_REGISTRY (a lua table), and return a
+ * pointer to its reference value which is stored in new allocated memory.
+ *
+ */
+
 static int *
-ud_create(int ref)
+refp_create(lua_State *L)
 {
-    // store LUA_REGISTRYINDEX ref's in the radix tree as ptr->int
-    int *p = calloc(1, sizeof(int));
-    *p = ref;
-    return p;
+    int *refp = calloc(1, sizeof(int));
+    *refp = luaL_ref(L, LUA_REGISTRYINDEX);
+    return refp;
 }
 
-static void
-usr_delete(void *L, void **refp)
+/*
+ * refp_delete()
+ *
+ * Delete a value from LUA_REGISTRYINDEX indexed by **r (which is treated as an
+ * **int).  This function acts as the purge_f_t (see iptable.h) for the table.
+ *
+ */
+
+static void refp_delete(void *L, void **r)
 {
-    // unref the userdata and free associated ptr->int
-    if (*refp) {
-        luaL_unref((lua_State *)L, LUA_REGISTRYINDEX, *(int *)*refp);
-        free(*refp);
-    }
+    lua_State *LL = L;
+    int **refp = (int **)r;
+
+    if(refp == NULL || *refp == NULL) return;
+    luaL_unref(LL, LUA_REGISTRYINDEX, **refp);
+    free(*refp);
     *refp = NULL;
 }
 
@@ -299,7 +313,7 @@ static int isvalid(struct radix_node *rn)
 }
 
 /*
-* iter_bail(L) <-- [..]
+* iter_bail(L)  <--  [..]
 *
 * Helper function to bail out of an iteration factory function.
 *
@@ -322,7 +336,7 @@ iter_bail(lua_State *L)
 }
 
 /*
-* iter_fail <-- [..], stack is ignored
+* iter_fail  <--  [..], stack is ignored
 *
 * An iteration func that terminates any iteration.
 *
@@ -338,7 +352,7 @@ iter_fail(lua_State *L)
 }
 
 /*
- * iter_hosts() <-- [h], h is nil on first call.
+ * iter_hosts()  <--  [h], h is nil on first call.
  *
  * The iter_f for iptable.hosts(pfx), yields the next host ip until stop value
  * is reached.  Ignores the stack: it uses upvalues for next, stop
@@ -371,7 +385,7 @@ iter_hosts(lua_State *L)
 }
 
 /*
- * iter_kv() <-- [t k]
+ * iter_kv()  <--  [t k]
  *
  * The iter_f for __pairs(), yields all k,v pairs in the tree(s).
  * - upvalue(1) is the leaf to process.
@@ -411,7 +425,7 @@ iter_kv(lua_State *L)
 }
 
 /*
- * iter_less()  <-- [t k], k is ignored
+ * iter_less()  <--  [t k], k is ignored
  *
  * Iterate across less specific prefixes relative to a given prefix.
  *
@@ -675,7 +689,7 @@ iter_more(lua_State *L)
 }
 
 /*
- * iter_radix() <-- [ud k] ([nil nil] at first call)
+ * iter_radix()  <--  [ud k] ([nil nil] at first call)
  *
  * - return current node as a Lua table or nil to stop iteration
  * - save next (type, node) as upvalues (1) resp. (2)
@@ -712,36 +726,6 @@ iter_radix(lua_State *L)
 
     return 0;
 }
-
-/*
-static int
-cb_collect(struct radix_node *rn, void *LL)
-{
-    // collect prefixes into table on top <-- [t_ud, pfx bool* ref]
-    // - where bool* may be absent.
-    // - Order of args follows walktree_f_t definition
-    lua_State *L = LL;
-    dbg_stack("cb_more()");                         // after *L=LL (it needs L)
-
-    char addr[MAX_STRKEY];
-    int mlen = -1, tlen = 0;
-
-    if (! lua_istable(L, -1)) return 1;
-    if (! key_tostr(rn->rn_key, addr)) return 1;
-    mlen = key_tolen(rn->rn_mask);
-
-    lua_len(L, -1);                                 // get table length
-    tlen = lua_tointeger(L, -1) + 1;                // new array index
-    lua_pop(L,1);
-
-    lua_pushfstring(L, "%s/%d", addr, mlen);        // more specific pfx
-    lua_seti(L, -2, tlen);                          // insert in array
-
-    dbg_stack("out(0) ==>");
-
-    return 1;                                       // ignored return value
-}
-*/
 
 // iter_radix helpers
 
@@ -971,16 +955,23 @@ push_rdx_mask(lua_State *L, struct radix_mask *rm)
 
 // iptable module functions
 
+/*
+ * .new()  <--  []
+ *
+ * Create and return a new iptable instance.
+ *
+ * - void** t -> so tbl_destroy(&t) sets t=NULL when done clearing it
+ * - Return a new iptable instance.  Bail on memory errors.
+ *
+ */
+
 static int
 ipt_new(lua_State *L)
 {
-    // ipt.new()  <-- []
-    // - void** t -> so tbl_destroy(&t) sets t=NULL when done clearing it
-    // - Return a new iptable instance.  Bail on memory errors.
     dbg_stack("inc(.) <--");
 
     void **t = lua_newuserdata(L, sizeof(void **));
-    *t = tbl_create(usr_delete);             // usr_delete func to free values
+    *t = tbl_create(refp_delete);             // usr_delete func to free values
 
     if (*t == NULL) {
         lua_pushliteral(L, "error creating iptable");
@@ -995,11 +986,17 @@ ipt_new(lua_State *L)
     return 1;
 }
 
+/*
+ * .tobin()  <--  [str]
+ *
+ * Return byte array for binary key, masklength & AF for a given prefix, nil on
+ * errors.  Note: byte array is [LEN-byte | key-bytes].
+ *
+ */
+
 static int
 ipt_tobin(lua_State *L)
 {
-    // iptable.tobin(strKey) <-- [str]
-    // Return binary form, masklength & AF for a given prefix, nil on errors
     dbg_stack("inc(.) <--");
 
     int af, mlen;
@@ -1009,7 +1006,7 @@ ipt_tobin(lua_State *L)
 
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
 
-    lua_pushlstring(L, (const char*)addr, IPT_KEYLEN(addr));
+    lua_pushlstring(L, (const char *)addr, IPT_KEYLEN(addr));
     lua_pushinteger(L, mlen);
     lua_pushinteger(L, af);
 
@@ -1018,11 +1015,16 @@ ipt_tobin(lua_State *L)
     return 3;
 }
 
+/*
+ * tostr()  <--  [binkey]
+ *
+ * Return string representation for a binary key, nil on errors
+ *
+ */
+
 static int
 ipt_tostr(lua_State *L)
 {
-    // iptable.tostr(binKey) <-- [binkey]
-    // Return string representation for a binary key, nil on errors
     dbg_stack("inc(.) <--");
 
     uint8_t key[MAX_BINKEY];
@@ -1040,12 +1042,17 @@ ipt_tostr(lua_State *L)
     return 1;
 }
 
+/*
+ * .tolen()  <--  [key]
+ *
+ * Return the number of consecutive msb 1-bits, nil on errors.
+ * - stops at the first zero bit.
+ *
+ */
+
 static int
 ipt_tolen(lua_State *L)
 {
-    // iptable.tolen(binKey) <-- [key]
-    // Return the number of consequtive msb 1-bits, nil on errors.
-    // - stops at the first zero bit.
     dbg_stack("inc(.) <--");
 
     uint8_t buf[MAX_BINKEY];
@@ -1062,13 +1069,17 @@ ipt_tolen(lua_State *L)
     return 1;
 }
 
+/*
+ * .size()  <--  [pfx]
+ *
+ * Returns the number of hosts in a given prefix, nil on errors
+ * - uses Lua's arithmatic (2^hostbits), since ipv6 can get large.
+ *
+ */
+
 static int
 ipt_size(lua_State *L)
 {
-    // iptable.size(strKey) <-- [str]
-    // Return the number of hosts in a given prefix, nil on errors
-    // - uses Lua's arithmatic (2^hostbits), since ipv6 can get large.
-
     dbg_stack("inc(.) <--");
 
     uint8_t addr[MAX_BINKEY];
@@ -1090,11 +1101,16 @@ ipt_size(lua_State *L)
     return 1;
 }
 
+/*
+ * .address()  <--  [str]
+ *
+ * Return host address, masklen and af_family for pfx; nil on errors.
+ *
+ */
+
 static int
 ipt_address(lua_State *L)
 {
-    // iptable.address(strKey) <-- [str]
-    // Return host address, masklen & af for a given prefix, nil on errors
     dbg_stack("inc(.) <--");
 
     char buf[MAX_STRKEY];
@@ -1117,11 +1133,16 @@ ipt_address(lua_State *L)
     return 3;
 }
 
+/*
+ * .network()  <--  [pfx]
+ *
+ * Return network address, masklen and af_family for pfx; nil on errors.
+ *
+ */
+
 static int
 ipt_network(lua_State *L)
 {
-    // iptable.network(strKey) <-- [str]
-    // Return network address & masklen for a given prefix, nil on errors
     dbg_stack("inc(.) <--");
 
     char buf[MAX_STRKEY];
@@ -1145,10 +1166,15 @@ ipt_network(lua_State *L)
     return 3;
 }
 
+/* .broadcast()  <--  [pfx]
+ *
+ * Return broadcast address, masklen and af_family for pfx; nil on errors.
+ *
+ */
+
 static int
 ipt_broadcast(lua_State *L)
 {
-    // iptable.broadcast(strKey) <-- [str]
     dbg_stack("inc(.) <--");
 
     int af = AF_UNSPEC, mlen = -1;
@@ -1173,7 +1199,7 @@ ipt_broadcast(lua_State *L)
 }
 
 /*
- * iptable.mask(af, mlen) <-- [num]
+ * iptable.mask()  <--  [num]
  *
  * Returns mask (as string) for mlen bits given, Nil on errors
  * - mlen < 0 means inverse mask of mlen, so mlen = -8 -> 0.255.255.255
@@ -1181,7 +1207,9 @@ ipt_broadcast(lua_State *L)
  * TODO: normally mlen==-1 means 'no mask present so default to MAXMASK', but
  * here we deviate.  Better to create imask(af, mlen) and maintain the notion
  * of mlen==-1 and return an inverse mask of max mask.
+ *
  */
+
 static int
 ipt_mask(lua_State *L)
 {
@@ -1210,7 +1238,7 @@ ipt_mask(lua_State *L)
 
 
 /*
- * .hosts(prefix, incl) <-- [pfx incl], incl is optional.
+ * .hosts()  <--  [pfx incl], incl is optional.
  *
  * Iterate across host adresses in prefix pfx, if incl is true, the network
  * and broadcast addresses are included as well.
@@ -1262,8 +1290,12 @@ ipt_hosts(lua_State *L)
 // iptable instance methods
 
 /*
+ * _gc()  <--  [t]
+ *
  * Garbage collect the table: free all resources
+ *
  */
+
 static int
 _gc(lua_State *L) {
     dbg_stack("inc(.) <--");
@@ -1286,16 +1318,16 @@ _gc(lua_State *L) {
  * prefix, cleanup and ignore the request.
  *
  */
+
 static int
 _newindex(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
-    void *ud;               // userdata to store (will be ptr->int)
     const char *pfx = NULL;
     size_t len = 0;
-    int ref = LUA_NOREF;
     table_t *t = check_table(L, 1);
+    int *refp = NULL;
 
     pfx = check_pfxstr(L, 2, &len);
     dbg_msg("got pfx %s", pfx);
@@ -1305,14 +1337,9 @@ _newindex(lua_State *L)
         tbl_del(t, pfx, L);
     }
     else {
-        ref = luaL_ref(L, LUA_REGISTRYINDEX); // pop top & store in registry
-        ud = ud_create(ref);
-        if (!tbl_set(t, pfx, ud, L)) {
-            usr_delete(L, &ud);
-            dbg_msg("unref'd %d", ref);
-        } else {
-            dbg_msg("stored as ref %d", ref);
-        }
+        if ((refp = refp_create(L)))
+            if (! tbl_set(t, pfx, refp, L))
+                refp_delete(L, (void**)&refp);
     }
 
     dbg_stack("out(0) ==>");
@@ -1329,6 +1356,7 @@ _newindex(lua_State *L)
  *  - otherwise, do metatable lookup for property named by k.
  *
  */
+
 static int
 _index(lua_State *L)
 {
@@ -1356,10 +1384,17 @@ _index(lua_State *L)
     return 1;
 }
 
+/*
+ * _len()  <--  [t]
+ *
+ * Return the sum of the number of entries in the ipv4 and ipv6 radix trees as
+ * the 'length' of the table.
+ *
+ */
+
 static int
 _len(lua_State *L)
 {
-    // #ipt <-- [ud]  --> return sum of count4 and count6
     dbg_stack("inc(.) <--");
 
     table_t *t = check_table(L, 1);
@@ -1370,10 +1405,16 @@ _len(lua_State *L)
     return 1;
 }
 
+/*
+ * _tostring()  <--  [t]
+ *
+ * Return a string representation of the iptable instance (with counts).
+ *
+ */
+
 static int
 _tostring(lua_State *L)
 {
-    // as string: iptable{#ipv4=.., #ipv6=..}
     dbg_stack("inc(.) <--");
 
     table_t *t = check_table(L, 1);
@@ -1384,26 +1425,40 @@ _tostring(lua_State *L)
     return 1;
 }
 
+/*
+ * :counts()  <--  [t]
+ *
+ * Return both ipv4 and ipv6 counts as two numbers.
+ *
+ */
+
 static int
 counts(lua_State *L)
 {
-    // ipt:size() <-- [t_ud]  -- return both count4 and count6 (in that order)
     dbg_stack("inc(.) <--");
 
     table_t *t = check_table(L, 1);
-    lua_pushinteger(L, t->count4);         // [t_ud count4]
-    lua_pushinteger(L, t->count6);         // [t_ud count4 count6]
+    lua_pushinteger(L, t->count4);         // [t count4]
+    lua_pushinteger(L, t->count6);         // [t count4 count6]
 
     dbg_stack("out(2) ==>");
 
     return 2;                              // [.., count4, count6]
 }
 
+/*
+ * _pairs()  <--  [t]
+ *
+ * Setup iteration across key,value-pairs in the table.  The first ipv4 or ipv6
+ * leaf node is pushed.  The iter_pairs iterator uses nextleaf to go through
+ * all leafs of the tree.  It will traverse ipv6 as well if we started with the
+ * ipv4 tree first.
+ *
+ */
+
 static int
 _pairs(lua_State *L)
 {
-    // __pairs(ipt) <-- [t_ud]
-
     dbg_stack("inc(.) <--");
 
     table_t *t = check_table(L, 1);
@@ -1413,26 +1468,25 @@ _pairs(lua_State *L)
 
     if (rn == NULL) return iter_bail(L);
 
-    lua_pushlightuserdata(L, rn);        // [t_ud lud], rn is 1st node
-    lua_pushcclosure(L, iter_kv, 1);     // [t_ud f], rn as upvalue(1)
-    lua_rotate(L, 1, 1);                 // [f t_ud]
-    lua_pushnil(L);                      // [f t_ud nil]
+    lua_pushlightuserdata(L, rn);        // [t rn], rn is 1st node
+    lua_pushcclosure(L, iter_kv, 1);     // [t f], rn as upvalue(1)
+    lua_rotate(L, 1, 1);                 // [f t]
+    lua_pushnil(L);                      // [f t nil]
 
     dbg_stack("out(3) ==>");
 
     return 3;                            // [iter_f invariant ctl_var]
 }
 
-/* TODO:
+/*
+ * subtree_fail()
  *
- * :masks(AF_fam) <-- [t af1 af2 ..]  at least 1 af_family needed
- *
- * Iterate across the masks in the tree(s).  A bit like k,v pair iteration
- * except that only the masks (keys in the radix_mask_head tree) are returned
- * and there no values.
+ * Checks correct subtree after descending down a tree.
  *
  */
-static inline int subtree_fail(struct radix_node *rn, int mlen) {
+
+static inline int
+subtree_fail(struct radix_node *rn, int mlen) {
   return RDX_ISROOT(rn)
       && RDX_ISLEAF(rn)
       && mlen !=0
@@ -1440,12 +1494,13 @@ static inline int subtree_fail(struct radix_node *rn, int mlen) {
 }
 
 /*
- * ipt:more(pfx, inclusive) <-- [t pfx bool], bool is optional
+ * :more()  <--  [t pfx bool], bool is optional
  *
  * Iterate across more specific prefixes. AF_family is deduced from the
- * prefix given.  This traverses the entire tree if pfx has a /0 mask.
+ * prefix given.  Note this traverses the entire tree if pfx has a /0 mask.
  *
  */
+
 static int
 more(lua_State *L)
 {
@@ -1488,6 +1543,7 @@ more(lua_State *L)
      * leafs
      *
      */
+
     maxb = (mlen == 0) ? maxb - 1 : maxb - 1 - IPT_KEYOFFSET - mlen;
     dbg_msg("rn_bit <= maxb %d", maxb);
 
@@ -1558,13 +1614,14 @@ more(lua_State *L)
 }
 
 /*
- * :less(pfx, incl)  <--  [t pfx incl]
+ * :less()  <--  [t pfx incl]
  *
  * Iterate across prefixes in the tree that are less specific than pfx.
  * - search may include pfx itself in the results, if incl is true.
  * - iter_less takes (pfx, mlen, af)
  *
  */
+
 static int
 less(lua_State *L)
 {
@@ -1606,7 +1663,7 @@ less(lua_State *L)
 }
 
 /*
- * t:masks(af) <-- [t af]
+ * :masks(af)  <--  [t af]
  *
  * Iterate across all masks used in AF_family's radix tree.
  * Notes:
@@ -1621,6 +1678,7 @@ less(lua_State *L)
  * flag needs to be passed to iter_f that a zeromask entry is present.
  *
  */
+
 static
 int masks(lua_State *L) { 
 
@@ -1653,6 +1711,7 @@ int masks(lua_State *L) {
      * (i.e. -1 - networkindex (of 0) == -1).
      *
      */
+
     rn = &rnh->rnh_nodes[0];
     while (rn->rn_dupedkey)
         rn = rn->rn_dupedkey;
@@ -1669,6 +1728,7 @@ int masks(lua_State *L) {
      * needs to be returned by iter_masks
      *
      */
+
     rn = rdx_firstleaf(&rnh->rh.rnh_masks->head);
     lua_pushlightuserdata(L, rn);                    // [t rn]
     lua_pushinteger(L, af);                          // [t rn af]
@@ -1682,10 +1742,11 @@ int masks(lua_State *L) {
 }
 
 /*
- * ipt:merge(af)  <-- [t, af]
+ * :merge(af)  <--  [t, af]
  *
  * Iterate across adjacent prefixes that may be combined
  */
+
 static int
 merge(lua_State *L)
 {
@@ -1715,17 +1776,17 @@ merge(lua_State *L)
     return 2;                                 // [iter_f invariant]
 }
 
+/*
+ * :radix(AF)  <--  [t af1 af2]
+ *
+ * Iterate across all nodes of all types in a radix tree.
+ * - returns the C-structs as Lua tables.
+ *
+ */
+
 static int
 radixes(lua_State *L)
 {
-    /*
-     * ipt:radix(AF)  <-- [t af1 af2 ..], needs 1+ AF_family
-     *
-     * Iterate across all nodes of all types in a radix tree.
-     * - returns the C-structs as Lua tables.
-     *
-     */
-
     dbg_stack("inc(.) <--");
 
     int isnum = 0, af = AF_UNSPEC, afs = IPT_UNSPEC;
