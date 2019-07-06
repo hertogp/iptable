@@ -35,8 +35,8 @@ static inline int subtree_fail(struct radix_node *, int);
 
 /* iter_radix() helpers */
 
-void iptL_push_fstr(lua_State *, const char *, const char *, const void *);
-void iptL_push_int(lua_State *, const char *, int);
+static void iptL_push_fstr(lua_State *, const char *, const char *, const void *);
+static void iptL_push_int(lua_State *, const char *, int);
 static int push_rdx_node_head(lua_State *, struct radix_node_head *);
 static int push_rdx_node(lua_State *, struct radix_node *);
 static int push_rdx_head(lua_State *, struct radix_head *);
@@ -286,6 +286,7 @@ static void refp_delete(void *L, void **r)
  * user action during iteration.  Not fullproof, but better than nothing.
  *
  */
+
 static int isvalid(struct radix_node *rn)
 {
     int valid = 1;
@@ -679,7 +680,8 @@ iter_more(lua_State *L)
         } else if (matched) {
             lua_pushlightuserdata(L, rn);
             lua_replace(L, lua_upvalueindex(2));
-            dbg_msg("next candidate  %s/%d\n", key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask));
+            dbg_msg("next candidate  %s/%d\n",
+                    key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask));
         }
     }
 
@@ -699,6 +701,7 @@ static int
 iter_radix(lua_State *L)
 {
     dbg_stack("inc(.) <--");
+
     table_t *t = check_table(L, 1);
     void *node;
     int type;
@@ -728,7 +731,8 @@ iter_radix(lua_State *L)
 
 // iter_radix helpers
 
-void iptL_push_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
+static void
+iptL_push_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
 {
     if (! lua_istable(L, -1)) {
         dbg_msg("need stack top to be a %s", "table");
@@ -740,7 +744,7 @@ void iptL_push_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
     lua_settable(L, -3);
 }
 
-void
+static void
 iptL_push_int(lua_State *L, const char *k, int v)
 {
     if (! lua_istable(L, -1)) {

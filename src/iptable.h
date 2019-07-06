@@ -25,13 +25,10 @@ typedef struct stackElm_t {
 typedef struct table_t {
     struct radix_node_head *head4;  // IPv4 radix tree
     struct radix_node_head *head6;  // IPv6 radix tree
-
     size_t count4;
     size_t count6;
-
     purge_f_t *purge;               // callback to free userdata
-
-    stackElm_t *top;
+    stackElm_t *top;                // only used to iterate across radix nodes
     size_t size;
 } table_t;
 
@@ -99,43 +96,46 @@ enum IPT_PROTOS {
 
 // -- PROTOTYPES
 
-void _dumprn(const char *s, struct radix_node *rn);
+void _dumprn(const char *, struct radix_node *);
 
 // -- key funcs
-
-uint8_t *key_alloc(int);
-uint8_t *key_copy(uint8_t *);
 
 uint8_t *key_bystr(uint8_t *, int *, int *, const char *);
 uint8_t *key_bylen(uint8_t *, int, int);
 const char *key_tostr(char *, void *);
 int key_tolen(void *);
 int key_incr(void *);
-int key_decr(void *);
 int key_cmp(void *, void *);
 int key_isin(void *, void *, void *);
 int key_network(void *, void *);
 int key_broadcast(void *, void *);
 int key_invert(void *);
 
+int key_decr(void *);
+uint8_t *key_alloc(int);
+uint8_t *key_copy(uint8_t *);
+
+
 // -- rdx funcs
 
-int rdx_flush(struct radix_node *, void *);
 struct radix_node *rdx_firstleaf(struct radix_head *);
 struct radix_node *rdx_nextleaf(struct radix_node *);
 int rdx_firstnode(table_t *, int);
 int rdx_nextnode(table_t *, int *, void **);
+
+int rdx_flush(struct radix_node *, void *);
 
 // -- tbl funcs
 
 table_t *tbl_create(purge_f_t *);
 entry_t *tbl_get(table_t *, const char *);
 entry_t *tbl_lpm(table_t *, const char *);
-entry_t *tbl_lsm(table_t *, const char *);
 int tbl_set(table_t *, const char *, void *, void *);
 int tbl_del(table_t *, const char *, void *);
-int tbl_walk(table_t *, walktree_f_t *, void *);
 int tbl_destroy(table_t **, void *);
+
+entry_t *tbl_lsm(table_t *, const char *);
+int tbl_walk(table_t *, walktree_f_t *, void *);
 int tbl_less(table_t *, const char *, int, walktree_f_t *, void *);
 int tbl_more(table_t *, const char *, int, walktree_f_t *, void *);
 int tbl_stackpush(table_t *, int, void *);

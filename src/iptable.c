@@ -12,13 +12,16 @@
 #include "iptable.h"
 
 /* static char rn_zeros[RDX_MAX_KEYLEN]; */
-// all_ones used as max mask in some cases where none was supplied
+
+/* all_ones used as max mask in cases where none was supplied */
 uint8_t  all_ones[RDX_MAX_KEYLEN] = {
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
 };
+
+
 
 // -- helpers - KEY functions
 
