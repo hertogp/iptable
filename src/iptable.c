@@ -117,7 +117,6 @@ key_bystr(uint8_t *dst, int *mlen, int *af, const char *s)
     return NULL;  // failed
 }
 
-// key_bylen(int af, int mlen, uint8_t *buf)
 uint8_t *
 key_bylen(uint8_t *binkey, int mlen, int af)
 {
@@ -392,7 +391,6 @@ rdx_firstleaf(struct radix_head *rh)
 
     /* goto treetop's left */
     rn = rh->rnh_treetop->rn_left;
-
     while(! RDX_ISLEAF(rn))
         rn = rn->rn_left;
 
@@ -780,6 +778,8 @@ tbl_lpm(table_t *t, const char *s)
 entry_t *
 tbl_lsm(table_t *t, const char *s)
 {
+    // TODO: remove? Not used by lua_iptable.c
+
     /* least specific match for address and masklength */
     /*
      * rn_bit = -1 - IPT_KEYOFFSET - masklen, so:
@@ -855,16 +855,6 @@ tbl_lsm(table_t *t, const char *s)
         if (RDX_ISROOT(rn->rn_parent)) done = 1;
     }
 
-    /* Example implementation with iptable t's stack
-     *
-     * while (t->top) tbl_stackpop(t);
-     * tbl_stackpush(t, TRDX_NODE, rn->rn_parent);
-     *
-     * while(rdx_nextnode(t, &type, (void **)&rn))
-     *     if (type == TRDX_NODE && RDX_ISLEAF(rn))
-     *         lsm = rn->rn_bit > lsm->rn_bit ? rn : lsm;
-     */
-
     if (lsm != NULL && key_isin(addr, lsm->rn_key, lsm->rn_mask))
         return (entry_t *)lsm;
 
@@ -874,6 +864,8 @@ tbl_lsm(table_t *t, const char *s)
 int
 tbl_less(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
 {
+    // TODO: remove? Not used from lua_iptable.c.
+
     // find less specific prefixes relative to s & call f(fargs, rn)
     // return 0 on failure, 1 on success
     // - actually traverses almost the entire tree to find all candidates
@@ -937,6 +929,8 @@ tbl_less(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
 int
 tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
 {
+    // TODO: rmove? Not used from lua_iptable.c.
+
     // find more specific prefixes relative to s & call f(fargs, rn)
     // return 0 on failure, 1 on success
     // - actually traverses almost the entire tree to find all candidates

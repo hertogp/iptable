@@ -14,15 +14,15 @@
 #include "iptable.h"
 #include "debug.h"
 
-// lua_iptable defines
+/* lua_iptable defines */
 
 #define LUA_IPTABLE_ID "iptable"
 
-// lua functions
+/* lua functions */
 
 int luaopen_iptable(lua_State *);
 
-// helper funtions
+/* helper funtions */
 
 table_t *check_table(lua_State *, int);
 static int check_binkey(lua_State *, int, uint8_t *, size_t *);
@@ -34,7 +34,7 @@ static int iter_bail(lua_State *);
 static int iter_fail(lua_State *);
 static inline int subtree_fail(struct radix_node *, int);
 
-// iter_radix() helpers
+/* iter_radix() helpers */
 
 void iptL_push_fstr(lua_State *, const char *, const char *, const void *);
 void iptL_push_int(lua_State *, const char *, int);
@@ -45,7 +45,7 @@ static int push_rdx_mask_head(lua_State *, struct radix_mask_head *);
 static int push_rdx_mask(lua_State *, struct radix_mask *);
 
 
-// iterators
+/* iterators */
 
 static int iter_hosts(lua_State *);
 static int iter_kv(lua_State *);
@@ -55,7 +55,7 @@ static int iter_merge(lua_State *);
 static int iter_more(lua_State *);
 static int iter_radix(lua_State *);
 
-// iptable module functions
+/* iptable module functions */
 
 static int ipt_new(lua_State *);
 static int ipt_tobin(lua_State *);
@@ -66,9 +66,9 @@ static int ipt_address(lua_State *);
 static int ipt_network(lua_State *);
 static int ipt_broadcast(lua_State *);
 static int ipt_mask(lua_State *);
-static int ipt_iter_hosts(lua_State *);
+static int ipt_hosts(lua_State *);
 
-// iptable instance methods
+/* iptable instance methods */
 
 static int _gc(lua_State *);
 static int _index(lua_State *);
@@ -83,7 +83,7 @@ static int merge(lua_State *);
 static int more(lua_State *);
 static int radixes(lua_State *);
 
-// iptable module function array
+/* iptable module function array */
 
 static const struct luaL_Reg funcs [] = {
     {"new", ipt_new},
@@ -95,11 +95,11 @@ static const struct luaL_Reg funcs [] = {
     {"broadcast", ipt_broadcast},
     {"mask", ipt_mask},
     {"size", ipt_size},
-    {"hosts", ipt_iter_hosts},
+    {"hosts", ipt_hosts},
     {NULL, NULL}
 };
 
-// iptable instance methods array
+/* iptable instance methods array */
 
 static const struct luaL_Reg meths [] = {
     {"__gc", _gc},
@@ -117,7 +117,15 @@ static const struct luaL_Reg meths [] = {
     {NULL, NULL}
 };
 
-// libopen
+/* libopen */
+
+/*
+ * require("iptable")  <--  ['iptable', '<path>/iptable.so']
+ *
+ * Return iptable's module-table which holds the module functions and
+ * constants.  Instance methods go into the module-table's metatable.
+ *
+ */
 
 int
 luaopen_iptable (lua_State *L)
@@ -155,22 +163,32 @@ luaopen_iptable (lua_State *L)
     return 1;
 }
 
-// helpers
+/* helpers */
+
+/*
+ * check_table(L, idx)  <--  [.. t ..]
+ *
+ * Check element at given idx is table with the correct metatable and thus is
+ * an iptable.  May throw an error through luaL_argcheck back to caller.
+ *
+ */
 
 table_t *
 check_table (lua_State *L, int index)
 {
-    void **ud = luaL_checkudata(L, index, LUA_IPTABLE_ID);
-    luaL_argcheck(L, ud != NULL, index, "`iptable' expected");
-    return (table_t *)*ud;
+    void **t = luaL_checkudata(L, index, LUA_IPTABLE_ID);
+    luaL_argcheck(L, t != NULL, index, "`iptable' expected");
+    return (table_t *)*t;
 }
 
 /*
- * Copy a binary key at given 'idx' into given 'buf'.
+ * check_binkey()  <--  [.. k ..]
  *
- * 'buf' is assumed to have a size >= MAX_BINKEY.
- * A binary key is a byte array [LEN | key bytes] and LEN is total length.
- * However, radix masks may set LEN to the nr of non-zero bytes in the array.
+ * Copy a binary key, either an address or a mask, at given 'idx' into given
+ * 'buf'.  'buf' size is assumed to be MAX_BINKEY.  A binary key is a byte
+ * array [LEN | key bytes] and LEN is total length.  However, radix masks may
+ * have set their LEN-byte equal to the nr of non-zero bytes in the array
+ * instead.
  *
  */
 
@@ -192,6 +210,15 @@ check_binkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
     return 1;
 }
 
+/*
+ * check_pfxstr()  <--  [.. s ..]
+ *
+ * Checks if given index is a string and yields a const char ptr to it or NULL.
+ * Sets len to the string length reported by Lua's stack manager.  Lua owns the
+ * memory pointed to by the return value (no free by caller needed).
+ *
+ */
+
 const char *
 check_pfxstr(lua_State *L, int idx, size_t *len)
 {
@@ -200,9 +227,20 @@ check_pfxstr(lua_State *L, int idx, size_t *len)
     if (! lua_isstring(L, idx)) return NULL;
     pfx = lua_tolstring(L, idx, len);  // donot use luaL_tolstring!
 
-    /* caller should check/accept results and decide her course of action */
     return pfx;
 }
+
+/*
+ * ud_create()
+ *
+ * Stores a given int value in newly allocated memory and returns its pointer.
+ *
+ * The int value is a LUA_REGISTRYINDEX reference value where the actual
+ * userdata is stored.  The ref-value's pointer is part of an entry_t which is
+ * what is stored/retrieved from the radix tree by casting radix node pointers
+ * to pointer to entry_t.  See _index().
+ *
+ */
 
 static int *
 ud_create(int ref)
@@ -1180,7 +1218,7 @@ ipt_mask(lua_State *L)
  */
 
 static int
-ipt_iter_hosts(lua_State *L)
+ipt_hosts(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
@@ -1238,10 +1276,19 @@ _gc(lua_State *L) {
     return 0;
 }
 
+/*
+ * _newindex()  <-- [t k v]
+ *
+ * Implements t[k] = v
+ *
+ * If v is nil, t[k] is deleted.  Otherwise, v is stored in the lua_registry
+ * and its ref-value is stored in the radix tree. If k is not a valid ipv4/6
+ * prefix, cleanup and ignore the request.
+ *
+ */
 static int
 _newindex(lua_State *L)
 {
-    // __newindex() -- [tbl_ud pfx val]
     dbg_stack("inc(.) <--");
 
     void *ud;               // userdata to store (will be ptr->int)
@@ -1273,13 +1320,18 @@ _newindex(lua_State *L)
     return 0;
 }
 
+/*
+ * __index()  <--  [t k]
+ *
+ * Given index k:
+ *  - do longest prefix search if k is a prefix without mask,
+ *  - do an exact match if k is a prefix with a mask
+ *  - otherwise, do metatable lookup for property named by k.
+ *
+ */
 static int
 _index(lua_State *L)
 {
-    // __index() -- [ud pfx] or [ud name]
-    // - no mask -> do longest prefix search,
-    // - with mask -> do exact lookup of prefix with mask
-    // - if pfx lookup fails -> try metatable
     dbg_stack("inc(.) <--");
 
     entry_t *entry = NULL;
@@ -1505,18 +1557,18 @@ more(lua_State *L)
     return 3;
 }
 
+/*
+ * :less(pfx, incl)  <--  [t pfx incl]
+ *
+ * Iterate across prefixes in the tree that are less specific than pfx.
+ * - search may include pfx itself in the results, if incl is true.
+ * - iter_less takes (pfx, mlen, af)
+ *
+ */
 static int
 less(lua_State *L)
 {
-    /*
-     * :less(pfx, incl)  <-- [t pfx incl]
-     *
-     * Iterate across prefixes in the tree that are less specific than pfx.
-     * - search may include pfx itself in the results, if incl is true.
-     * - iter_f takes (pfx, mlen, af)
-     */
-
-    dbg_stack("inc(.) <--");     // [t pfx incl], incl is an optional boolean
+    dbg_stack("inc(.) <--");
 
     size_t len = 0;
     int mlen = 0, inclusive = 0, af = AF_UNSPEC;
@@ -1554,7 +1606,7 @@ less(lua_State *L)
 }
 
 /*
- * ipt:masks(af) <-- [t af]
+ * t:masks(af) <-- [t af]
  *
  * Iterate across all masks used in AF_family's radix tree.
  * Notes:
@@ -1569,7 +1621,6 @@ less(lua_State *L)
  * flag needs to be passed to iter_f that a zeromask entry is present.
  *
  */
-
 static
 int masks(lua_State *L) { 
 
