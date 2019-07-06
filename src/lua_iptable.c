@@ -1,10 +1,9 @@
-// file lua_iptable.c -- Lua bindings for iptable
+/* file lua_iptable.c --  Lua bindings for iptable */
 
 #include <malloc.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <string.h>
-#include <math.h>
 
 #include "lua.h"
 #include "lualib.h"
@@ -14,7 +13,7 @@
 #include "iptable.h"
 #include "debug.h"
 
-/* lua_iptable defines */
+/* lua_iptable identity */
 
 #define LUA_IPTABLE_ID "iptable"
 

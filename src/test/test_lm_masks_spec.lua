@@ -21,7 +21,7 @@ describe("t:masks(af): ", function()
     AF_INET6 = iptable.AF_INET6
 
 
-    it("finds no masks in emtpy tables", function()
+    it("finds no masks in an emtpy table", function()
       local t = iptable.new()
       local cnt = 0;
 
@@ -33,16 +33,17 @@ describe("t:masks(af): ", function()
       assert.are_equal(0, cnt);
     end)
 
-    it("finds /0 masks", function()
+    it("finds /0 masks in ipv4 tree", function()
       local t = iptable.new()
       local cnt = 0;
 
       t["0/0"] = 1
       for mask in t:masks(AF_INET) do cnt = cnt + 1 end
       assert.are_equal(1, cnt);
+
     end)
 
-    it("finds /0 masks", function()
+    it("finds /0 masks in ipv6 tree", function()
       local t = iptable.new()
       local cnt = 0;
 
