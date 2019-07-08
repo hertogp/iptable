@@ -11,7 +11,7 @@
 #include "iptable.h"         // iptable layered on top of radix.c
 
 #include "minunit.h"         // the mu_test macros
-#include "test_c_destroy.h"  // a generated header file for this test runner
+#include "test_c_tbl_destroy.h"
 
 /*
  * Test table->destroy()
@@ -32,7 +32,6 @@ void purge(void *args, void **dta)
     *(int *)args += 1;
     dta = dta ? dta : dta; /* not used */
 }
-
 
 void
 test_emptytable(void)

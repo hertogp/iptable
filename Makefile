@@ -3,6 +3,8 @@
 # utilities
 RM=/bin/rm
 BUSTED=~/.luarocks/bin/busted
+VGRIND=valgrind
+VOPTS=--leak-check=full --show-leak-kinds=all
 BOPTS=
 MKDIR= mkdir
 INSTALL= cp
@@ -136,7 +138,8 @@ MU_RUNNERS=$(MU_TARGETS:%=$(BLDDIR)/%.out)
 # run all C-unit tests
 c_test: $(CTARGET) $(MU_RUNNERS)
 	@echo "\n\n--- C unit tests ---\n"
-	@$(foreach runner, $(MU_RUNNERS), valgrind --leak-check=yes ./$(runner);)
+	#@$(foreach runner, $(MU_RUNNERS), valgrind --leak-check=yes ./$(runner);)
+	@$(foreach runner, $(MU_RUNNERS), $(VGRIND) $(VOPTS) ./$(runner);)
 	@echo "\n--- done ---\n\n"
 
 # # run a single unit test
@@ -145,7 +148,7 @@ $(MU_TARGETS): %: $(BLDDIR)/%.out
 	@echo "* $*"
 	@echo "< $<"
 	@echo "^ $^"
-	valgrind --leak-check=yes ./$<
+	$(VGRIND) $(VOPTS) ./$<
 
 # build a unit test's mu-header
 $(MU_HEADERS): $(BLDDIR)/%.h: $(TSTDIR)/%.c

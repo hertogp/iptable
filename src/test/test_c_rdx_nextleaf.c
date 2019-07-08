@@ -10,8 +10,8 @@
 #include "radix.h"           // the radix tree
 #include "iptable.h"         // iptable layered on top of radix.c
 
-#include "minunit.h"          // the mu_test macros
-#include "test_c_firstleaf.h" // a generated header file for this test runner
+#include "minunit.h"         // the mu_test macros
+#include "test_c_rdx_nextleaf.h"
 
 typedef struct testpfx_t {
     const char *pfx;
@@ -32,10 +32,13 @@ void
 test_emptytable(void)
 {
 
+    /* check we donot yield the root-leafs for an empty table */
+
     table_t *t = tbl_create(NULL);
     struct radix_node *rn;
 
     rn = rdx_firstleaf(&t->head4->rh);
+    rn = rdx_nextleaf(rn);
     mu_eq(NULL, (void *)rn, "%p");
     tbl_destroy(&t, NULL);
 }
@@ -43,7 +46,7 @@ test_emptytable(void)
 void
 test_host0(void)
 {
-
+    /* check we reach left-end marker's dupedkey if its the only entry */
     table_t *t = tbl_create(NULL);
     testpfx_t pfx[] = { {"0.0.0.0/32", 1} };
     struct radix_node *rn;
@@ -51,6 +54,39 @@ test_host0(void)
     mu_assert(tbl_set(t, pfx[0].pfx, &pfx[0].dta, NULL));
     rn = rdx_firstleaf(&t->head4->rh);
     mu_eq((void *)t->head4->rnh_nodes[0].rn_dupedkey, (void *)rn, "%p");
+    rn = rdx_nextleaf(rn);
+    mu_eq(NULL, (void *)rn, "%p");
+
+    tbl_destroy(&t, NULL);
+}
+
+void
+test_nxhost0(void)
+{
+    /* check we reach all left-end marker's dupedkeys if its has multiple */
+    table_t *t = tbl_create(NULL);
+    testpfx_t pfx[] = {
+        {"0.0.0.0/32", 1},
+        {"0.0.0.0/24", 1},
+        {"0.0.0.0/16", 1},
+        {"0.0.0.0/8",  1},
+        {"0.0.0.0/1",  1},
+        {"0.0.0.0/0",  1},
+    };
+    struct radix_node *rn;
+    int cnt = 0;
+
+    for(int i = 0; i < NELEMS(pfx); i++)
+        mu_assert(tbl_set(t, pfx[i].pfx, &pfx[i].dta, NULL));
+
+    cnt = 0;
+    rn = rdx_firstleaf(&t->head4->rh);
+    if(rn)
+        cnt += 1;
+
+    while((rn = rdx_nextleaf(rn)))
+        cnt += 1;
+    mu_eq(NELEMS(pfx), cnt, "%d");
 
     tbl_destroy(&t, NULL);
 }
@@ -58,6 +94,7 @@ test_host0(void)
 void
 test_host128(void)
 {
+    /* check we reach a single, normal leaf */
 
     table_t *t = tbl_create(NULL);
     testpfx_t pfx[] = { {"128.128.128.128/32", 1} };
@@ -73,91 +110,91 @@ test_host128(void)
         mu_eq( 128, 0xFF & *(rn->rn_key+2), "LEN byte 0x%02x");
         mu_eq( 128, 0xFF & *(rn->rn_key+3), "LEN byte 0x%02x");
         mu_eq( 128, 0xFF & *(rn->rn_key+4), "LEN byte 0x%02x");
-    } else
+    } else {
         mu_failed("host128 not found, got %p", (void *)rn);
+    }
+    rn = rdx_nextleaf(rn);
+    mu_eq(NULL, (void *)rn, "%p");
 
     tbl_destroy(&t, NULL);
 }
 
-/* host255:
- * - yields a memory leak?
- * - is not found by firstleaf
- */
-
 void
-test_host255(void)
+test_endmarker(void)
 {
+    /* check we reach right-end marker's dupedkey if its the only entry */
 
     table_t *t = tbl_create(NULL);
     testpfx_t pfx[] = { {"255.255.255.255/32", 1} };
     struct radix_node *rn;
 
     mu_assert(tbl_set(t, pfx[0].pfx, &pfx[0].dta, NULL));
-
     rn = rdx_firstleaf(&t->head4->rh);
-    mu_eq((void *)t->head4->rnh_nodes[2].rn_dupedkey, (void *)rn, "%p");
+    rn = rdx_nextleaf(rn);
+    mu_eq(NULL, (void *)rn, "%p");
 
     tbl_destroy(&t, NULL);
 }
 
 void
-test_twosubnets(void)
+test_endmarkers(void)
 {
+    /* check we also reach right-end marker's dupedkey, in the face of
+     * some more table entries */
 
     table_t *t = tbl_create(NULL);
     testpfx_t pfx[] = {
-        {"10.10.10.10/24", 1},
-        {"11.11.11.11/24", 1},
+      {"255.255.255.255/32", 1},
+      {"255.255.255.255/24", 1},
+      {"255.255.255.255/16", 1},
     };
     struct radix_node *rn;
+    int count = 0;
 
     for (int i = 0; i < NELEMS(pfx); i++)
         mu_assert(tbl_set(t, pfx[i].pfx, &pfx[i].dta, NULL));
 
     rn = rdx_firstleaf(&t->head4->rh);
     mu_assert(rn);
+    count = 1;
+    while ( (rn = rdx_nextleaf(rn)) )
+      count += 1;
+
+    mu_eq(NELEMS(pfx), count, "count endmarkers %d");
 
     tbl_destroy(&t, NULL);
 }
 
 void
-test_threemin(void)
+test_left_right_leafs(void)
 {
-    /* 0-key with a mask and 2 normal subnets */
+    /* check we also reach right-end marker's dupedkey, in the face of
+     * some more table entries */
+
     table_t *t = tbl_create(NULL);
     testpfx_t pfx[] = {
-        {"0.0.0.0", 1},
-        {"10.10.10.10/24", 1},
-        {"11.11.11.11/24", 1},
+      {"0.0.0.0/1", 1},
+      {"0.0.0.0/24", 1},
+      {"0.0.0.0", 1},
+      {"192.1.1.1", 1},
+      {"192.1.1.3", 1},
+      {"128.1.1.1", 1},
+      {"128.1.1.2", 1},
+      {"255.255.255.255/32", 1},
     };
     struct radix_node *rn;
+    int count = 0;
 
     for (int i = 0; i < NELEMS(pfx); i++)
         mu_assert(tbl_set(t, pfx[i].pfx, &pfx[i].dta, NULL));
 
     rn = rdx_firstleaf(&t->head4->rh);
     mu_assert(rn);
+    count = 1;
+    while ( (rn = rdx_nextleaf(rn)) )
+      count += 1;
 
-    tbl_destroy(&t, NULL);
-}
-
-void
-test_threemax(void)
-{
-    /* 255-key with two normal subnets */
-    table_t *t = tbl_create(NULL);
-    testpfx_t pfx[] = {
-        {"255.255.255.255", 1},
-        {"10.10.10.10/24", 1},
-        {"11.11.11.11/24", 1},
-    };
-    struct radix_node *rn;
-
-    for (int i = 0; i < NELEMS(pfx); i++)
-        mu_assert(tbl_set(t, pfx[i].pfx, &pfx[i].dta, NULL));
-
-    rn = rdx_firstleaf(&t->head4->rh);
-    mu_assert(rn);
+    mu_eq(NELEMS(pfx), count, "count all leafs %d");
 
     tbl_destroy(&t, NULL);
 }

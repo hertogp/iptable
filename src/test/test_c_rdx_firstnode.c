@@ -11,7 +11,7 @@
 #include "iptable.h"         // iptable layered on top of radix.c
 
 #include "minunit.h"         // the mu_test macros
-#include "test_c_tbl_firstnode.h"
+#include "test_c_rdx_firstnode.h"
 
 #define INT_VALUE(x) (*(int *)x->value)
 #define SIZE_T(x) ((size_t)(x))

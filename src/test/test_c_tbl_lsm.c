@@ -11,7 +11,7 @@
 #include "iptable.h"         // iptable layered on top of radix.c
 
 #include "minunit.h"         // the mu_test macros
-#include "test_c_lsm.h"    // a generated header file for this test runner
+#include "test_c_tbl_lsm.h"
 
 /*
  * Test cases

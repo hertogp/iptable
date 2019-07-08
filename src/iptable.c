@@ -227,17 +227,24 @@ key_decr(void *key)
     return 1;
 }
 
+/*
+ * key_invert()
+ *
+ * inverts a key, usefull for a mask.  Assumes the LEN-byte indicates how many
+ * bytes must be (and can be safely) inverted.
+ *
+ */
+
 int
 key_invert(void *key)
 {
-  // invert a key, usefull for a mask.  LEN-byte does not change, so that
-  // disrupts the idea that, for a mask, the LEN-byte indicates the number of
-  // non-zero's bytes in the array, counting from the left.
   uint8_t *k = key;
   int klen;
 
-  if (k == NULL) return 0;
+  if (k == NULL) return 0;   /* no key, no inverted key */
   klen = IPT_KEYLEN(k);
+  if (klen < 2) return 0;    /* key without bits cannot be inverted */
+
   while(--klen > 0 && k++) *k = ~*k;
 
   return 1;
@@ -260,33 +267,41 @@ key_network(void *key, void *mask)
     k = IPT_KEYPTR(k);      // skip LEN byte
     m = IPT_KEYPTR(m);      // skip LEN byte
 
-    if (klen < mlen) return 0;  // donot overrun key
+    if (klen < 2) return 0;     // no key, no network address
+    if (mlen > klen) return 0;  // donot overrun key
     for(mlen--; --klen; mlen--)
-        *(k++) &= mlen > 0 ? *(m++) : 0x00;
+        *(k++) &= (mlen > 0) ? *(m++) : 0x00;
 
     return 1;
 }
 
+/*
+ * key_broadcast() - set key to broadcast address, using mask
+ *
+ * - 1 on success, 0 on failure
+ * - mask LEN <= key LEN, 'missing' mask bytes are taken to be 0x00
+ *   (a radix tree artifact).
+ */
+
 int
 key_broadcast(void *key, void *mask)
 {
-    // apply (xor) inv.mask to key, 1 on success, 0 on failure
-    // - a mask's length may indicate the num of non-zero bytes instead of the
-    //   entire length of the mask byte array.  Such 'missing' bytes are taken
-    //   to be 0xff (some radix tree masks seem to do this).
     int klen, mlen;
     uint8_t *k = key, *m = mask;
 
-    // sanity check
     if (k == NULL || m == NULL) return 0;
+
     klen = IPT_KEYLEN(k);
     mlen = IPT_KEYLEN(m);
-    k = IPT_KEYPTR(k);      // skip LEN byte
-    m = IPT_KEYPTR(m);      // skip LEN byte
 
-    if (klen < mlen) return 0;  // donot overrun key
+    if (klen < 2) return 0;      /* no key, no bcast address */
+    if (mlen > klen) return 0;   /* mask may be smaller, never larger */
+
+    k = IPT_KEYPTR(k);
+    m = IPT_KEYPTR(m);
+
     for(mlen--; --klen; mlen--)
-        *(k++) |= mlen > 0 ? ~*(m++) : 0xff;
+        *(k++) |= (mlen > 0) ? ~*(m++) : 0xff;
 
     return 1;
 }
@@ -300,6 +315,7 @@ key_cmp(void *a, void *b)
     if (aa == NULL || bb == NULL) return -2;       // need real keys
     keylen = IPT_KEYLEN(aa);
     if (keylen != IPT_KEYLEN(bb)) return -2;       // different AF_families
+    if (keylen < 2) return -2;                     // need key bits to compare
 
     for(; --keylen > 0 && *aa==*bb; aa++, bb++)
         ;
@@ -353,17 +369,35 @@ void _dumprn(const char *s, struct radix_node *rn)
 
 }
 
+/*
+ * rdx_flush() - free user controlled resources.
+ *
+ * Called by walktree, rdx_flush:
+ * - frees the key and, if applicable,
+ * - uses the purge function to allow user controlled resources to be freed.
+ * The purge function is supplied at tree creation time.
+ *
+ * Note: rdx_flush is called from walktree and only on _LEAF_ nodes, so the rn
+ * pointer is cast to pointer to entry_t.  As a walktree_f_t, it always returns
+ * the value 0 to indicate success, otherwise the walkabout would stop.
+ *
+ */
+
 int
 rdx_flush(struct radix_node *rn, void *args)
 {
-    // return 0 on success, 1 on failure (see rnh_walktree)
-    // - rdx_flush is called only on  _LEAF_ nodes (rn points to entry->rn[0])
     struct entry_t *entry = NULL;
-    purge_t *arg = (purge_t *)args;
-    struct radix_node_head *rnh = arg->head;
+    purge_t *arg = NULL;
+    struct radix_node_head *rnh = NULL;
 
     if (rn == NULL) return 0;
+    if (args == NULL) return 0;  /* need args for head pointer */
+
+    arg = (purge_t *)args;
+    rnh = arg->head;
+
     entry = (entry_t *)rnh->rnh_deladdr(rn->rn_key, rn->rn_mask, &rnh->rh);
+
     if (entry == NULL) return 0;
 
     free(entry->rn[0].rn_key);
@@ -1016,7 +1050,8 @@ tbl_stackpush(table_t *t, int type, void *elm)
     // insert element into stack
     stackElm_t *node = NULL;
 
-    if (elm == NULL) return 0;   // ignore NULL elements
+    if (t == NULL) return 0;     /* no table, no stack */
+    if (elm == NULL) return 0;   /* ignore NULL elements */
 
     node = calloc(1, sizeof(stackElm_t));
 
@@ -1037,12 +1072,16 @@ tbl_stackpop(table_t *t)
     // pop & free top element
     stackElm_t *node;
 
-    if (t->top == NULL) return 0;
+    if (t == NULL) return 0;       /* no table, no stack */
+    if (t->top == NULL) return 0;  /* no stack, no pop */
 
     node = t->top;
     t->top = node->next;
     free(node);
+
     t->size -= 1;
+    if(t->top == NULL)  /* just in case somebody messed with the size */
+        t->size = 0;
 
     return 1;
 }
