@@ -165,7 +165,6 @@ $(MU_RUNNERS): $(BLDDIR)/%.out: $(BLDDIR)/%.o $(BLDDIR)/lib$(LIB).so
 
 # show variables
 echo:
-	@echo
 	@echo "RM          = $(RM)"
 	@echo "BUSTED      = $(BUSTED)"
 	@echo "BOPTS       = $(BOPTS)"
@@ -198,17 +197,15 @@ echo:
 	@objdump -p $(CTARGET) | grep -i soname
 	@echo
 	@echo "luarocks"
-	@echo "LUA_LIBDIR = $()"
 	@echo "LUA_BINDIR = $(LUA_BINDIR)"
 	@echo "LUA_INCDIR = $(LUA_INCDIR)"
 	@echo "LUALIB     = $(LUALIB)"
 	@echo "LUA        = $(LUA)"
-# - install dirs
 	@echo "PREFIX     = $(PREFIX)"
 	@echo "BINDIR     = $(BINDIR)"
 	@echo "LIBDIR     = $(LIBDIR)"
 	@echo "LUADIR     = $(LUADIR)"
-	@echo "CONFDIR    = $(CONFDIR"
+	@echo "CONFDIR    = $(CONFDIR)"
 	@echo
 	@echo "removables"
 	@echo "$(OBJS)"

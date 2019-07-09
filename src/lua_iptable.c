@@ -436,6 +436,7 @@ iter_less(lua_State *L)
 {
     char buf[MAX_STRKEY];
     table_t *t = check_table(L, 1);
+    entry_t *e;
     const char *pfx = lua_tostring(L, lua_upvalueindex(1));
     int mlen = lua_tointeger(L, lua_upvalueindex(2));
 
@@ -443,23 +444,22 @@ iter_less(lua_State *L)
     if (mlen < 0) return 0;
     if (pfx == NULL) return 0;
 
-    for(; mlen > 0; mlen--) {
-      snprintf(buf, sizeof(buf), "%s/%d", pfx, mlen);
-      buf[MAX_STRKEY-1] = '\0';
+    for(; mlen >= 0; mlen--) {
+        snprintf(buf, sizeof(buf), "%s/%d", pfx, mlen);
+        buf[MAX_STRKEY-1] = '\0';
 
-      /* TODO: return actual prefix found, not sought which does not have the
-       * key applied (yet)
-       */
-      if (tbl_get(t, buf)) {
-        lua_pushstring(L, buf);
-        lua_pushinteger(L, mlen-1);
-        lua_replace(L, lua_upvalueindex(2));
-        return 1;
-      }
+        if ((e = tbl_get(t, buf))) {
+            lua_pushfstring(L, "%s/%d",
+                    key_tostr(buf, e->rn[0].rn_key),
+                    key_tolen(e->rn[0].rn_mask));
+            lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
+            lua_pushinteger(L, mlen-1);
+            lua_replace(L, lua_upvalueindex(2));
+            return 2;
+        }
     }
     return 0;  // all done
 }
-
 
 /*
  * iter_masks(lua_State *);
