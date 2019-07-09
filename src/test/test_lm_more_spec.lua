@@ -34,134 +34,49 @@ describe("ipt:more(pfx): ", function()
     ipt["1.2.3.144/28"] = 128
 
     it("finds more specifics, non-inclusive", function()
-      local cnt = 0;
+      local sum = 0;
       local search_pfx = "1.2.3.0/24";
-      for pfx in ipt:more(search_pfx) do
-        cnt = cnt + 1;
-      end
-      assert.are_equal(7, cnt);
+      for pfx, v in ipt:more(search_pfx) do sum = sum + v; end
+      assert.are_equal(2+4+8+16+32+64+128, sum);
     end)
 
     it("finds more specifics, inclusive", function()
-      local cnt = 0;
+      local sum = 0;
       local search_pfx = "1.2.3.0/24";
-      for pfx in ipt:more(search_pfx, true) do
-        cnt = cnt + 1;
-      end
-      assert.are_equal(8, cnt);
+      for pfx, v in ipt:more(search_pfx, true) do sum = sum + v; end
+      assert.are_equal(1+2+4+8+16+32+64+128, sum);
     end)
 
     it("handles non-existing search prefixes", function()
-      local cnt = 0;
+      local sum = 0;
       local search_pfx = "10.10.10.0/24";
-      for pfx in ipt:more(search_pfx, true) do
-        cnt = cnt + 1;
-      end
-      assert.are_equal(0, cnt);
+      for pfx, v in ipt:more(search_pfx, true) do sum = sum + v end
+      assert.are_equal(0, sum);
     end)
 
     it("yields all entries for 0/0", function()
-      local cnt = 0;
-      for pfx in ipt:more("10.10.10.0/0") do
-        cnt = cnt + 1;
-      end
-      assert.are_equal(8, cnt);
+      local sum = 0;
+      local search_pfx = "0/0";
+      for pfx, v in ipt:more(search_pfx) do sum = sum + v; end
+      assert.are_equal(1+2+4+8+16+32+64+128, sum);
     end)
 
     it("optionally includes 0/0 in the results", function()
-      local cnt = 0;
-
+      local sum = 0;
       -- add 0/0 to the table
       ipt["0.0.0.0/0"] = 256;
 
-      -- non-inclusive does not return 0/0
-      for pfx in ipt:more("10.10.10.0/0") do
-        cnt = cnt + 1;
-      end
-      assert.are_equal(8, cnt);
+      -- non-inclusive will not include search term
+      sum = 0;
+      local search_pfx = "0/0";
+      for pfx, v in ipt:more(search_pfx) do sum = sum + v; end
+      assert.are_equal(1+2+4+8+16+32+64+128, sum);
 
       -- inclusive will return 0/0
-      cnt = 0;
-      for pfx in ipt:more("10.10.10.0/0", true) do
-        cnt = cnt + 1;
-      end
-      assert.are_equal(9, cnt);
-
-
+      sum = 0;
+      for pfx, v in ipt:more(search_pfx, true) do sum = sum + v; end
+      assert.are_equal(1+2+4+8+16+32+64+128+256, sum);
     end)
-
-  end)
-end)
-
-describe("ipt:more(pfx) ", function()
-
-  expose("instance: ", function()
-    iptable = require("iptable");
-    assert.is_truthy(iptable);
-    ipt = iptable.new();
-    assert.is_truthy(ipt);
-
-    it("gets array of more specific prefixes", function()
-      local cnt = 0
-      ipt["1.1.1.0/24"] = 24;
-      ipt["1.1.1.0/25"] = 25;
-      ipt["1.1.1.128/25"] = 25;
-      ipt["1.1.1.0/26"] = 26;
-      ipt["1.1.1.64/26"] = 26;
-      ipt["1.1.1.128/26"] = 26;
-      ipt["1.1.1.192/26"] = 26;
-      assert.is_truthy(7 == #ipt);
-
-      -- non-inclusive
-      cnt = 0
-      for p in ipt:more("1.1.1.0/24") do cnt = cnt + 1 end
-      assert.are.equal(6, cnt);
-
-      -- inclusive
-      cnt = 0
-      for p in ipt:more("1.1.1.0/24", true) do cnt = cnt + 1 end
-      assert.are.equal(7, cnt);
-
-      -- should find two /26's
-      cnt = 0
-      for p in ipt:more("1.1.1.0/25") do cnt = cnt + 1 end
-      assert.are.equal(2, cnt);
-
-      -- inclusive search
-      cnt = 0
-      for p in ipt:more("1.1.1.0/25", true) do cnt = cnt + 1 end
-      assert.are.equal(3, cnt);
-
-      -- nothing more specific for 1.1.1.0/26
-      cnt = 0
-      for p in ipt:more("1.1.1.0/26") do cnt = cnt + 1 end
-      assert.are.equal(0, cnt);
-
-      -- inclusive search
-      cnt = 0
-      for p in ipt:more("1.1.1.0/26", true) do cnt = cnt + 1 end
-      assert.are.equal(1, cnt);
-    end)
-
-    it("will find results if search prefix itself is absent", function()
-      local cnt;
-      local ipt = iptable.new()
-      ipt["1.1.1.128/25"] = 25;
-      ipt["1.1.1.64/26"] = 26;
-      ipt["1.1.1.128/26"] = 26;
-      ipt["1.1.1.192/26"] = 26;
-      assert.is_truthy(4 == #ipt);
-
-      -- 1.1.1.0/24 is not in table, but more specific entries exist
-      cnt = 0
-      for p in ipt:more("1.1.1.0/24") do cnt = cnt + 1 end
-      assert.are.equal(4, cnt);
-
-      cnt = 0
-      for p in ipt:more("1.1.1.0/24", true) do cnt = cnt + 1 end
-      assert.are.equal(4, cnt);
-    end)
-
   end)
 end)
 
@@ -212,7 +127,6 @@ describe("ipt:more(pfx): ", function()
         for pfx in t:more("1.1.1.1/0", incl) do cnt = cnt + 1; end
         assert.are_equal(#t, cnt);
       end
-
     end)
   end)
 end)

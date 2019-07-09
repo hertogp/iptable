@@ -515,8 +515,9 @@ static int iter_masks(lua_State *L)
 /*
  * Iterate across adjacent prefixes that may be combined.
  *
- * returns array of {{kc, vc}, {k0, v0}, {k1, v1}}
+ * returns supernet, bot_subnet, top_subnet
  */
+
 static int
 iter_merge(lua_State *L)
 {
@@ -535,47 +536,35 @@ iter_merge(lua_State *L)
     uint8_t netw[MAX_BINKEY], mask[MAX_BINKEY];
     int mlen = 0;
 
-    if (rn == NULL) return 0;     /* all done */
-    if (! isvalid(rn)) return 0;  /* TODO: error handling */
-    if (! RDX_ISLEAF(rn)) return 0; /* dito */
-    if (RDX_ISROOT(rn)) return 0; /* all done */
-
-    if (rn->rn_mask == NULL) return 0;
+    if (rn == NULL) return 0;          /* all done */
+    if (! isvalid(rn)) return 0;       /* before accessing rn properties */
+    if (RDX_ISROOT(rn)) return 0;      /* all done */
+    if (! RDX_ISLEAF(rn)) return 0;    /* dito */
+    if (rn->rn_mask == NULL) return 0; 
 
     /* search for combinable prefix */
     int found = 0;
     while (rn && !found) {
         mlen = key_tolen(rn->rn_mask);
-        dbg_msg("topic is %s/%d", key_tostr(dbuf, rn->rn_key), mlen);
         if (mlen == 1) return 0; // TODO: not combining to /0
 
         /* get network address for rn_key for mlen-1 */
         for (int i = 0; i <= IPT_KEYLEN(rn->rn_key) && i < MAX_BINKEY; i++)
             netw[i] = rn->rn_key[i];
         if (! key_bylen(mask, mlen-1, KEY_AF_FAM(rn->rn_key))) return 0;
-        dbg_msg("new mask         %s", key_tostr(dbuf, mask));
-        dbg_msg("netw before mask %s", key_tostr(dbuf, netw));
         if (! key_network(netw, mask)) return 0;
-        dbg_msg("netw after  mask %s", key_tostr(dbuf, netw));
-        dbg_msg("rn->rn_key       %s", key_tostr(dbuf, rn->rn_key));
-        dbg_msg("key_cmp says     %d", key_cmp(rn->rn_key, netw));
 
         if (key_cmp(rn->rn_key, netw) != 0) {
             /* rn_key is upper half, so check for bottom half */
             if (! key_tostr(super, netw)) return 0; // TODO: err hdlr
             snprintf(bottom, sizeof(bottom), "%s/%d", super, mlen);
-            dbg_msg("upper  is %s/%d", key_tostr(dbuf, rn->rn_key), mlen);
-            dbg_msg("bottom is %s", bottom);
             if ((ebot = tbl_get(t, bottom))) {
                 found = 1;
                 lua_pushfstring(L, "%s/%d", super, mlen-1);
                 lua_pushstring(L, bottom);
                 lua_pushfstring(L, "%s/%d", key_tostr(upper, rn->rn_key), mlen);
             }
-        } else {
-            dbg_msg("%s/%d is bottom half", key_tostr(dbuf, rn->rn_key), mlen);
         }
-
 
         if (!found)
             rn = rdx_nextleaf(rn);
@@ -606,6 +595,7 @@ iter_more(lua_State *L)
     char buf[MAX_STRKEY];
     struct radix_node *top = lua_touserdata(L, lua_upvalueindex(1));
     struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(2));
+    struct entry_t *e = NULL;
     int maxb = lua_tointeger(L, lua_upvalueindex(3));
     size_t dummy;
     uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
@@ -635,8 +625,13 @@ iter_more(lua_State *L)
             && rn->rn_bit <= maxb
             && key_isin(addr, rn->rn_key, mask)) {
 
-            if (! key_tostr(buf, rn->rn_key)) return 0;
-            lua_pushfstring(L, "%s/%d", buf, key_tolen(rn->rn_mask));
+            e = (entry_t *)rn;
+            lua_pushfstring(L, "%s/%d",
+                key_tostr(buf, e->rn[0].rn_key),
+                key_tolen(e->rn[0].rn_mask));
+            lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
+            /* if (! key_tostr(buf, rn->rn_key)) return 0; */
+            /* lua_pushfstring(L, "%s/%d", buf, key_tolen(rn->rn_mask)); */
             matched = 1;
         }
 
@@ -685,7 +680,7 @@ iter_more(lua_State *L)
         }
     }
 
-    if (matched) return 1;
+    if (matched) return 2;
     return 0;
 }
 
