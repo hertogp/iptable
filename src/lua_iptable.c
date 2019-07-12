@@ -696,50 +696,58 @@ iter_more(lua_State *L)
     lua_pop(L, lua_gettop(L));  // clear stack, not used
 
     char buf[MAX_STRKEY];
+    struct entry_t *e = NULL;
     // struct radix_node *top = lua_touserdata(L, lua_upvalueindex(1));
     struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(2));
-    struct entry_t *e = NULL;
-    // int maxb = lua_tointeger(L, lua_upvalueindex(3));
-    int mlen = lua_tointeger(L, lua_upvalueindex(3));
+    int inclusive = lua_tointeger(L, lua_upvalueindex(3));
+    int mlen;
     size_t dummy;
     uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
 
+    /* fprintf(stderr, "iter-more\n"); */
     if (rn == NULL) return 0;     /* we're done */
-    if (!isvalid(rn)) return 0;   /* TODO: error handling, rn was deleted */
-
+    if (!isvalid(rn)) return 0;   /* TODO: error: rn was deleted */
     if(!check_binkey(L, lua_upvalueindex(4), addr, &dummy)) return 0;
     if(!check_binkey(L, lua_upvalueindex(5), mask, &dummy)) return 0;
+    mlen = key_tolen(mask);
+    mlen = inclusive ? mlen : mlen + 1;
 
     while (rn) {
 
-        if(!RDX_ISLEAF(rn) || RDX_ISROOT(rn)) {
-            rn = NULL;
+        if(!RDX_ISLEAF(rn)) /* || RRDX_ISROOT(rn)) */
+            return 0; /* all done */
 
-        } else if(key_tolen(rn->rn_mask) > mlen
-                    && key_isin(addr, rn->rn_key, mask)) {
+        /* if(RDX_ISLEAF(rn)) { */
+        /*     fprintf(stderr, "msp check %s/%d", */
+        /*         key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask)); */
+        /* } */
 
-                e = (entry_t *)rn;
-                lua_pushfstring(L, "%s/%d",
-                        key_tostr(buf, e->rn[0].rn_key),
-                        key_tolen(e->rn[0].rn_mask));
-                lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
+        if(key_tolen(rn->rn_mask) >= mlen
+                && key_isin(addr, rn->rn_key, mask)) {
 
-                rn = rdx_nextleaf(rn);
+            /* fprintf(stderr, " -> match!\n"); */
+            e = (entry_t *)rn;
+            lua_pushfstring(L, "%s/%d",
+                    key_tostr(buf, e->rn[0].rn_key),
+                    key_tolen(e->rn[0].rn_mask));
+            lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
 
-                lua_pushlightuserdata(L, rn);
-                lua_replace(L, lua_upvalueindex(2));
-
-                return 2;
-
-        } else if(key_tolen(rn->rn_mask) > mlen &&
-                key_isin(addr, rn->rn_key, rn->rn_mask))
             rn = rdx_nextleaf(rn);
-        else
-            rn = NULL;
-    }
 
-    dbg_stack("out (0)");
-    return 0;
+            lua_pushlightuserdata(L, rn);
+            lua_replace(L, lua_upvalueindex(2));
+
+            return 2;
+
+        } else if(key_isin(addr, rn->rn_key, mask)) {
+            rn = rdx_nextleaf(rn);
+            /* fprintf(stderr, " -- continue\n"); */
+        } else {
+            /* fprintf(stderr, " -- stopping\n"); */
+            return 0; /* all done */
+        }
+    }
+    return 0; /* NOT REACHED */
 }
 
 /*
@@ -1675,24 +1683,19 @@ more(lua_State *L)
     uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
     struct radix_node_head *head = NULL;
     struct radix_node *rn = NULL, *top = NULL;
-    int mmlen;
+    int inclusive = 0;
 
     table_t *t = check_table(L, 1);
     const char *pfx = check_pfxstr(L, 2, &len);
 
+    /* fprintf(stderr, "-1-\n"); */
     if (! key_bystr(addr, &mlen, &af, pfx)) {
         /* TODO: err hdlr - set errno & bail: iter_bail(L, errno) */
         lua_pushfstring(L, "more(): invalid prefix %s", lua_tostring(L, 2));
         lua_error(L);
     }
-    if (lua_gettop(L) == 3 && lua_isboolean(L, 3)) {
-        maxb = 0;
-        mmlen = mlen;
-    } else
-        mmlen = mlen - 1;
-
-    lua_pop(L, lua_gettop(L) - 1);  // [t]
-
+    if (lua_gettop(L) == 3 && lua_isboolean(L, 3))
+        inclusive = 1;
     if (af == AF_INET) {
       head = t->head4;
       mlen = mlen < 0 ? IP4_MAXMASK : mlen;
@@ -1700,73 +1703,29 @@ more(lua_State *L)
       head = t->head6;
       mlen = mlen < 0 ? IP6_MAXMASK : mlen;
     } else return iter_bail(L);
-
     if (! key_bylen(mask, mlen, af) || ! key_network(addr, mask)) {
         /* TODO: err hdlr - set errno & bail: iter_bail(L, errno) */
         lua_pushliteral(L, "more(): error converting prefix");
         lua_error(L);
     }
+    lua_pop(L, lua_gettop(L) - 1);  // [t]
 
-    /*
-     * rn_bit >= maxb, and in case mlen==0 and 0/0 is present in the tree,
-     * it's rn_bit is -1 and not -1-IPT_KEYOFFSET-mlen like for all other
-     * leafs
-     *
-     */
-
-    maxb = (mlen == 0) ? maxb - 1 : maxb - 1 - IPT_KEYOFFSET - mlen;
-
-    /* descend the tree towards a possible matching leaf */
-    for(rn = head->rh.rnh_treetop; !RDX_ISLEAF(rn);)
-        if (addr[rn->rn_offset] & rn->rn_bmask)
-            rn = rn->rn_right;
+    maxb = (mlen > 0) ? -1 - IPT_KEYOFFSET - mlen : -2;
+    for(top = head->rh.rnh_treetop; !RDX_ISLEAF(top) && top->rn_bit >= maxb;)
+        if (addr[top->rn_offset] & top->rn_bmask)
+            top = top->rn_right;
         else
-            rn = rn->rn_left;
+            top = top->rn_left;
 
-    /* go up to INTERNAL node governing the tree of this leaf */
-    for(top=rn->rn_parent; top->rn_bit>mlen+IPT_KEYOFFSET; top=top->rn_parent)
-        if (RDX_ISROOT(top)) break;
+    for (rn = top->rn_parent; !RDX_ISLEAF(rn);)  /* first, left-most, leaf */
+        rn = rn->rn_left;
 
-    /* goto LEFT subtree, first LEAF */
-    for (rn = top; !RDX_ISLEAF(rn); rn=rn->rn_left)
-        ;
-
-    /*
-     * If the search ends up on the default ROOT 0/0 node, it has failed if
-     * mlen != 0 and no matches are possible.  Note: ROOT's 0.0.0.0 rn_key has
-     * a keylength of 0 bytes(!) and thus will always match any other key when
-     * using key_isin to check for a match.  Hence the first check is for a
-     * subtree failure and then a key_isin check is done.
-     *
-     * If the search ends up on some 'real' LEAF node, key_isin can be used to
-     * check the leaf actually matches.  Required since the trie is path
-     * compressed.
-     *
-     */
-
-    if (subtree_fail(rn, mlen) || !key_isin(addr, rn->rn_key, mask)) {
-        /* switch to RIGHT subtree */
-        for (rn = top->rn_right; !RDX_ISLEAF(rn); rn=rn->rn_left)
-            ;
-        if (subtree_fail(rn, mlen) || !key_isin(addr, rn->rn_key, mask))
-          rn = NULL;
-    }
-
-    /* the upvalues for the iterator: subtreetop, current node & maxbit */
-    /* if (rn && RDX_ISLEAF(rn)) { */
-    /*     char buf[MAX_STRKEY]; */
-    /*     printf("more start found %s/%d, top's rn_bit %d\n", */
-    /*         key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask), */
-    /*         top->rn_bit); */
-    /* } */
-    lua_pushlightuserdata(L, top);
-    lua_pushlightuserdata(L, rn);
-    // lua_pushinteger(L, maxb);
-    lua_pushinteger(L, mmlen);
+    /* iterator upvalues: sub-treetop, fst-leaf, inclusive, addr, mask */
+    lua_pushlightuserdata(L, top);  // stay below this node
+    lua_pushlightuserdata(L, rn);   // first possible match in subtree
+    lua_pushinteger(L, inclusive);
     lua_pushlstring(L, (const char *)addr, (size_t)IPT_KEYLEN(addr));
     lua_pushlstring(L, (const char *)mask, (size_t)IPT_KEYLEN(mask));
-
-                                                  // [t top rn maxb addr mask]
     lua_pushcclosure(L, iter_more, 5);            // [t f]
     lua_rotate(L, 1, 1);                          // [f t]
 

@@ -13,7 +13,6 @@ package.cpath = "./build/?.so;"
 -- helpers
 
 F = string.format
-VERBOSE = 1
 
 -- tests
 
@@ -37,38 +36,24 @@ describe("ipt:more(pfx): ", function()
     it("finds more specifics, non-inclusive", function()
       local sum = 0;
       local search_pfx = "1.2.3.0/24";
-      if VERBOSE then
-        for k, v in pairs(ipt) do print(k,v) end
-        print(F("\nmsp than pfx %s, non-inclusive", search_pfx))
-      end
       for pfx, v in ipt:more(search_pfx) do
         sum = sum + v;
-        if VERBOSE then print(F("msp -> %s", pfx)) end
       end
-      print("\ndone\n")
-      if sum == 2+4+8+16+32+64+128 then print(" -- ok") else print(" --fail") end
       assert.are_equal(2+4+8+16+32+64+128, sum);
     end)
 
     it("finds more specifics, inclusive", function()
       local sum = 0;
       local search_pfx = "1.2.3.0/24";
-      print(F("\nmsp than pfx %s, inclusive", search_pfx))
       for pfx, v in ipt:more(search_pfx, true) do sum = sum + v; end
       assert.are_equal(1+2+4+8+16+32+64+128, sum);
-      if sum == 1+2+4+8+16+32+64+128 then print(" -- ok") else print(" --fail") end
     end)
 
     it("handles non-existing search prefixes", function()
       local sum = 0;
       local search_pfx = "10.10.10.0/24";
-      print(F("\nmsp than %s", search_pfx))
-      for pfx, v in ipt:more(search_pfx, true) do
-        sum = sum + v
-        print(" ->", pfx)
-      end
+      for pfx, v in ipt:more(search_pfx, true) do sum = sum + v end
       assert.are_equal(0, sum);
-      if sum == 0 then print(" -- ok") else print(" --fail") end
     end)
 
     it("yields all entries for 0/0", function()
@@ -128,358 +113,358 @@ describe("ipt:more(pfx): ", function()
   end)
 end)
 
--- describe("ipt:more(pfx): ", function()
-
---   expose("ipt: ", function()
---     iptable = require("iptable");
---     assert.is_truthy(iptable);
-
---     it("finds nothing in empty table", function()
---       local t = iptable.new();
---       assert.is_truthy(t);
-
---       -- 0.0.0.0 and 255.255.255.255 are always in the radix tree as root nodes
---       -- but should never match unless they were added explicitly to the tree
+describe("ipt:more(pfx): ", function()
+
+  expose("ipt: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+
+    it("finds nothing in empty table", function()
+      local t = iptable.new();
+      assert.is_truthy(t);
+
+      -- 0.0.0.0 and 255.255.255.255 are always in the radix tree as root nodes
+      -- but should never match unless they were added explicitly to the tree
 
---       -- (non-)inclusive search finds nothing in an empty table
---       for _,incl in ipairs{false, true} do
---         local cnt = 0;
---         for pfx in t:more("0.0.0.0", incl) do cnt = cnt + 1; end
---         assert.are_equal(#t, cnt);
---       end
+      -- (non-)inclusive search finds nothing in an empty table
+      for _,incl in ipairs{false, true} do
+        local cnt = 0;
+        for pfx in t:more("0.0.0.0", incl) do cnt = cnt + 1; end
+        assert.are_equal(#t, cnt);
+      end
 
---       -- (non-)inclusive search finds nothing in an empty table
---       for _,incl in ipairs{false, true} do
---         local cnt = 0;
---         for pfx in t:more("255.255.255.255", incl) do cnt = cnt + 1; end
---         assert.are_equal(#t, cnt);
---       end
+      -- (non-)inclusive search finds nothing in an empty table
+      for _,incl in ipairs{false, true} do
+        local cnt = 0;
+        for pfx in t:more("255.255.255.255", incl) do cnt = cnt + 1; end
+        assert.are_equal(#t, cnt);
+      end
 
---       -- (non-)inclusive search finds nothing in an empty table
---       for _,incl in ipairs{false, true} do
---         local cnt = 0;
---         for pfx in t:more("0.0.0.0/0", incl) do cnt = cnt + 1; end
---         assert.are_equal(#t, cnt);
---       end
-
---       -- (non-)inclusive search finds nothing in an empty table
---       for _,incl in ipairs{false, true} do
---         local cnt = 0;
---         for pfx in t:more("255.255.255.255/0", incl) do cnt = cnt + 1; end
---         assert.are_equal(#t, cnt);
---       end
+      -- (non-)inclusive search finds nothing in an empty table
+      for _,incl in ipairs{false, true} do
+        local cnt = 0;
+        for pfx in t:more("0.0.0.0/0", incl) do cnt = cnt + 1; end
+        assert.are_equal(#t, cnt);
+      end
+
+      -- (non-)inclusive search finds nothing in an empty table
+      for _,incl in ipairs{false, true} do
+        local cnt = 0;
+        for pfx in t:more("255.255.255.255/0", incl) do cnt = cnt + 1; end
+        assert.are_equal(#t, cnt);
+      end
 
---       -- (non-)inclusive search finds nothing in an empty table
---       for _,incl in ipairs{false, true} do
---         local cnt = 0;
---         for pfx in t:more("1.1.1.1/0", incl) do cnt = cnt + 1; end
---         assert.are_equal(#t, cnt);
---       end
---     end)
---   end)
--- end)
+      -- (non-)inclusive search finds nothing in an empty table
+      for _,incl in ipairs{false, true} do
+        local cnt = 0;
+        for pfx in t:more("1.1.1.1/0", incl) do cnt = cnt + 1; end
+        assert.are_equal(#t, cnt);
+      end
+    end)
+  end)
+end)
 
--- describe("ipt:more(pfx): ", function()
+describe("ipt:more(pfx): ", function()
 
---   expose("ipt: ", function()
---     iptable = require("iptable");
---     assert.is_truthy(iptable);
+  expose("ipt: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
 
---     it("handles a single entry {0..255}.0.0.0/{0..32}", function()
+    it("handles a single entry {0..255}.0.0.0/{0..32}", function()
 
---       for stem=0,255 do
---         for mask=0,32 do
+      for stem=0,255 do
+        for mask=0,32 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("0.0.0.%d/%d", stem, mask)  -- pfx = 0/0 .. 255/32
---           t[pfx] = 1
+          local pfx = F("0.0.0.%d/%d", stem, mask)  -- pfx = 0/0 .. 255/32
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
+        end -- for mask
+      end -- for stem
+    end)
 
 
---     it("handles a single entry 0.{0..255}.0.0/{0..32}", function()
+    it("handles a single entry 0.{0..255}.0.0/{0..32}", function()
 
---       for stem=0,255 do
---         for mask=0,32 do
+      for stem=0,255 do
+        for mask=0,32 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("0.%d.0.0/%d", stem, mask)  -- pfx = 0/0 .. 255/32
---           t[pfx] = 1
+          local pfx = F("0.%d.0.0/%d", stem, mask)  -- pfx = 0/0 .. 255/32
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
+        end -- for mask
+      end -- for stem
+    end)
 
 
---     it("handles a single entry 0.0.{0..255}.0/{0..32}", function()
+    it("handles a single entry 0.0.{0..255}.0/{0..32}", function()
 
---       for stem=0,255 do
---         for mask=0,32 do
+      for stem=0,255 do
+        for mask=0,32 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("0.0.%d.0/%d", stem, mask)  -- pfx = 0/0 .. 255/32
---           t[pfx] = 1
+          local pfx = F("0.0.%d.0/%d", stem, mask)  -- pfx = 0/0 .. 255/32
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
+        end -- for mask
+      end -- for stem
+    end)
 
 
---     it("handles a single entry 0.0.0.{0..255}/{0..32}", function()
+    it("handles a single entry 0.0.0.{0..255}/{0..32}", function()
 
---       for stem=0,255 do
---         for mask=0,32 do
+      for stem=0,255 do
+        for mask=0,32 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("0.0.0.%d/%d", stem, mask)  -- pfx = 0/0 .. 255/32
---           t[pfx] = 1
+          local pfx = F("0.0.0.%d/%d", stem, mask)  -- pfx = 0/0 .. 255/32
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
---   end)
--- end)
+        end -- for mask
+      end -- for stem
+    end)
+  end)
+end)
 
 
--- describe("ipt:more(pfx): ", function()
+describe("ipt:more(pfx): ", function()
 
---   expose("ipt: ", function()
---     iptable = require("iptable");
---     assert.is_truthy(iptable);
+  expose("ipt: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
 
---     it("handles a single entry 255.255.{0..255}.255/{0..32}", function()
+    it("handles a single entry 255.255.{0..255}.255/{0..32}", function()
 
---       for stem=0,255 do
---         for mask=0,32 do
+      for stem=0,255 do
+        for mask=0,32 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("255.255.%d.255/%d", stem, mask)  -- pfx = 0/0 .. 255/32
---           t[pfx] = 1
+          local pfx = F("255.255.%d.255/%d", stem, mask)  -- pfx = 0/0 .. 255/32
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
+        end -- for mask
+      end -- for stem
+    end)
 
---     it("handles a single entry 255.{0..255}.255.255/{0..32}", function()
+    it("handles a single entry 255.{0..255}.255.255/{0..32}", function()
 
---       for stem=0,255 do
---         for mask=0,32 do
+      for stem=0,255 do
+        for mask=0,32 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("255.%d.255.255/%d", stem, mask)  -- pfx = 0/0 .. 255/32
---           t[pfx] = 1
+          local pfx = F("255.%d.255.255/%d", stem, mask)  -- pfx = 0/0 .. 255/32
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
+        end -- for mask
+      end -- for stem
+    end)
 
---     it("handles a single entry {0..255}.255.255.255/{0..32}", function()
+    it("handles a single entry {0..255}.255.255.255/{0..32}", function()
 
---       for stem=0,255 do
---         for mask=0,32 do
+      for stem=0,255 do
+        for mask=0,32 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("%d.255.255.255/%d", stem, mask)  -- pfx = 0/0 .. 255/32
---           t[pfx] = 1
+          local pfx = F("%d.255.255.255/%d", stem, mask)  -- pfx = 0/0 .. 255/32
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
+        end -- for mask
+      end -- for stem
+    end)
 
---     it("handles a single entry 255.255.255.{0..255}/{0..32}", function()
+    it("handles a single entry 255.255.255.{0..255}/{0..32}", function()
 
---       for stem=0,255 do
---         for mask=0,32 do
+      for stem=0,255 do
+        for mask=0,32 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("255.255.255.%d/%d", stem, mask)
---           t[pfx] = 1
+          local pfx = F("255.255.255.%d/%d", stem, mask)
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
+        end -- for mask
+      end -- for stem
+    end)
 
---   end)
--- end)
+  end)
+end)
 
--- describe("ipt:more(pfx6): ", function()
+describe("ipt:more(pfx6): ", function()
 
---   expose("ipt: ", function()
---     iptable = require("iptable");
---     assert.is_truthy(iptable);
+  expose("ipt: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
 
---     it("handles a single entry xx::/{0..128}", function()
+    it("handles a single entry xx::/{0..128}", function()
 
---       for stem=0,255 do
---         for mask=0,128 do
+      for stem=0,255 do
+        for mask=0,128 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("%02x::/%d", stem, mask)
---           t[pfx] = 1
+          local pfx = F("%02x::/%d", stem, mask)
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
+        end -- for mask
+      end -- for stem
+    end)
 
---     it("handles a single entry 00:xx::/{0..128}", function()
+    it("handles a single entry 00:xx::/{0..128}", function()
 
---       for stem=0,255 do
---         for mask=0,128 do
+      for stem=0,255 do
+        for mask=0,128 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("00:%02x::/%d", stem, mask)
---           t[pfx] = 1
+          local pfx = F("00:%02x::/%d", stem, mask)
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
+        end -- for mask
+      end -- for stem
+    end)
 
---     it("handles a single entry 00::xx/{0..128}", function()
+    it("handles a single entry 00::xx/{0..128}", function()
 
---       for stem=0,255 do
---         for mask=0,128 do
+      for stem=0,255 do
+        for mask=0,128 do
 
---           local t = iptable.new();
---           assert.is_truthy(t);
+          local t = iptable.new();
+          assert.is_truthy(t);
 
---           local pfx = F("::%02x/%d", stem, mask)
---           t[pfx] = 1
+          local pfx = F("::%02x/%d", stem, mask)
+          t[pfx] = 1
 
---           -- non-inclusive
---           local cnt = 0;
---           for p in t:more(pfx) do cnt = cnt + 1; end
---           assert.are_equal(0, cnt);
+          -- non-inclusive
+          local cnt = 0;
+          for p in t:more(pfx) do cnt = cnt + 1; end
+          assert.are_equal(0, cnt);
 
---           -- inclusive
---           cnt = 0;
---           for p in t:more(pfx, true) do cnt = cnt + 1; end
---           assert.are_equal(1, cnt);
+          -- inclusive
+          cnt = 0;
+          for p in t:more(pfx, true) do cnt = cnt + 1; end
+          assert.are_equal(1, cnt);
 
---         end -- for mask
---       end -- for stem
---     end)
+        end -- for mask
+      end -- for stem
+    end)
 
---   end)
--- end)
+  end)
+end)

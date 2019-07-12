@@ -63,6 +63,7 @@ typedef struct table_t {
 
 // radix tree macros
 #define RDX_ISLEAF(rn) (rn->rn_bit < 0)
+#define RDX_ISINTERNAL(rn) (rn->rn_bit >= 0)
 #define RDX_ISROOT(rn) (rn->rn_flags & RNF_ROOT)
 #define MSK_ISROOT(rm) (rm->rm_flags & RNF_ROOT)
 #define RDX_ISRIGHT_CHILD(rn) (rn->rn_parent->rn_right == rn)
