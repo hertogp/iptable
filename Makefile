@@ -75,14 +75,20 @@ endif
 
 
 # not real targets
-.PHONY: clean
+.PHONY: clean DEBUG
 
-# donot delete intermediate/auto-generated  dependency files
+# dependency files are auto-generated and, normally, autodeleted
+# unless defined as .SECONDARY's
 .SECONDARY: $(DEPS)
 
 # Lua library (default target)
 $(TARGET): $(OBJS) $(DEPS)
 	$(CC) $(LIBFLAG) $(LFLAGS) $(OBJS) -o $(TARGET)
+
+# https://www.gnu.org/software/make/manual/html_node/Target_002dspecific.html
+DEBUG: CFLAGS+=-DDEBUG
+DEBUG: BOPTS=--defer-print
+DEBUG: clean $(TARGET)
 
 # C libary
 $(CTARGET): $(COBJS)
