@@ -95,7 +95,7 @@ end
 
 local M = {} -- the module
 
-function dotify(ipt, ...)
+function dotify(ipt, title, ...)
   local lines = {}
   local graph = {   -- collector for graph info
     nodes = {},
@@ -104,8 +104,10 @@ function dotify(ipt, ...)
 
   -- start the graph
   lines[#lines+1] = "digraph G {"
+  -- lines[#lines+1] = F("  size=%q;", "7.5,7.5")
+  lines[#lines+1] = F("  label=%q;", title or "")
   lines[#lines+1] = "  splines=line;"
-  lines[#lines+1] = "  ranksep=\"1.0 equally\";"
+  lines[#lines+1] = F("  ranksep=%q;", "1.0 equally")
 
   -- collect all RADIX node types of AF_families given (...)
   for radix in ipt:radixes(...) do

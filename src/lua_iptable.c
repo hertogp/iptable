@@ -697,7 +697,6 @@ iter_more(lua_State *L)
 
     char buf[MAX_STRKEY];
     struct entry_t *e = NULL;
-    // struct radix_node *top = lua_touserdata(L, lua_upvalueindex(1));
     struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(2));
     int inclusive = lua_tointeger(L, lua_upvalueindex(3));
     int mlen;
@@ -713,14 +712,6 @@ iter_more(lua_State *L)
     mlen = inclusive ? mlen : mlen + 1;
 
     while (rn) {
-
-        if(!RDX_ISLEAF(rn)) /* || RRDX_ISROOT(rn)) */
-            return 0; /* all done */
-
-        /* if(RDX_ISLEAF(rn)) { */
-        /*     fprintf(stderr, "msp check %s/%d", */
-        /*         key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask)); */
-        /* } */
 
         if(key_tolen(rn->rn_mask) >= mlen
                 && key_isin(addr, rn->rn_key, mask)) {
@@ -739,13 +730,13 @@ iter_more(lua_State *L)
 
             return 2;
 
-        } else if(key_isin(addr, rn->rn_key, mask)) {
-            rn = rdx_nextleaf(rn);
-            /* fprintf(stderr, " -- continue\n"); */
-        } else {
-            /* fprintf(stderr, " -- stopping\n"); */
-            return 0; /* all done */
         }
+
+        /* keys still within the inclusive range? */
+        if(key_isin(addr, rn->rn_key, mask))
+            rn = rdx_nextleaf(rn);
+        else
+            return 0; /* all done */
     }
     return 0; /* NOT REACHED */
 }
