@@ -9,12 +9,26 @@
 -------------------------------------------------------------------------------
 
 package.cpath = "./build/?.so;"
+package.path = "./src/lua/?.lua"
+
+local dotify = require("ipt2smalldot")
 
 -- helpers
 
 F = string.format
 
 -- tests
+local function mergecb(pfx, t)
+  -- pfx is the pfx to replace all that is in table t, {pfx->value}
+  -- pfx may or may not be in table t.
+  -- return a table with keepers.
+  print(F("%20s, may replace:", pfx))
+  for p, v in pairs(t) do
+    print(F(" - %20s - %s", p, v))
+  end
+  -- return table with pfx's to be preserved
+  return { [pfx] = #t }
+end
 
 describe("ipt:more(pfx): ", function()
 
@@ -25,25 +39,33 @@ describe("ipt:more(pfx): ", function()
     assert.is_truthy(ipt);
 
     ipt["1.2.3.0/24"] = 1
-    ipt["1.2.3.0/25"] = 2
-    ipt["1.2.3.128/25"] = 4
-    ipt["1.2.3.128/26"] = 8
-    ipt["1.2.3.192/26"] = 16
-    ipt["1.2.3.128/27"] = 32
-    ipt["1.2.3.128/28"] = 64
-    ipt["1.2.3.144/28"] = 128
+    ipt["1.2.3.0/25"] = 1
+    ipt["1.2.3.0/26"] = 2
+    ipt["1.2.3.192/27"] = 1
+    ipt["1.2.3.0/27"] = 2
 
+    ipt["1.2.5.128/25"] = 4
+    ipt["1.2.5.128/26"] = 4
+
+    local fh = io.open("tmp/tmp/00.dot", "w")
+    fh:write(table.concat(dotify(ipt, "00", iptable.AF_INET)), "\n")
+    fh:close()
 
     it("finds prefixes that are able to merge", function()
-      print("originally:\n")
-      for k,v in pairs(ipt) do print(k,v) end
-      print("start folding, 1st pass")
-      for s, l, u in ipt:merge(iptable.AF_INET) do
-        ipt[s] = ipt[l] + ipt[u] + (ipt[s] or 0)
-        ipt[l] = nil; ipt[u] = nil
+      local cnt = 0
+      for p, t in ipt:merge(iptable.AF_INET) do
+        cnt = cnt + 1
+        print(F("%s may replace:", p), t)
+        if not t[p] then t[p] = 42 end
+        for k,v in pairs(t) do
+          -- if k ~= p then ipt[k] = nil end
+          print(F("%20s - %s (deleted)", k,v))
+        end
+        local fh = io.open(F("tmp/tmp/%02d.dot", cnt), "w")
+        fh:write(table.concat(dotify(ipt, F("%02d", cnt), iptable.AF_INET)), "\n")
+        fh:close()
+
       end
-      print("after 1st pass:")
-      for k,v in pairs(ipt) do print(k,v) end
     end)
   end)
 end)

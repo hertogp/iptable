@@ -516,63 +516,136 @@ static int iter_masks(lua_State *L)
 }
 
 /*
- * Iterate across adjacent prefixes that may be combined.
+ * helper to dedup a leaf
+ * - puts all pfx,v in table on stack L
+ * - returns last leaf of chain if duplicates were found, NULL otherwise
+ */
+
+/* static struct radix_node *ipt_merge_dedup(lua_State *, struct radix_node *); */
+/* static struct radix_node * */
+/* ipt_merge_dedup(lua_State *L, struct radix_node *rn) { */
+/*     char buf[MAX_STRKEY]; */
+/*     struct radix_node *last = NULL; */
+/*     entry_t *e; */
+
+/*     dbg_stack("inc(.) <--"); */
+/*     if (rn == NULL) return NULL; */
+/*     if (!RDX_ISLEAF(rn)) return NULL; */
+
+/*     /1* goto top of dupedkey chain, if possible *1/ */
+/*     while(!RDX_ISROOT(rn->rn_parent) && RDX_ISLEAF(rn->rn_parent)) */
+/*         rn = rn->rn_parent; */
+/*     if (rn->rn_dupedkey == NULL) return NULL;  /1* no dupedkeys *1/ */
+
+/*     /1* collect (pfx, v) into lua table on stack L *1/ */
+/*     lua_newtable(L);                                        // [.. {}] */
+/*     last = rn; */
+/*     while(rn) { */
+/*         lua_pushfstring(L, "%s/%d", */
+/*                 key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask)); */
+/*         e = (entry_t *)rn; */
+/*         lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value); */
+/*         lua_settable(L, -3); */
+/*         last = rn; */
+/*         rn = rn->rn_dupedkey; */
+/*     } */
+
+/*     lua_pushfstring(L, "%s/%d", */
+/*             key_tostr(buf, last->rn_key), */
+/*             key_tolen(last->rn_mask));                      // [.. {} pfx] */
+/*     dbg_stack("dupedkeys"); */
+/*     lua_rotate(L, lua_gettop(L) - 1, 1);                    // [.. pfx {}] */
+/*     dbg_stack("dupedkeys"); */
+/*     return last; */
+/* } */
+
+static struct radix_node *ipt_merge_largest(struct radix_node *);
+static struct radix_node *
+ipt_merge_largest(struct radix_node *rn) {
+    /* return largest leaf in subtree starting at rn */
+
+    while(!RDX_ISLEAF(rn)) rn = rn->rn_left;
+    while(rn->rn_dupedkey) rn = rn->rn_dupedkey;
+    return rn;
+}
+
+/*
+ * Iterate across prefixes that may be combined.
  *
- * returns supernet, bot_subnet, top_subnet
+ * Returns the supernet and a regular table w/ pfx->value.  Caller may decide
+ * to keep only the supernet or parts of the group.  If the supernet exists in
+ * the tree it will be present in the table as well.
+ *
+ * The next node stored as upvalue before returning, must be the first node of
+ * the next group.
+ *
+ * Given a single radix rn collect what can be combined safely: overlapping
+ * prefixes or adjacent prefixes.
+ * introducing new address space in the tree:
+ * 1) overlapping space:
+ *    - more specifics, inclusive of largest leaf in the dupedkeychain
+ * 2) adjacent space
+ *    a) combinable w/ previous (non-duped) leaf?
+ *    b) combinable w/ next (non-duped) leaf?
+ *
+ * Algorithm:
+ * - goto leaf's parent
+ * - get largest-left, largest-right
+ * - if adjacent -> combine, else take largest-left
+ *   return all more specifics; next node is first-leaf of grandparent R-tree
  */
 
 static int
 iter_merge(lua_State *L)
 {
-    dbg_stack("inc(.) <--");                   // [t pfx]
+    dbg_stack("inc(.) <--");                   // [t p]
 
-    table_t *t = check_table(L, 1);
     struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
-    entry_t *ebot;
-    char upper[MAX_STRKEY], bottom[MAX_STRKEY], super[MAX_STRKEY];
-    uint8_t netw[MAX_BINKEY], mask[MAX_BINKEY];
-    int mlen = 0;
+    struct radix_node *ll=NULL, *lr=NULL;;
 
-    if (rn == NULL) return 0;          /* all done */
-    if (! isvalid(rn)) return 0;       /* before accessing rn properties */
-    if (RDX_ISROOT(rn)) return 0;      /* all done */
-    if (! RDX_ISLEAF(rn)) return 0;    /* dito */
-    if (rn->rn_mask == NULL) return 0; 
+    if (rn == NULL) return 0;          /* all done, not an error */
+    if (! isvalid(rn)) return 0;       /* error: cannot continue */
+    if (! RDX_ISLEAF(rn)) return 0;    /* error: should've been a leaf */
+    lua_pop(L, lua_gettop(L));         /* [] -- clear stack */
 
-    /* search for combinable prefix */
-    int found = 0;
-    while (rn && !found) {
-        mlen = key_tolen(rn->rn_mask);
-        if (mlen == 1) return 0; // TODO: not combining to /0
+    while(rn) {
+        while(RDX_ISLEAF(rn->rn_parent)) rn = rn->rn_parent; /* top of chain */
+        // if (RDX_ISROOT(rn)) return 0; /* all done */
+        ll = ipt_merge_largest(rn->rn_parent->rn_left);
+        lr = ipt_merge_largest(rn->rn_parent->rn_right);
+        _dumprn("lo ", rn);
+        _dumprn("ll ", ll);
+        _dumprn("lr ", lr);
 
-        /* get network address for rn_key for mlen-1 */
-        for (int i = 0; i <= IPT_KEYLEN(rn->rn_key) && i < MAX_BINKEY; i++)
-            netw[i] = rn->rn_key[i];
-        if (! key_bylen(mask, mlen-1, KEY_AF_FAM(rn->rn_key))) return 0;
-        if (! key_network(netw, mask)) return 0;
+        /* Case:
+         * - ll + lr are adjacent ->  key_join'm & return msp
+         * - ll includes lr       ->  key := ll  & return msp
+         * - ll is not top of chain -> key := ll & return msp
+         * - lr is not top of chain -> key := lr & return msp
+         * move onto next subtree
+         */
 
-        if (key_cmp(rn->rn_key, netw) != 0) {
-            /* rn_key is upper half, so check for bottom half */
-            if (! key_tostr(super, netw)) return 0; // TODO: err hdlr
-            snprintf(bottom, sizeof(bottom), "%s/%d", super, mlen);
-            if ((ebot = tbl_get(t, bottom))) {
-                found = 1;
-                lua_pushfstring(L, "%s/%d", super, mlen-1);
-                lua_pushstring(L, bottom);
-                lua_pushfstring(L, "%s/%d", key_tostr(upper, rn->rn_key), mlen);
-            }
+        if(key_isin(ll->rn_key, lr->rn_key, ll->rn_mask)) {
+            fprintf(stderr, "ll contains lr -> msp(ll)\n");
         }
 
-        if (!found)
-            rn = rdx_nextleaf(rn);
+        /* if (key_merge(spfx, &mlen, ll, lr)) { */
+        /*     /1* return spfx's more specifics, inclusive *1/ */
+        /*     /1* rn = rdx_nextleaf(rn->rn_parent) *1/ */
+        /* } else if (key_isin(ll, lr, ll->rn_mask)) { */
+        /*     /1* return ll's more specifics, inclusive *1/ */
+        /* } else if (RDX_ISLEAF(ll->rn_parent)) { */
+        /*     /1* return lr's more specifics, inclusive *1/ */
+        /* } else { */
+        /*     /1* return *1/ */
+        /* } */
+
+        rn = rdx_nextleaf(lr);
+        if (rn == NULL) return 0;
+        if(RDX_ISROOT(rn)) return 0;
+
     }
 
-    /* tmp placeholder for real algorithm */
-    rn = rdx_nextleaf(rn);
-    lua_pushlightuserdata(L, rn);
-    lua_replace(L, lua_upvalueindex(1));
-
-    if (found) return 3;
 
     return 0;
 }
@@ -731,7 +804,6 @@ iter_more(lua_State *L)
             return 2;
 
         }
-
         /* keys still within the inclusive range? */
         if(key_isin(addr, rn->rn_key, mask))
             rn = rdx_nextleaf(rn);
@@ -1856,7 +1928,7 @@ int masks(lua_State *L) {
 /*
  * :merge(af)  <--  [t, af]
  *
- * Iterate across prefixes that may be combined
+ * Iterate across groups of pfx's that may be combined
  */
 
 static int
@@ -1865,23 +1937,19 @@ merge(lua_State *L)
     dbg_stack("inc(.) <--");
 
     struct radix_node *rn;
-    struct radix_node_head *head;
     table_t *t = check_table(L, 1);
     int af = lua_tointeger(L, 2);
 
     if (af == AF_INET)
-        head = t->head4;
+        rn = rdx_firstleaf(&t->head4->rh);
     else if (af == AF_INET6)
-        head = t->head6;
+        rn = rdx_firstleaf(&t->head6->rh);
     else return iter_bail(L);
 
-    rn = rdx_firstleaf(&head->rh);
-
-    lua_pop(L, lua_gettop(L) - 1);            // [t]
+    lua_pop(L, 1);                            // [t]
     lua_pushlightuserdata(L, rn);             // [t rn]
-    dbg_stack("firstleaf");
     lua_pushcclosure(L, iter_merge, 1);       // [t f]
-    lua_rotate(L, 1, 1);                      // [f t]
+    lua_rotate(L, 1, -1);                     // [f t]
 
     dbg_stack("out(2) ==>");
 
@@ -1889,11 +1957,13 @@ merge(lua_State *L)
 }
 
 /*
- * :radix(AF)  <--  [t af1 af2]
+ * :radix(af)  <--  [t af]
  *
  * Iterate across all nodes of all types in a radix tree.
  * - returns the C-structs as Lua tables.
- *
+ * TODO: :radix(af, maskp)  <-- change this:
+ *  - take a single AF_family as iteration target, and
+ *  - a boolean that says to include the mask tree or not.
  */
 
 static int

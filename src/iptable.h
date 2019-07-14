@@ -103,6 +103,7 @@ void _dumprn(const char *, struct radix_node *);
 
 uint8_t *key_bystr(uint8_t *, int *, int *, const char *);
 uint8_t *key_bylen(uint8_t *, int, int);
+uint8_t *key_bypair(uint8_t *, const void *, const void *);
 const char *key_tostr(char *, void *);
 int key_tolen(void *);
 int key_incr(void *);

@@ -115,6 +115,26 @@ end)
 
 describe("ipt:more(pfx): ", function()
 
+  expose("instance ipt: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+    ipt = iptable.new();
+    assert.is_truthy(ipt);
+
+    ipt["1.1.255.255"] = 1
+    ipt["3.1.255.255"] = 4
+
+    it("finds more specifics, non-inclusive", function()
+      local sum = 0;
+      local search_pfx = "1.1/16";
+      for pfx, v in ipt:more(search_pfx) do sum = sum + v; end
+      assert.are_equal(1, sum);
+    end)
+  end)
+end)
+
+describe("ipt:more(pfx): ", function()
+
   expose("ipt: ", function()
     iptable = require("iptable");
     assert.is_truthy(iptable);

@@ -86,9 +86,9 @@ $(TARGET): $(OBJS) $(DEPS)
 	$(CC) $(LIBFLAG) $(LFLAGS) $(OBJS) -o $(TARGET)
 
 # https://www.gnu.org/software/make/manual/html_node/Target_002dspecific.html
-DEBUG: CFLAGS+=-DDEBUG
-DEBUG: BOPTS=--defer-print
-DEBUG: clean $(TARGET)
+debug DEBUG: CFLAGS+=-DDEBUG
+debug DEBUG: BOPTS=--defer-print
+debug DEBUG: clean $(TARGET)
 
 # C libary
 $(CTARGET): $(COBJS)

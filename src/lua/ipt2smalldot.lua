@@ -43,7 +43,7 @@ end
 local function rn_dot(g, t)
   local RN = node(t)
   local fmt_leaf = "[shape=plaintext,label=\"%s/%s\n(%s) %s\"];"
-  local fmt_internal = "[shape=plaintext,label=\"(%s) %s\"];"
+  local fmt_internal = "[shape=plaintext,label=\"bit %d (%d %s)\"];"
   -- skip radix_masks for now
   -- g.edges[#g.edges+1] = {RN, node(t.rn_mklist)}
 
@@ -55,7 +55,8 @@ local function rn_dot(g, t)
     local RN_left = node(t.rn_left)
     local RN_right = node(t.rn_right)
 
-    g.nodes[RN] = F(fmt_internal, t.rn_bit, t_flags(t))
+    -- g.nodes[RN] = F(fmt_internal, t.rn_bit, t_flags(t))
+    g.nodes[RN] = F(fmt_internal, t.rn_bit-8, t.rn_bit, t_flags(t))
     g.edges[#g.edges+1] = {RN, RN_left, "L"}
     g.edges[#g.edges+1] = {RN, RN_right, "R"}
     -- left -> right, used in invis rank to keep left to the left of right

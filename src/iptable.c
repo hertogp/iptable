@@ -149,6 +149,37 @@ key_bylen(uint8_t *binkey, int mlen, int af)
     return binkey;
 }
 
+/* int key_bypair(a, b, m)
+ *
+ * Set key a such that a/m and b/m are a pair that fit in key/m-1.
+ * Assumes masks are contiguous.
+ */
+
+uint8_t *
+key_bypair(uint8_t *a, const void *b, const void *m)
+{
+    uint8_t *aa = a, *last;
+    const uint8_t *bb = b, *mm = m;
+
+    if (aa == NULL || bb == NULL || mm == NULL) return NULL;
+    if (*mm == 0 || *bb == 0) return NULL;  /* no key-pair for 0/0 */
+    last = aa + *bb - 1;                    /* last key byte */
+
+    for(*aa++ = *bb++, mm++; *mm == 0xFF; mm++)
+        *aa++ = *bb++;
+
+    /* apply non-0xFF mask byte to bb's key byte, just to be sure */
+    *aa = (*bb & *mm) ^ (1 + ~*mm);
+    if (*mm == 0)
+        *(aa-1) = *(aa-1) ^ 0x01;
+
+    /* zero out any remaining key bytes */
+    for(aa++; aa <= last; )
+      *aa++ = 0x00;
+
+    return a;
+}
+
 int key_tolen(void *key)
 {
     // counts the nr of consequtive 1-bits starting with the MSB first.
@@ -325,11 +356,16 @@ key_cmp(void *a, void *b)
     return 0;
 }
 
+/* key_isin(a, b, m)
+ * return 1 iff a/m includes b, 0 otherwise
+ * note:
+ * - also means b/m includes a
+ * - any radix keys/masks may have short(er) KEYLEN's than usual
+ */
+
 int
 key_isin(void *a, void *b, void *m)
 {
-    // 1 iff a & m == b & m, 0 otherwise
-    // note: any radix keys/masks may have short(er) KEYLEN's than usual
     uint8_t *aa = a, *bb = b, *mm = m;
     int matchlen = 0;  // how many bytes to match depends on mask
 
@@ -348,25 +384,25 @@ key_isin(void *a, void *b, void *m)
     return 1;
 }
 
+
 // radix node functions
 void _dumprn(const char *s, struct radix_node *rn)
 {
     char dbuf[MAX_STRKEY];
-    printf("%10s rn @ %p", s, (void*)rn);
+    fprintf(stderr, "%10s rn @ %p", s, (void*)rn);
     if(rn!=NULL) {
         if(RDX_ISLEAF(rn)) {
-            printf(" %s", key_tostr(dbuf, rn->rn_key));
-            printf("/%d", key_tolen(rn->rn_mask));
-            printf(", keylen %d", IPT_KEYLEN(rn->rn_key));
+            fprintf(stderr, " %s", key_tostr(dbuf, rn->rn_key));
+            fprintf(stderr, "/%d", key_tolen(rn->rn_mask));
+            fprintf(stderr, ", keylen %d", IPT_KEYLEN(rn->rn_key));
         }
-        printf(", isroot %d", rn->rn_flags & RNF_ROOT);
-        printf(", isleaf %d", RDX_ISLEAF(rn));
-        printf(", isNORM %d", rn->rn_flags & RNF_NORMAL);
-        printf(", flags  %d", rn->rn_flags);
-        printf(", rn_bit %d", rn->rn_bit);
+        fprintf(stderr, ", isroot %d", rn->rn_flags & RNF_ROOT);
+        fprintf(stderr, ", isleaf %d", RDX_ISLEAF(rn));
+        fprintf(stderr, ", isNORM %d", rn->rn_flags & RNF_NORMAL);
+        fprintf(stderr, ", flags  %d", rn->rn_flags);
+        fprintf(stderr, ", rn_bit %d", rn->rn_bit);
     }
-    printf("\n");
-
+    fprintf(stderr, "\n");
 }
 
 /*
@@ -448,12 +484,30 @@ rdx_firstleaf(struct radix_head *rh)
     return rn;
 }
 
+/* TODO: formalize once merge() has been fleshed out */
+/* struct radix_node * */
+/* rdx_maxleaf(struct radix_node *rn) */
+/* { */
+/*   /1* given a node, find the least specific, left-most leaf underneath *1/ */
+/*   while(!RDX_ISLEAF(rn)) rn = rn->rn_left; */
+/*   while(rn->rn_dupedkey) rn = rn->rn_dupedkey; */
+/*   return rn */
+/* } */
+
 struct radix_node *
 rdx_nextleaf(struct radix_node *rn)
 {
-    /* given a leaf, find next leaf */
+    /* given a node, find next leaf */
 
-    if (rn == NULL || !RDX_ISLEAF(rn)) return NULL;
+    if (rn == NULL) return NULL;        /* already done */
+    // if (! RDX_ISLEAF(rn)) return NULL;
+
+    /* if rn is an INTERNAL node, return its first left leaf */
+    if (! RDX_ISLEAF(rn)) {
+        while(!RDX_ISLEAF(rn))
+          rn = rn->rn_left;
+        return rn;
+    }
 
     /*
      * Edge case: the right-end marker may have a dupedkey.
@@ -462,16 +516,15 @@ rdx_nextleaf(struct radix_node *rn)
      * the key, including its keylen byte, is all-ones.  It takes a full mask
      * to create a 'normal' leaf with the all-broadcast address, hence the
      * right-end marker root-leaf can have at most 1 dupedkey child.
-     *
      */
 
     if(RDX_ISLEAF(rn->rn_parent)
             && RDX_ISROOT(rn->rn_parent)
             && 0xff == (0xff & IPT_KEYLEN(rn->rn_parent->rn_key))) {
-        return NULL;
+        return NULL; /* we were RE-marker dupedkey child */
     }
 
-    /* return the (less specific dupedkey(s), if any */
+    /* return the next (less specific) dupedkey, if any */
     if (RDX_ISLEAF(rn) && rn->rn_dupedkey)
         return rn->rn_dupedkey;
 
