@@ -122,6 +122,7 @@ uint8_t *key_copy(uint8_t *);
 
 struct radix_node *rdx_firstleaf(struct radix_head *);
 struct radix_node *rdx_nextleaf(struct radix_node *);
+struct radix_node *rdx_pairleaf(struct radix_node *);
 int rdx_firstnode(table_t *, int);
 int rdx_nextnode(table_t *, int *, void **);
 

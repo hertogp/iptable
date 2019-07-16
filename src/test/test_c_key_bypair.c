@@ -14,7 +14,7 @@
 #include "test_c_key_bypair.h"    // a generated header file for this test runner
 
 /*
- * Test key_bypair(a, b, m)
+ * key_bypair(a, b, m)
  */
 
 void
@@ -91,13 +91,7 @@ test_key_bypair_simple(void)
     mu_true(a[2] == b[2]);
     mu_true(a[3] == b[3]);
     mu_true(a[4] == 0x08);
-    char buf[MAX_STRKEY];
-    printf("pair key for %s/%d, is ",
-        key_tostr(buf, b), key_tolen(m));
-    printf("%s/%d.\n",
-        key_tostr(buf, a), key_tolen(m));
 }
-
 
 void
 test_key_bypair_lenbyte(void)
@@ -123,4 +117,77 @@ test_key_bypair_lenbyte(void)
     mu_true(a[2] == 0x02);
     mu_true(a[3] == 0x00);
     mu_true(a[4] == 0x00);
+}
+
+void
+test_key_bypair_nulls(void)
+{
+   /*
+    * key_bypair should hanlde erronuous input
+    */
+
+    uint8_t a[MAX_BINKEY], b[MAX_BINKEY] = {0}, m[MAX_BINKEY]={0};
+
+    b[0] = 0x05;            /* LEN byte */
+    m[0] = 0x05;            /* LEN byte is 3 for [LEN,0xFF,0xFF,0,..]  mask */
+
+    /* src key is 1.1.1.0/24 */
+    b[1] = b[2] = b[3] = 0x01; b[4] = 0x00;
+    m[1] = m[2] = m[3] = 0xFF; m[4] = 0x00;
+
+    mu_false(key_bypair(NULL, b , m));
+    mu_false(key_bypair(a, NULL, m));
+    mu_false(key_bypair(a, b , NULL));
+    mu_false(key_bypair(a, b , NULL));
+
+    /* zero length address */
+    b[0] = 0;
+    mu_false(key_bypair(a, b , m));
+    b[0] = 0x05;
+    /* zero length mask */
+    m[0] = 0x00;
+    mu_false(key_bypair(a, b , m));
+}
+
+void
+test_key_bypair_hosts(void)
+{
+   /*
+    * key_bypair should hanlde erronuous input
+    */
+
+    uint8_t a[MAX_BINKEY], b[MAX_BINKEY] = {0}, m[MAX_BINKEY]={0};
+
+    b[0] = 0x05;            /* LEN byte */
+    m[0] = 0x05;            /* LEN byte is 3 for [LEN,0xFF,0xFF,0,..]  mask */
+
+    /* pair key for 1.1.1.255/32 is 1.1.1.254 */
+    b[1] = b[2] = b[3] = 0x01; b[4] = 0xff;
+    m[1] = m[2] = m[3] = m[4] = 0xFF;
+
+    mu_true(key_bypair(a, b, m));
+    mu_true(a[0] == b[0]);
+    mu_true(a[1] == b[1]);
+    mu_true(a[2] == b[2]);
+    mu_true(a[3] == b[3]);
+    mu_true(a[4] == 0xfe);
+}
+
+void
+test_key_bypair_zeromask(void)
+{
+   /*
+    * key_bypair should hanlde erronuous input
+    */
+
+    uint8_t a[MAX_BINKEY], b[MAX_BINKEY] = {0}, m[MAX_BINKEY]={0};
+
+    b[0] = 0x05;            /* LEN byte */
+    m[0] = 0x05;            /* LEN byte is 3 for [LEN,0xFF,0xFF,0,..]  mask */
+
+    /* pair key for 1.1.1.255/0 is ...? */
+    b[1] = b[2] = b[3] = 0x01; b[4] = 0xff;
+    m[1] = m[2] = m[3] = m[4] = 0x00;
+
+    mu_false(key_bypair(a, b, m));
 }

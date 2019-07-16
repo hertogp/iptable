@@ -57,16 +57,17 @@ static int iter_radix(lua_State *);
 
 /* iptable module functions */
 
-static int ipt_new(lua_State *);
-static int ipt_tobin(lua_State *);
-static int ipt_tostr(lua_State *);
-static int ipt_tolen(lua_State *);
-static int ipt_size(lua_State *);
 static int ipt_address(lua_State *);
-static int ipt_network(lua_State *);
 static int ipt_broadcast(lua_State *);
-static int ipt_mask(lua_State *);
 static int ipt_hosts(lua_State *);
+static int ipt_mask(lua_State *);
+static int ipt_neighbor(lua_State *L);
+static int ipt_network(lua_State *);
+static int ipt_new(lua_State *);
+static int ipt_size(lua_State *);
+static int ipt_tobin(lua_State *);
+static int ipt_tolen(lua_State *);
+static int ipt_tostr(lua_State *);
 
 /* iptable instance methods */
 
@@ -87,16 +88,17 @@ static int radixes(lua_State *);
 /* iptable module function array */
 
 static const struct luaL_Reg funcs [] = {
-    {"new", ipt_new},
-    {"tobin", ipt_tobin},
-    {"tostr", ipt_tostr},
-    {"tolen", ipt_tolen},
     {"address", ipt_address},
-    {"network", ipt_network},
     {"broadcast", ipt_broadcast},
-    {"mask", ipt_mask},
-    {"size", ipt_size},
     {"hosts", ipt_hosts},
+    {"mask", ipt_mask},
+    {"neighbor", ipt_neighbor},
+    {"network", ipt_network},
+    {"new", ipt_new},
+    {"size", ipt_size},
+    {"tobin", ipt_tobin},
+    {"tolen", ipt_tolen},
+    {"tostr", ipt_tostr},
     {NULL, NULL}
 };
 
@@ -1286,6 +1288,41 @@ ipt_network(lua_State *L)
     if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_network(addr, mask)) return 0;
     if (! key_tostr(buf, addr)) return 0;
+
+    lua_pushstring(L, buf);
+    lua_pushinteger(L, mlen);
+    lua_pushinteger(L, af);
+
+    dbg_stack("out(3) ==>");
+
+    return 3;
+}
+
+/*
+ * .neighbor()  <--  [str]
+ *
+ * Given a prefix, return the neighbor prefix, masklen and af_family, such that
+ * both can be combined into a supernet with masklen -1; nil on errors.
+ *
+ */
+
+static int
+ipt_neighbor(lua_State *L)
+{
+    dbg_stack("inc(.) <--");
+
+    char buf[MAX_STRKEY];
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY], nbor[MAX_BINKEY];
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1;
+    const char *pfx = NULL;
+
+    pfx = check_pfxstr(L, 1, &len);
+    if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
+    if (mlen == 0) return 0;                        /* 0/0 has no neighbor */
+    if (! key_bylen(mask, mlen, af)) return 0;
+    if (! key_bypair(nbor, addr, mask)) return 0;
+    if (! key_tostr(buf, nbor)) return 0;
 
     lua_pushstring(L, buf);
     lua_pushinteger(L, mlen);

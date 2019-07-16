@@ -162,15 +162,15 @@ key_bypair(uint8_t *a, const void *b, const void *m)
     const uint8_t *bb = b, *mm = m;
 
     if (aa == NULL || bb == NULL || mm == NULL) return NULL;
-    if (*mm == 0 || *bb == 0) return NULL;  /* no key-pair for 0/0 */
-    last = aa + *bb - 1;                    /* last key byte */
+    /* fail on zero-length mask/key or mask that starts with 0 */
+    if (*mm == 0 || *(mm+1) == 0 || *bb == 0) return NULL; 
+    last = aa + *bb - 1; /* last key byte to write */
 
-    for(*aa++ = *bb++, mm++; *mm == 0xFF; mm++)
+    for(*aa++ = *bb++, mm++; aa < last && *mm == 0xFF; mm++)
         *aa++ = *bb++;
 
-    /* apply non-0xFF mask byte to bb's key byte, just to be sure */
     *aa = (*bb & *mm) ^ (1 + ~*mm);
-    if (*mm == 0)
+    if (*mm == 0x00)
         *(aa-1) = *(aa-1) ^ 0x01;
 
     /* zero out any remaining key bytes */
@@ -543,6 +543,53 @@ rdx_nextleaf(struct radix_node *rn)
     /* if at RightEnd-marker, return dupedkey if any */
     if (rn && RDX_ISROOT(rn) && RDX_ISLEAF(rn))
         rn = rn->rn_dupedkey;
+
+    return rn;
+}
+
+/*
+ * pairleaf(rn)
+ *
+ * Find and return the leaf whose key forms a pair with the given leaf
+ * node such that both fit in an enclosing supernet with the given leaf's
+ * masklength - 1.
+ * Note:
+ * - 0/0 itself, has no pair leaf.
+ * - 0.0.0.0/1 and 128.0.0.0/1 are a pair; combined they yield 0/0.
+ */
+
+struct radix_node *
+rdx_pairleaf(struct radix_node *oth) {
+    uint8_t pair[MAX_BINKEY];
+    struct radix_node *rn;
+    int maxb;
+
+    if(oth == NULL) return NULL;
+    if(! RDX_ISLEAF(oth)) return NULL;
+    if(! key_bypair(pair, oth->rn_key, oth->rn_mask)) return NULL;
+
+    maxb = IPT_KEYOFFSET + key_tolen(oth->rn_mask);
+    /* goto up the tree to the governing internal node */
+    for(rn = oth; RDX_ISLEAF(rn) || rn->rn_bit >= maxb; rn = rn->rn_parent)
+      ;
+
+    /* descend following pair-key */
+    while(! RDX_ISLEAF(rn))
+      if (pair[rn->rn_offset] & rn->rn_bmask)
+        rn = rn->rn_right;
+      else
+        rn = rn->rn_left;
+
+    /* Never use ROOT-leafs for key comparisons (KEYLEN), take its dupedkey */
+    if(RDX_ISROOT(rn)) rn = rn->rn_dupedkey;
+
+    /* check key actually matches */
+    if(key_cmp(pair, rn->rn_key) != 0)
+      return NULL;
+
+    /* return the leaf with the same mask length */
+    while( rn && rn->rn_bit != oth->rn_bit)
+      rn = rn->rn_dupedkey;
 
     return rn;
 }
