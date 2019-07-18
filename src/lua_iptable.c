@@ -35,8 +35,9 @@ static inline int subtree_fail(struct radix_node *, int);
 
 /* iter_radix() helpers */
 
-static void iptL_push_fstr(lua_State *, const char *, const char *, const void *);
-static void iptL_push_int(lua_State *, const char *, int);
+static void iptT_push_fstr(lua_State *, const char *, const char *, const void *);
+static void iptT_push_int(lua_State *, const char *, int);
+static void iptT_push_kv(lua_State *, struct radix_node *);
 static int push_rdx_node_head(lua_State *, struct radix_node_head *);
 static int push_rdx_node(lua_State *, struct radix_node *);
 static int push_rdx_head(lua_State *, struct radix_head *);
@@ -177,11 +178,23 @@ luaopen_iptable (lua_State *L)
  */
 
 table_t *
-check_table (lua_State *L, int index)
+check_table(lua_State *L, int index)
 {
     void **t = luaL_checkudata(L, index, LUA_IPTABLE_ID);
     luaL_argcheck(L, t != NULL, index, "`iptable' expected");
     return (table_t *)*t;
+}
+
+int check_int(lua_State *L, int, const char *);
+int
+check_int(lua_State *L, int idx, const char *msg)
+{
+    if (! lua_isinteger(L, idx)) {
+        lua_pushstring(L, msg);
+        lua_error(L);
+    }
+    return lua_tointeger(L, idx);
+
 }
 
 /*
@@ -561,40 +574,27 @@ static int iter_masks(lua_State *L)
 /*     return last; */
 /* } */
 
-static struct radix_node *ipt_merge_largest(struct radix_node *);
-static struct radix_node *
-ipt_merge_largest(struct radix_node *rn) {
-    /* return largest leaf in subtree starting at rn */
+/* static struct radix_node *ipt_merge_largest(struct radix_node *); */
+/* static struct radix_node * */
+/* ipt_merge_largest(struct radix_node *rn) { */
+/*     /1* return largest leaf in subtree starting at rn *1/ */
 
-    while(!RDX_ISLEAF(rn)) rn = rn->rn_left;
-    while(rn->rn_dupedkey) rn = rn->rn_dupedkey;
-    return rn;
-}
+/*     while(!RDX_ISLEAF(rn)) rn = rn->rn_left; */
+/*     while(rn->rn_dupedkey) rn = rn->rn_dupedkey; */
+/*     return rn; */
+/* } */
 
 /*
  * Iterate across prefixes that may be combined.
  *
- * Returns the supernet and a regular table w/ pfx->value.  Caller may decide
- * to keep only the supernet or parts of the group.  If the supernet exists in
- * the tree it will be present in the table as well.
+ * Returns the supernet and a regular table with 2 or 3 pfx,value entries.
+ *
+ * Caller may decide to keep only the supernet or parts of the group.  If the
+ * supernet exists in the tree it will be present in the table as well as a
+ * third entry.
  *
  * The next node stored as upvalue before returning, must be the first node of
  * the next group.
- *
- * Given a single radix rn collect what can be combined safely: overlapping
- * prefixes or adjacent prefixes.
- * introducing new address space in the tree:
- * 1) overlapping space:
- *    - more specifics, inclusive of largest leaf in the dupedkeychain
- * 2) adjacent space
- *    a) combinable w/ previous (non-duped) leaf?
- *    b) combinable w/ next (non-duped) leaf?
- *
- * Algorithm:
- * - goto leaf's parent
- * - get largest-left, largest-right
- * - if adjacent -> combine, else take largest-left
- *   return all more specifics; next node is first-leaf of grandparent R-tree
  */
 
 static int
@@ -602,54 +602,56 @@ iter_merge(lua_State *L)
 {
     dbg_stack("inc(.) <--");                   // [t p]
 
-    struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
-    struct radix_node *ll=NULL, *lr=NULL;;
+    struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(2));
+    struct radix_node *pair=NULL, *nxt = NULL, *super = NULL;
+    char buf[MAX_STRKEY];
 
     if (rn == NULL) return 0;          /* all done, not an error */
     if (! isvalid(rn)) return 0;       /* error: cannot continue */
     if (! RDX_ISLEAF(rn)) return 0;    /* error: should've been a leaf */
-    lua_pop(L, lua_gettop(L));         /* [] -- clear stack */
 
-    while(rn) {
-        while(RDX_ISLEAF(rn->rn_parent)) rn = rn->rn_parent; /* top of chain */
-        // if (RDX_ISROOT(rn)) return 0; /* all done */
-        ll = ipt_merge_largest(rn->rn_parent->rn_left);
-        lr = ipt_merge_largest(rn->rn_parent->rn_right);
-        _dumprn("lo ", rn);
-        _dumprn("ll ", ll);
-        _dumprn("lr ", lr);
+    /* skip leafs without a pairing key */
+    while(rn && (pair = rdx_pairleaf(rn)) == NULL)
+        rn = rdx_nextleaf(rn);
 
-        /* Case:
-         * - ll + lr are adjacent ->  key_join'm & return msp
-         * - ll includes lr       ->  key := ll  & return msp
-         * - ll is not top of chain -> key := ll & return msp
-         * - lr is not top of chain -> key := lr & return msp
-         * move onto next subtree
-         */
-
-        if(key_isin(ll->rn_key, lr->rn_key, ll->rn_mask)) {
-            fprintf(stderr, "ll contains lr -> msp(ll)\n");
-        }
-
-        /* if (key_merge(spfx, &mlen, ll, lr)) { */
-        /*     /1* return spfx's more specifics, inclusive *1/ */
-        /*     /1* rn = rdx_nextleaf(rn->rn_parent) *1/ */
-        /* } else if (key_isin(ll, lr, ll->rn_mask)) { */
-        /*     /1* return ll's more specifics, inclusive *1/ */
-        /* } else if (RDX_ISLEAF(ll->rn_parent)) { */
-        /*     /1* return lr's more specifics, inclusive *1/ */
-        /* } else { */
-        /*     /1* return *1/ */
-        /* } */
-
-        rn = rdx_nextleaf(lr);
-        if (rn == NULL) return 0;
-        if(RDX_ISROOT(rn)) return 0;
-
-    }
+    if (rn == NULL) return 0;
+    if(RDX_ISROOT(rn)) return 0;
 
 
-    return 0;
+    /* search for supernet node on dupedkey chain of lowest key */
+    super = key_cmp(rn->rn_key, pair->rn_key) > 0 ? pair : rn;
+    key_tostr(buf, super->rn_key);  /* to push supernet prefix as string */
+    while(super && super->rn_bit != rn->rn_bit + 1)
+        super = super->rn_dupedkey;
+
+    /* Caller may delete upper-half or even the supernet, which may be next if
+     * the current leaf is the lower-half.  So:
+     * 1) if super is next, store alternative next node as well (not equal to
+     *      upper-half)
+     * 2) else if upper-half is next, goto the next leaf-node.
+     * TODO: implement alt node in case nxt==super.
+     */
+
+    /* save next leaf for next iteration (NULL stops next iteration) */
+    nxt = rdx_nextleaf(rn);
+    if (nxt == super) nxt = rdx_nextleaf(nxt);
+    if (nxt == pair) nxt = rdx_nextleaf(nxt);
+    lua_pushlightuserdata(L, nxt);
+    lua_replace(L, lua_upvalueindex(2));
+
+    /* clear stack, push supernet prefix string & table with k,v-pairs */
+    lua_pop(L, lua_gettop(L));                                    // []
+    lua_pushfstring(L, "%s/%d", buf, key_tolen(rn->rn_mask)-1);   // [s]
+
+    /* new table and add key,value pairs */
+    lua_newtable(L);                                              // [s {}]
+    iptT_push_kv(L, rn);
+    iptT_push_kv(L, pair);
+    if (super) iptT_push_kv(L, super);
+
+    dbg_stack("out(2) ==>");
+
+    return 2;
 }
 
 /*
@@ -855,10 +857,10 @@ iter_radix(lua_State *L)
     return 0;
 }
 
-// iter_radix helpers
+// table pushers (iter_radix/iter_merge) helpers
 
 static void
-iptL_push_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
+iptT_push_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
 {
     if (! lua_istable(L, -1)) {
         dbg_msg("need stack top to be a %s", "table");
@@ -871,7 +873,7 @@ iptL_push_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
 }
 
 static void
-iptL_push_int(lua_State *L, const char *k, int v)
+iptT_push_int(lua_State *L, const char *k, int v)
 {
     if (! lua_istable(L, -1)) {
         dbg_msg("need stack top to be a %s", "table");
@@ -883,6 +885,31 @@ iptL_push_int(lua_State *L, const char *k, int v)
     lua_settable(L, -3);
 }
 
+static void
+iptT_push_kv(lua_State *L, struct radix_node *rn)
+{
+    char buf[MAX_STRKEY];
+    entry_t *e;
+    if (rn == NULL || ! lua_istable(L, -1)) {
+        dbg_msg("need stack top to be a %s", "table");
+        dbg_stack("not a table? ->");
+        return;
+    }
+    if (RDX_ISROOT(rn)) {
+        dbg_msg("cannot push k,v pair for %s node!", "ROOT");
+    }
+    if (!RDX_ISLEAF(rn)) {
+        dbg_msg("cannot push k,v pair for %s node!", "an INTERNAL");
+    }
+
+    e = (entry_t *)rn;
+    lua_pushfstring(L, "%s/%d",
+            key_tostr(buf, rn->rn_key),                   // [.. {} p]
+            key_tolen(rn->rn_mask));
+    lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);  // [.. {} p v]
+    lua_settable(L, -3);                                  // [.. {}]
+}
+
 
 static int
 push_rdx_node_head(lua_State *L, struct radix_node_head *rnh)
@@ -891,9 +918,9 @@ push_rdx_node_head(lua_State *L, struct radix_node_head *rnh)
     dbg_stack("inc(.) <--");
 
     lua_newtable(L);
-    iptL_push_fstr(L, "_MEM_", "%p", rnh);
-    iptL_push_int(L, "_TYPE_", TRDX_NODE_HEAD);
-    iptL_push_fstr(L, "_NAME_", "%s", "RADIX_NODE_HEAD");
+    iptT_push_fstr(L, "_MEM_", "%p", rnh);
+    iptT_push_int(L, "_TYPE_", TRDX_NODE_HEAD);
+    iptT_push_fstr(L, "_NAME_", "%s", "RADIX_NODE_HEAD");
 
     // rh goes into a subtable
     lua_pushliteral(L, "rh");
@@ -905,8 +932,8 @@ push_rdx_node_head(lua_State *L, struct radix_node_head *rnh)
 
     // new subtable: array of 3 RDX nodes; table has MEM/NAME but no type
     lua_newtable(L);
-    iptL_push_fstr(L, "_MEM_", "%p", rnh->rnh_nodes);
-    iptL_push_fstr(L, "_NAME_", "%s", "RNH_NODES[3]");
+    iptT_push_fstr(L, "_MEM_", "%p", rnh->rnh_nodes);
+    iptT_push_fstr(L, "_NAME_", "%s", "RNH_NODES[3]");
     lua_pushinteger(L, 1);
     push_rdx_node(L, &rnh->rnh_nodes[0]);
     lua_settable(L, -3);
@@ -934,51 +961,51 @@ push_rdx_node(lua_State *L, struct radix_node *rn)
 
     lua_newtable(L);
 
-    iptL_push_fstr(L, "_MEM_", "%p", rn);
-    iptL_push_int(L, "_TYPE_", TRDX_NODE);
-    iptL_push_fstr(L, "_NAME_", "%s", "RADIX_NODE");
+    iptT_push_fstr(L, "_MEM_", "%p", rn);
+    iptT_push_int(L, "_TYPE_", TRDX_NODE);
+    iptT_push_fstr(L, "_NAME_", "%s", "RADIX_NODE");
 
-    iptL_push_fstr(L, "rn_mklist", "%p", rn->rn_mklist);
-    iptL_push_fstr(L, "rn_parent", "%p", rn->rn_parent);
-    iptL_push_int(L, "rn_bit", rn->rn_bit);
+    iptT_push_fstr(L, "rn_mklist", "%p", rn->rn_mklist);
+    iptT_push_fstr(L, "rn_parent", "%p", rn->rn_parent);
+    iptT_push_int(L, "rn_bit", rn->rn_bit);
     // its a char, pushed as int => print("%02x", 0xff & int_val)
-    iptL_push_int(L, "rn_bmask", rn->rn_bmask);
-    iptL_push_int(L, "rn_flags", rn->rn_flags);
+    iptT_push_int(L, "rn_bmask", rn->rn_bmask);
+    iptT_push_int(L, "rn_flags", rn->rn_flags);
 
     // set _RNF_FLAGs_
     if (rn->rn_flags & RNF_NORMAL)
-        iptL_push_int(L, "_NORMAL_", 1);
+        iptT_push_int(L, "_NORMAL_", 1);
     if (rn->rn_flags & RNF_ROOT)
-        iptL_push_int(L, "_ROOT_", 1);
+        iptT_push_int(L, "_ROOT_", 1);
     if (rn->rn_flags & RNF_ACTIVE)
-        iptL_push_int(L, "_ACTIVE_", 1);
+        iptT_push_int(L, "_ACTIVE_", 1);
 
     if(RDX_ISLEAF(rn)) {
-      iptL_push_int(L, "_LEAF_", 1);
-      iptL_push_fstr(L, "rn_key", "%s", key_tostr(key, rn->rn_key));
-      iptL_push_fstr(L, "rn_mask", "%s", key_tostr(key, rn->rn_mask));
-      iptL_push_fstr(L, "rn_dupedkey", "%p", rn->rn_dupedkey);
+      iptT_push_int(L, "_LEAF_", 1);
+      iptT_push_fstr(L, "rn_key", "%s", key_tostr(key, rn->rn_key));
+      iptT_push_fstr(L, "rn_mask", "%s", key_tostr(key, rn->rn_mask));
+      iptT_push_fstr(L, "rn_dupedkey", "%p", rn->rn_dupedkey);
 
       /* additional diagnostics */
       if (rn->rn_key)
-        iptL_push_int(L, "_rn_key_LEN", 0xff & IPT_KEYLEN(rn->rn_key));
+        iptT_push_int(L, "_rn_key_LEN", 0xff & IPT_KEYLEN(rn->rn_key));
       else
-        iptL_push_int(L, "_rn_key_LEN", -1);
+        iptT_push_int(L, "_rn_key_LEN", -1);
 
       if (rn->rn_mask) {
-        iptL_push_int(L, "_rn_mask_LEN", IPT_KEYLEN(rn->rn_mask));
-        iptL_push_int(L, "_rn_mlen", key_tolen(rn->rn_mask));
+        iptT_push_int(L, "_rn_mask_LEN", IPT_KEYLEN(rn->rn_mask));
+        iptT_push_int(L, "_rn_mlen", key_tolen(rn->rn_mask));
       } else {
-        iptL_push_int(L, "_rn_mask_LEN", -1); /* may happen in mask tree */
-        iptL_push_int(L, "_rn_mlen", key_tolen(rn->rn_key));
+        iptT_push_int(L, "_rn_mask_LEN", -1); /* may happen in mask tree */
+        iptT_push_int(L, "_rn_mlen", key_tolen(rn->rn_key));
       }
 
 
     } else {
-      iptL_push_int(L, "_INTERNAL_", 1);
-      iptL_push_int(L, "rn_offset", rn->rn_offset);
-      iptL_push_fstr(L, "rn_left", "%p", rn->rn_left);
-      iptL_push_fstr(L, "rn_right", "%p", rn->rn_right);
+      iptT_push_int(L, "_INTERNAL_", 1);
+      iptT_push_int(L, "rn_offset", rn->rn_offset);
+      iptT_push_fstr(L, "rn_left", "%p", rn->rn_left);
+      iptT_push_fstr(L, "rn_right", "%p", rn->rn_right);
     }
 
     dbg_stack("out(1) ==>");
@@ -993,12 +1020,12 @@ push_rdx_head(lua_State *L, struct radix_head *rh)
     dbg_stack("inc(.) <--");
 
     lua_newtable(L);
-    iptL_push_fstr(L, "_MEM_", "%p", rh);
-    iptL_push_int(L, "_TYPE_", TRDX_HEAD);
-    iptL_push_fstr(L, "_NAME_", "%s", "RADIX_HEAD");
+    iptT_push_fstr(L, "_MEM_", "%p", rh);
+    iptT_push_int(L, "_TYPE_", TRDX_HEAD);
+    iptT_push_fstr(L, "_NAME_", "%s", "RADIX_HEAD");
 
-    iptL_push_fstr(L, "rnh_treetop", "%p", rh->rnh_treetop);
-    iptL_push_fstr(L, "rnh_masks", "%p", rh->rnh_masks);
+    iptT_push_fstr(L, "rnh_treetop", "%p", rh->rnh_treetop);
+    iptT_push_fstr(L, "rnh_masks", "%p", rh->rnh_masks);
 
     dbg_stack("out(1) ==>");
 
@@ -1012,9 +1039,9 @@ push_rdx_mask_head(lua_State *L, struct radix_mask_head *rmh)
     dbg_stack("inc(.) <--");
 
     lua_newtable(L);
-    iptL_push_fstr(L, "_MEM_", "%p", rmh);
-    iptL_push_int(L, "_TYPE_", TRDX_MASK_HEAD);
-    iptL_push_fstr(L, "_NAME_", "%s", "RADIX_MASK_HEAD");
+    iptT_push_fstr(L, "_MEM_", "%p", rmh);
+    iptT_push_int(L, "_TYPE_", TRDX_MASK_HEAD);
+    iptT_push_fstr(L, "_NAME_", "%s", "RADIX_MASK_HEAD");
 
     lua_pushliteral(L, "head");
     push_rdx_head(L, &rmh->head);
@@ -1024,8 +1051,8 @@ push_rdx_mask_head(lua_State *L, struct radix_mask_head *rmh)
 
     // new subtable: an array of 3 radix_node's
     lua_newtable(L);
-    iptL_push_fstr(L, "_MEM_", "%p", rmh->mask_nodes);
-    iptL_push_fstr(L, "_NAME_", "%s", "MASK_NODES[3]");
+    iptT_push_fstr(L, "_MEM_", "%p", rmh->mask_nodes);
+    iptT_push_fstr(L, "_NAME_", "%s", "MASK_NODES[3]");
     lua_pushinteger(L, 1);
     push_rdx_node(L, &rmh->mask_nodes[0]);
     lua_settable(L, -3);
@@ -1052,31 +1079,31 @@ push_rdx_mask(lua_State *L, struct radix_mask *rm)
     char key[MAX_STRKEY];
 
     lua_newtable(L);
-    iptL_push_fstr(L, "_MEM_", "%p", rm);
-    iptL_push_int(L, "_TYPE_", TRDX_MASK);
-    iptL_push_fstr(L, "_NAME_", "%s", "RADIX_MASK");
+    iptT_push_fstr(L, "_MEM_", "%p", rm);
+    iptT_push_int(L, "_TYPE_", TRDX_MASK);
+    iptT_push_fstr(L, "_NAME_", "%s", "RADIX_MASK");
 
-    iptL_push_int(L, "rm_bit", rm->rm_bit);
-    iptL_push_int(L, "rm_unused", rm->rm_unused);
-    iptL_push_int(L, "rm_flags", rm->rm_flags);
+    iptT_push_int(L, "rm_bit", rm->rm_bit);
+    iptT_push_int(L, "rm_unused", rm->rm_unused);
+    iptT_push_int(L, "rm_flags", rm->rm_flags);
 
     // set _RNF_FLAGs_
-    if (rm->rm_flags & RNF_NORMAL) iptL_push_int(L, "_NORMAL_", 1);
-    if (rm->rm_flags & RNF_ROOT)   iptL_push_int(L, "_ROOT_", 1);
-    if (rm->rm_flags & RNF_ACTIVE) iptL_push_int(L, "_ACTIVE_", 1);
+    if (rm->rm_flags & RNF_NORMAL) iptT_push_int(L, "_NORMAL_", 1);
+    if (rm->rm_flags & RNF_ROOT)   iptT_push_int(L, "_ROOT_", 1);
+    if (rm->rm_flags & RNF_ACTIVE) iptT_push_int(L, "_ACTIVE_", 1);
 
-    iptL_push_fstr(L, "rm_mklist", "%p", rm->rm_mklist);
-    iptL_push_int(L, "rm_refs", rm->rm_refs);
+    iptT_push_fstr(L, "rm_mklist", "%p", rm->rm_mklist);
+    iptT_push_int(L, "rm_refs", rm->rm_refs);
 
     if (rm->rm_flags & RNF_NORMAL) {
       // NOTE: if its a NORMAL 'radix_mask' then union -> rm_leaf else rm_mask
       // - see radix.c:377 and and radix.c:773
-      iptL_push_int(L, "_LEAF_", 1);
-      iptL_push_fstr(L, "rm_leaf", "%p", rm->rm_leaf);
+      iptT_push_int(L, "_LEAF_", 1);
+      iptT_push_fstr(L, "rm_leaf", "%p", rm->rm_leaf);
 
     } else {
-      iptL_push_int(L, "_INTERNAL_", 1);
-      iptL_push_fstr(L, "rm_mask", "%s", key_tostr(key, rm->rm_mask));
+      iptT_push_int(L, "_INTERNAL_", 1);
+      iptT_push_fstr(L, "rm_mask", "%s", key_tostr(key, rm->rm_mask));
     }
 
     dbg_stack("out(1) ==>");
@@ -1965,17 +1992,18 @@ int masks(lua_State *L) {
 /*
  * :merge(af)  <--  [t, af]
  *
- * Iterate across groups of pfx's that may be combined
+ * Iterate across groups of pfx's that may be combined, to setup just return
+ * the first leaf of the correct AF_family's tree.
  */
 
 static int
 merge(lua_State *L)
 {
-    dbg_stack("inc(.) <--");
+    dbg_stack("inc(.) <--");                 // [t af]
 
     struct radix_node *rn;
     table_t *t = check_table(L, 1);
-    int af = lua_tointeger(L, 2);
+    int af = check_int(L, 2, "expected an AF_family number");
 
     if (af == AF_INET)
         rn = rdx_firstleaf(&t->head4->rh);
@@ -1983,9 +2011,8 @@ merge(lua_State *L)
         rn = rdx_firstleaf(&t->head6->rh);
     else return iter_bail(L);
 
-    lua_pop(L, 1);                            // [t]
-    lua_pushlightuserdata(L, rn);             // [t rn]
-    lua_pushcclosure(L, iter_merge, 1);       // [t f]
+    lua_pushlightuserdata(L, rn);             // [t af rn]
+    lua_pushcclosure(L, iter_merge, 2);       // [t f]
     lua_rotate(L, 1, -1);                     // [f t]
 
     dbg_stack("out(2) ==>");

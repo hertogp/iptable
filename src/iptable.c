@@ -568,10 +568,19 @@ rdx_pairleaf(struct radix_node *oth) {
     if(! RDX_ISLEAF(oth)) return NULL;
     if(! key_bypair(pair, oth->rn_key, oth->rn_mask)) return NULL;
 
-    maxb = IPT_KEYOFFSET + key_tolen(oth->rn_mask);
+    //char dbuf[MAX_STRKEY];
+    //fprintf(stderr, "stem key %s/%d\n",
+    //  key_tostr(dbuf, oth->rn_key), key_tolen(oth->rn_mask));
+
+    //fprintf(stderr, "pair key %s/%d (rb_bit %d, maxb %d)\n",
+    //  key_tostr(dbuf, pair), key_tolen(oth->rn_mask),
+    //  oth->rn_bit, IPT_KEYOFFSET + key_tolen(oth->rn_mask));
+    // _dumprn("oth", oth);
+
     /* goto up the tree to the governing internal node */
+    maxb = IPT_KEYOFFSET + key_tolen(oth->rn_mask);
     for(rn = oth; RDX_ISLEAF(rn) || rn->rn_bit >= maxb; rn = rn->rn_parent)
-      ;
+        ;
 
     /* descend following pair-key */
     while(! RDX_ISLEAF(rn))
@@ -580,17 +589,26 @@ rdx_pairleaf(struct radix_node *oth) {
       else
         rn = rn->rn_left;
 
+    // _dumprn(">0>", rn);
     /* Never use ROOT-leafs for key comparisons (KEYLEN), take its dupedkey */
     if(RDX_ISROOT(rn)) rn = rn->rn_dupedkey;
+    // _dumprn(">1>", rn);
+
+    if (rn == NULL) return 0;
+
+    // _dumprn(">2>", rn);
 
     /* check key actually matches */
     if(key_cmp(pair, rn->rn_key) != 0)
       return NULL;
 
+    // _dumprn(">3>", rn);
+
     /* return the leaf with the same mask length */
     while( rn && rn->rn_bit != oth->rn_bit)
       rn = rn->rn_dupedkey;
 
+    // _dumprn(">>>", rn);
     return rn;
 }
 
