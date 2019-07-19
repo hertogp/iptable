@@ -245,11 +245,10 @@ describe("ipt:radixes(AF) ", function()
       ipt["3f::/90"] = 643;
       ipt["4f::/24"] = 643;
 
-      for node in ipt:radixes(iptable.AF_INET, iptable.AF_INET6) do
+      for node in ipt:radixes(iptable.AF_INET6) do
         -- all tables/nodes have type & address 
         assert.is_truthy(node._TYPE_);
         assert.is_truthy(node._MEM_);
-
         -- check fields based on node type
         if (node._TYPE_ == iptable.RDX_NODE_HEAD) then
           -- NOTE: the function ptr values are skipped

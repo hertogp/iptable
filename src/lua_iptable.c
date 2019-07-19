@@ -305,27 +305,41 @@ static void refp_delete(void *L, void **r)
  *
  */
 
-static int isvalid(struct radix_node *rn)
+static int
+isvalid(struct radix_node *rn)
 {
     int valid = 1;
 
-    if(rn == NULL || rn->rn_parent == NULL) return 0;
+    if (rn == NULL) return !valid;
+    if (rn->rn_parent == NULL) return !valid;
+    /* donot mess with ROOT nodes */
+    if (RDX_ISROOT(rn)) return valid;
 
-    // rn is pointed to by its children (if any)
     if (RDX_ISLEAF(rn)) {
-        if (rn->rn_dupedkey)
-            valid &= rn->rn_dupedkey->rn_parent == rn;
+      /* LEAF - valid key, mask & parent of dupedkey child (if any) */
+      if (rn->rn_key == NULL) return !valid;
+      if (*(uint8_t *)rn->rn_key > MAX_BINKEY) return !valid;
+      /* leaf nodes in radix mask tree donot have rn_mask's, just rn_key's */
+      if (rn->rn_mask && *(uint8_t *)rn->rn_mask > MAX_BINKEY) return !valid;
+      if (rn->rn_dupedkey && rn != rn->rn_dupedkey->rn_parent) return !valid;
+
     } else {
-        valid &= rn->rn_left->rn_parent == rn;
-        valid &= rn->rn_right->rn_parent == rn;
+      /* INTERNAL -*/
+      if (rn->rn_left == NULL) return !valid;
+      if (rn != rn->rn_left->rn_parent) return !valid;
+
+      if (rn->rn_right == NULL) return !valid;
+      if (rn != rn->rn_right->rn_parent) return !valid;
     }
 
     // and rn is pointed to by its parent
-    if(RDX_ISLEAF(rn->rn_parent))
-        valid &= rn->rn_parent->rn_dupedkey == rn;
-    else
-        valid &= (rn->rn_parent->rn_left == rn
-                  || rn->rn_parent->rn_right == rn);
+    if(RDX_ISLEAF(rn->rn_parent)) {
+      if (rn != rn->rn_parent->rn_dupedkey) return !valid;
+
+    } else {
+      if (rn != rn->rn_parent->rn_left
+        && rn != rn->rn_parent->rn_right) return !valid;
+    }
 
     return valid;
 }
@@ -600,15 +614,15 @@ static int iter_masks(lua_State *L)
 static int
 iter_merge(lua_State *L)
 {
-    dbg_stack("inc(.) <--");                   // [t p]
+    dbg_stack("inc(.) <--");                   // [t p], upvalues(nxt, alt)
 
-    struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(2));
+    struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
     struct radix_node *pair=NULL, *nxt = NULL, *super = NULL;
     char buf[MAX_STRKEY];
 
-    if (rn == NULL) return 0;          /* all done, not an error */
-    if (! isvalid(rn)) return 0;       /* error: cannot continue */
-    if (! RDX_ISLEAF(rn)) return 0;    /* error: should've been a leaf */
+    if (rn == NULL) return 0;                  /* all done, not an error */
+    if (! isvalid(rn)) return 0;               /* error: got deleted */
+    if (! RDX_ISLEAF(rn)) return 0;            /* error: not a leaf */
 
     /* skip leafs without a pairing key */
     while(rn && (pair = rdx_pairleaf(rn)) == NULL)
@@ -617,7 +631,6 @@ iter_merge(lua_State *L)
     if (rn == NULL) return 0;
     if(RDX_ISROOT(rn)) return 0;
 
-
     /* search for supernet node on dupedkey chain of lowest key */
     super = key_cmp(rn->rn_key, pair->rn_key) > 0 ? pair : rn;
     key_tostr(buf, super->rn_key);  /* to push supernet prefix as string */
@@ -625,11 +638,9 @@ iter_merge(lua_State *L)
         super = super->rn_dupedkey;
 
     /* Caller may delete upper-half or even the supernet, which may be next if
-     * the current leaf is the lower-half.  So:
-     * 1) if super is next, store alternative next node as well (not equal to
-     *      upper-half)
-     * 2) else if upper-half is next, goto the next leaf-node.
-     * TODO: implement alt node in case nxt==super.
+     * the current leaf is the lower-half.  So ensure nxt-node is neither. This
+     * means that super-/pair-node may be skipped during a single iteration but
+     * its the only way to prevent undefined behaviour.
      */
 
     /* save next leaf for next iteration (NULL stops next iteration) */
@@ -637,7 +648,7 @@ iter_merge(lua_State *L)
     if (nxt == super) nxt = rdx_nextleaf(nxt);
     if (nxt == pair) nxt = rdx_nextleaf(nxt);
     lua_pushlightuserdata(L, nxt);
-    lua_replace(L, lua_upvalueindex(2));
+    lua_replace(L, lua_upvalueindex(1));
 
     /* clear stack, push supernet prefix string & table with k,v-pairs */
     lua_pop(L, lua_gettop(L));                                    // []
@@ -701,16 +712,7 @@ iter_more_org(lua_State *L)
                     key_tolen(e->rn[0].rn_mask));
             lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
             matched = 1;
-        } else if(RDX_ISLEAF(rn)
-                && !RDX_ISROOT(rn)
-                && rn->rn_bit <= maxb) {
-            printf("%s/%d no match for ",
-                key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask));
-            printf("%s/%d\n",
-                key_tostr(buf, addr), key_tolen(mask));
-
-
-                }
+        }
 
         dbg_msg("top %p, maxb %d, rn %p, rn_bit %d, match %d",
           (void *)top, maxb, (void *)rn, rn->rn_bit, matched);
@@ -780,7 +782,6 @@ iter_more(lua_State *L)
     size_t dummy;
     uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
 
-    /* fprintf(stderr, "iter-more\n"); */
     if (rn == NULL) return 0;     /* we're done */
     if (!isvalid(rn)) return 0;   /* TODO: error: rn was deleted */
     if(!check_binkey(L, lua_upvalueindex(4), addr, &dummy)) return 0;
@@ -793,7 +794,6 @@ iter_more(lua_State *L)
         if(key_tolen(rn->rn_mask) >= mlen
                 && key_isin(addr, rn->rn_key, mask)) {
 
-            /* fprintf(stderr, " -> match!\n"); */
             e = (entry_t *)rn;
             lua_pushfstring(L, "%s/%d",
                     key_tostr(buf, e->rn[0].rn_key),
@@ -1778,12 +1778,6 @@ more_org(lua_State *L)
     }
 
     /* the upvalues for the iterator: subtreetop, current node & maxbit */
-    if (rn && RDX_ISLEAF(rn)) {
-        char buf[MAX_STRKEY];
-        printf("more start found %s/%d, top's rn_bit %d\n",
-            key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask),
-            top->rn_bit);
-    }
     lua_pushlightuserdata(L, top);
     lua_pushlightuserdata(L, rn);
     lua_pushinteger(L, maxb);
@@ -1815,7 +1809,6 @@ more(lua_State *L)
     table_t *t = check_table(L, 1);
     const char *pfx = check_pfxstr(L, 2, &len);
 
-    /* fprintf(stderr, "-1-\n"); */
     if (! key_bystr(addr, &mlen, &af, pfx)) {
         /* TODO: err hdlr - set errno & bail: iter_bail(L, errno) */
         lua_pushfstring(L, "more(): invalid prefix %s", lua_tostring(L, 2));
@@ -1999,12 +1992,13 @@ int masks(lua_State *L) {
 static int
 merge(lua_State *L)
 {
-    dbg_stack("inc(.) <--");                 // [t af]
+    dbg_stack("inc(.) <--");                  // [t af]
 
     struct radix_node *rn;
     table_t *t = check_table(L, 1);
     int af = check_int(L, 2, "expected an AF_family number");
 
+    lua_pop(L, 1);                            // [t]
     if (af == AF_INET)
         rn = rdx_firstleaf(&t->head4->rh);
     else if (af == AF_INET6)
@@ -2012,6 +2006,7 @@ merge(lua_State *L)
     else return iter_bail(L);
 
     lua_pushlightuserdata(L, rn);             // [t af rn]
+    lua_pushlightuserdata(L, NULL);           // [t af rn NULL]
     lua_pushcclosure(L, iter_merge, 2);       // [t f]
     lua_rotate(L, 1, -1);                     // [f t]
 

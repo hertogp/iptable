@@ -163,7 +163,10 @@ key_bypair(uint8_t *a, const void *b, const void *m)
 
     if (aa == NULL || bb == NULL || mm == NULL) return NULL;
     /* fail on zero-length mask/key or mask that starts with 0 */
-    if (*mm == 0 || *(mm+1) == 0 || *bb == 0) return NULL; 
+    if (*mm == 0 || *(mm+1) == 0 || *bb == 0) return NULL;
+    /* ensure correct bounds on key/mask */
+    if (*bb > MAX_BINKEY || *mm > MAX_BINKEY)
+        return NULL;
     last = aa + *bb - 1; /* last key byte to write */
 
     for(*aa++ = *bb++, mm++; aa < last && *mm == 0xFF; mm++)
@@ -432,11 +435,30 @@ rdx_flush(struct radix_node *rn, void *args)
     arg = (purge_t *)args;
     rnh = arg->head;
 
+    /* remove entry [rn[2], ptr] from the tree */
     entry = (entry_t *)rnh->rnh_deladdr(rn->rn_key, rn->rn_mask, &rnh->rh);
 
     if (entry == NULL) return 0;
 
+    /* invalidate the entry before it's freed */
+    *entry->rn[0].rn_key = -1;  /* illegal KEYLEN */
     free(entry->rn[0].rn_key);
+    entry->rn[0].rn_key = NULL;
+
+    /* entry's leaf node - NULLify any pointers */
+    rn->rn_parent = NULL;
+    rn->rn_mklist = NULL;
+    rn->rn_flags = 0;
+    rn->rn_mask = NULL;
+    rn->rn_dupedkey = NULL;
+
+    /* entry's internal node - NULLify any pointers */
+    rn = &entry->rn[1];
+    rn->rn_parent = NULL;
+    rn->rn_mklist = NULL;
+    rn->rn_left = NULL;
+    rn->rn_right = NULL;
+
     if (entry->value != NULL && arg->purge != NULL)
         arg->purge(arg->args, &entry->value);
 
