@@ -312,7 +312,6 @@ isvalid(struct radix_node *rn)
 
     if (rn == NULL) return !valid;
     if (rn->rn_parent == NULL) return !valid;
-    /* donot mess with ROOT nodes */
     if (RDX_ISROOT(rn)) return valid;
 
     if (RDX_ISLEAF(rn)) {
