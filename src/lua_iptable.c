@@ -16,6 +16,21 @@
 /* lua_iptable identity */
 
 #define LUA_IPTABLE_ID "iptable"
+#define LUA_IPT_ITR_GC "itr_gc"
+
+/* iterator for-loop break protection
+ *
+ * Iterators traverse the tree by hopping from leaf to leaf and keep a pointer
+ * to the next hop in order to be able to continue.  During iteration, the tree
+ * is locked against actual radix node removal and nodes, when deleted, are
+ * simply flagged for deferred deletion when no iterators are active.
+ *
+ * The ipt_iter_gc() function implements this deferred deletion.
+ */
+
+typedef struct itr_gc_t {
+  table_t *t;
+} itr_gc_t;
 
 /* lua functions */
 
@@ -26,6 +41,7 @@ int luaopen_iptable(lua_State *);
 table_t *check_table(lua_State *, int);
 static int check_binkey(lua_State *, int, uint8_t *, size_t *);
 const char *check_pfxstr(lua_State *, int, size_t *);
+static int ipt_itr_gc(lua_State *);
 static int *refp_create(lua_State *);
 static void refp_delete(void *, void **);
 static int isvalid(struct radix_node *);
@@ -33,8 +49,10 @@ static int iter_bail(lua_State *);
 static int iter_fail(lua_State *);
 static inline int subtree_fail(struct radix_node *, int);
 
-/* iter_radix() helpers */
 
+/* iter_xxx() helpers */
+
+static void iptL_push_itr_gc(lua_State *, table_t *);
 static void iptT_push_fstr(lua_State *, const char *, const char *, const void *);
 static void iptT_push_int(lua_State *, const char *, int);
 static void iptT_push_kv(lua_State *, struct radix_node *);
@@ -137,6 +155,12 @@ luaopen_iptable (lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
+    /* LUA_IPT_ITR_GC metatable */
+    luaL_newmetatable(L, LUA_IPT_ITR_GC);
+    lua_pushstring(L, "__gc");
+    lua_pushcfunction(L, ipt_itr_gc);
+    lua_settable(L, -3);
+
     luaL_newmetatable(L, LUA_IPTABLE_ID);   // [.., {} ]
     lua_pushvalue(L, -1);                   // [.., {}, {} ]
     lua_setfield(L, -2, "__index");         // [.., {__index={}} ]
@@ -161,7 +185,6 @@ luaopen_iptable (lua_State *L)
     lua_pushinteger(L, TRDX_HEAD);
     lua_setfield(L, -2, "RDX_HEAD");
 
-
     dbg_stack("out(1) ==>");
 
     return 1;
@@ -170,11 +193,9 @@ luaopen_iptable (lua_State *L)
 /* helpers */
 
 /*
- * check_table()  <--  [ .. t ..]
+ * check out an iptable at given index or fail  <--  [ .. t ..]
  *
- * Check element at given idx is table with the correct metatable and thus is
- * an iptable.  May throw an error through luaL_argcheck back to caller.
- *
+ * Fails if index does not hold userdata with the correct metatable.
  */
 
 table_t *
@@ -195,6 +216,24 @@ check_int(lua_State *L, int idx, const char *msg)
     }
     return lua_tointeger(L, idx);
 
+}
+
+/*
+ * check out an AF_family or default to af_default.
+ * If af_default is NULL, this will raise an error if no known AF_family is
+ * given.
+ */
+
+int check_af(lua_State *L, int, const char*);
+int
+check_af(lua_State *L, int idx, const char *af_default)
+{
+    static const char *const af_fam[] = {"AF_UNSPEC", "AF_INET", "AF_INET6",
+        NULL };
+    static const int af_num[] = {AF_UNSPEC, AF_INET, AF_INET6};
+    int af = luaL_checkoption(L, idx, af_default, af_fam);
+
+    return af_num[af];
 }
 
 /*
@@ -358,7 +397,8 @@ iter_bail(lua_State *L)
 {
     dbg_stack("inc(.) ->");
 
-    lua_pop(L, lua_gettop(L));               /* clear the stack */
+    lua_settop(L, 0);                        /* clear the stack */
+    // lua_pop(L, lua_gettop(L));               /* clear the stack */
     lua_pushcclosure(L, iter_fail, 0);       /* the iteration blocker */
 
     dbg_stack("out(1) ==>");
@@ -846,6 +886,7 @@ iter_radix(lua_State *L)
             if (! isvalid(node)) return 0;         // rn got deleted
             return push_rdx_node(L, node);
         case TRDX_MASK_HEAD:
+            if (! lua_tointeger(L, lua_upvalueindex(1))) return 0;
             return push_rdx_mask_head(L, node);
         case TRDX_MASK:
             return push_rdx_mask(L, node);
@@ -1136,8 +1177,8 @@ ipt_new(lua_State *L)
         lua_error(L);
     }
 
-    luaL_getmetatable(L, LUA_IPTABLE_ID); // [ud M]
-    lua_setmetatable(L, 1);
+    luaL_getmetatable(L, LUA_IPTABLE_ID); // [t M]
+    lua_setmetatable(L, 1);               // [t]
 
     dbg_stack("out(1) ==>");
 
@@ -1325,7 +1366,7 @@ ipt_network(lua_State *L)
 }
 
 /*
- * .neighbor()  <--  [str]
+ * .neighbor(pfx)  <--  [str]
  *
  * Given a prefix, return the neighbor prefix, masklen and af_family, such that
  * both can be combined into a supernet with masklen -1; nil on errors.
@@ -1523,11 +1564,10 @@ _newindex(lua_State *L)
     int *refp = NULL;
 
     pfx = check_pfxstr(L, 2, &len);
-    dbg_msg("got pfx %s", pfx);
 
     if (lua_isnil(L, -1)) {
-        dbg_msg("tbl_del on %s", pfx);
         tbl_del(t, pfx, L);
+        dbg_msg("tbl_del on %s", pfx);
     }
     else {
         if ((refp = refp_create(L)))
@@ -1566,7 +1606,7 @@ _index(lua_State *L)
         entry = strchr(pfx, '/') ? tbl_get(t, pfx) : tbl_lpm(t, pfx);
 
     if(entry)
-        lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)entry->value); // [tbl k v]
+        lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)entry->value); // [t k v]
     else {
         if (luaL_getmetafield(L, 1, pfx) == LUA_TNIL)
             return 0;
@@ -1845,7 +1885,8 @@ more(lua_State *L)
     lua_pushinteger(L, inclusive);
     lua_pushlstring(L, (const char *)addr, (size_t)IPT_KEYLEN(addr));
     lua_pushlstring(L, (const char *)mask, (size_t)IPT_KEYLEN(mask));
-    lua_pushcclosure(L, iter_more, 5);            // [t f]
+    iptL_push_itr_gc(L, t);
+    lua_pushcclosure(L, iter_more, 6);            // [t f]
     lua_rotate(L, 1, 1);                          // [f t]
 
     dbg_stack("out(1) ==>");
@@ -2015,57 +2056,89 @@ merge(lua_State *L)
 }
 
 /*
- * :radix(af)  <--  [t af]
+ * During iteration(s), delete operations only flag radix nodes (leafs holding
+ * a prefix) for deletion so they are not actively removed, only flagged for
+ * deletion.  This way, the 'next leaf' node, stored as an upvalue by the
+ * iter_xxx functions, is guaranteed to still exist on the next iteration.
  *
- * Iterate across all nodes of all types in a radix tree.
- * - returns the C-structs as Lua tables.
- * TODO: :radix(af, maskp)  <-- change this:
- *  - take a single AF_family as iteration target, and
- *  - a boolean that says to include the mask tree or not.
+ * Such 'inactive' leafs are still part of the tree, but are seen as absent by
+ * regular tree operations.
+ *
+ * The iterator garbage collector only actually removes those flagged for
+ * deletion when there are no more iterators active (ie. itr_count reaches
+ * zero).
+ */
+
+static void
+iptL_push_itr_gc(lua_State *L, table_t *t)
+{
+  dbg_stack("inc(.) <--");
+
+  itr_gc_t *g = (itr_gc_t *)lua_newuserdata(L, sizeof(itr_gc_t *));
+
+  if (g == NULL) {
+    lua_pushliteral(L, "error creating iterator _gc guard");
+    lua_error(L);
+  }
+
+  g->t = t;
+  t->itr_lock++;  /* registers presence of an active iterator */
+
+  luaL_newmetatable(L, LUA_IPT_ITR_GC);   // [... g M]
+  lua_setmetatable(L, -2);                // [... g]
+
+  dbg_stack("out(.) ==>");
+}
+
+static int
+ipt_itr_gc(lua_State *L)
+{
+  dbg_stack("inc(.) <--");
+
+  itr_gc_t *gc = luaL_checkudata(L, 1, LUA_IPT_ITR_GC);
+
+  dbg_msg("gc->t is %p", (void *)gc->t);
+  dbg_msg("t->count4 is %lu", gc->t->count4);
+  dbg_msg("t->iterators is %d", gc->t->iterators);
+  gc->t->itr_lock--;
+
+  /* if (gc->t->itr_lock == 0) */
+  /*   fprintf(stderr, "!"); */
+
+  lua_settop(L, 0);
+
+  dbg_stack("out(.) ==>");
+
+  return 0;
+}
+
+/*
+ * :radix(af)  <--  [t af maskp]
+ *
+ * Iterate across all nodes of all types in af's radix trees.
+ *
+ * Only includes the radix_mask tree if the optional maskp argument is true;
+ * The iterator will return the C-structs as Lua tables.
  */
 
 static int
 radixes(lua_State *L)
 {
-    dbg_stack("inc(.) <--");
+    dbg_stack("inc(.) <--");                        // [t af maskp]
 
-    int isnum = 0, af = AF_UNSPEC, afs = IPT_UNSPEC;
     table_t *t = check_table(L, 1);
+    int af_fam = check_af(L, 2, "AF_INET");
+    int maskp = lua_toboolean(L, 3);
 
-    if (lua_gettop(L) < 2) {
-        lua_pushfstring(L, "ipt:radixes(): need AF_INET, AF_INET6 or both");
-        lua_error(L);
-    }
+    /* pushes af_fam's radix_node_head onto t's stack */
+    if (! rdx_firstnode(t, af_fam)) return iter_bail(L);
 
-    /* get all af families given */
-    while(lua_gettop(L) > 1) {
-      af = lua_tointegerx(L, lua_gettop(L), &isnum);
-      lua_pop(L, 1);
-      if (!isnum || AF_UNKNOWN(af)) {
-        lua_pushfstring(L, "ipt:radixes(): unknown AF_family %d", af);
-        lua_error(L);
-      }
-      /* translate AF_fam to IPT_fam, which are powers of two */
-      switch (af) {
-        case AF_INET:
-          afs |= IPT_INET;
-          break;
-        case AF_INET6:
-          afs |= IPT_INET6;
-          break;
-        default:
-          dbg_msg("unknown AF_family (%d)", af);
-          lua_pushfstring(L, "Address family (%d) not supported", af);
-          lua_error(L);
-      }
-    }
-
-    if (! rdx_firstnode(t, afs)) return iter_bail(L);
-
-    dbg_stack("upvalues(0)");
-
-    lua_pushcclosure(L, iter_radix, 0);             // [t_ud iter_f]
-    lua_rotate(L, 1, 1);                            // [iter_f t_ud]
+    /* maskp & itr_gc as upvalues for iterator */
+    lua_settop(L, 1);                                // [t]
+    lua_pushinteger(L, maskp);                       // [t maskp]
+    iptL_push_itr_gc(L, t);                          // [t maskp {}]
+    lua_pushcclosure(L, iter_radix, 2);              // [t f]
+    lua_rotate(L, 1, 1);                             // [f t]
 
     dbg_stack("out(2) ==>");
 

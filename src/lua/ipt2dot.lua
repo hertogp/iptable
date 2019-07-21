@@ -88,20 +88,30 @@ local TBL_END = [[
 local function th_bgcolor(node)
   bgcolors = {
     nill = "white",
+
     RADIX_NODE_HEAD = "yellow",
     RADIX_HEAD = "khaki",
+    RADIX_MASK_HEAD = "gold",
+    RADIX_MASK = "coral",
+
+    -- color by 'kind'
     RADIX_NODE_ROOT = "yellow",         -- flags are not mutually exclusive
     RADIX_NODE_LEAF = "green",          -- favor ROOT over LEAF/INTERNAL
     RADIX_NODE_INTERNAL = "lightgrey",
-    RADIX_MASK_HEAD = "gold",
-    RADIX_MASK = "coral",
+
     default = "khaki",
   }
 
   if (node == nil) then return bgcolors.nill end
+
+  -- radix nodes with rn_mask NULL are in mask_tree and get different color
+  if (node._NAME_ == "RADIX_NODE" and node.rn_mask == "(null)") then
+    return bgcolors.RADIX_MASK_HEAD
+  end
   -- try color by node name
   local bgcolor = bgcolors[node._NAME_]
   if (bgcolor) then return bgcolor end
+
   -- try color by radix_node 'kind'
   if (node._ROOT_) then return bgcolors.RADIX_NODE_ROOT end
   if (node._LEAF_) then return bgcolors.RADIX_NODE_LEAF end
@@ -236,7 +246,15 @@ local function rnh_dot(g, t)
   -- RADIX_HEAD part
   theader(g, t.rh)
   trowkv(g, "rnh_treetop", t.rh.rnh_treetop)
-  trowkv(g, "rnh_masks", t.rh.rnh_masks)
+  if (g.masks) then
+    -- mask_tree to be dottified as well
+    trowkv(g, "rnh_masks", t.rh.rnh_masks)
+  else
+
+    -- no mask tree so prevent graphing a dangling pointer by wrapping the address 
+    -- in spaces
+    trowkv(g, "rnh_masks", " "..t.rh.rnh_masks.." ")
+  end
 
   -- RADIX_NODES part
   theader(g, t)
@@ -317,10 +335,11 @@ end
 
 local M = {}
 
-function dotify(ipt, ...)
+function dotify(ipt, af_fam, masks)
   local lines = {}
   -- handlers piggyback on graph (lines) while building a node
   local graph = {   -- collector for graph info
+    masks = masks,     -- hint for RADIX_NODE_HEAD handler
     edges = {},        -- register for (incomplete) edges (across the graph)
     ports = {}         -- map (unique) port_id->node_id (across the graph)
   }
@@ -331,7 +350,7 @@ function dotify(ipt, ...)
   lines[#lines+1] = "  ranksep=\"1.0 equally\";\n"
 
   -- collect all RADIX node types of AF_families given (...)
-  for radix in ipt:radixes(...) do
+  for radix in ipt:radixes(af_fam, masks) do
     lines[#lines+1] = tbl2dot(graph, radix)
   end
 
@@ -356,26 +375,20 @@ return dotify
 
 --[[ example usage
 
-iptable = require("iptable")
-dotify = require("ipt2dot")
-
 local iptable = require("iptable")
+local dotify = require("ipt2dot")
 local ipt = iptable.new()
-ipt["1.1.1.0/24"] = 24
 
-ipt["1.1.1.0/25"] = 25
-ipt["1.1.1.128/25"] = 25
+ipt["1.1.1.0/24"] = 1
+ipt["1.1.1.128/25"] = 2
+ipt["2f::/128"] = 1
+ipt["3f:aa:/128"] = 2
 
-ipt["1.1.1.0/26"] = 25
-ipt["1.1.1.64/26"] = 25
-ipt["1.1.1.128/26"] = 25
-ipt["1.1.1.192/26"] = 25
+-- alternatively:
+-- - pass in false (or omit 3rd arg) to skip radix mask tree
+-- - use AF_INET6 for ipv6 tree
 
-ipt["3.1.1.0/24"] = 24
-ipt["3.1.1.0/25"] = 24
-ipt["3.1.1.128/25"] = 24
-
-local mylines = dotify(ipt, iptable.AF_INET)
-print(table.concat(mylines, "\n"))
+local lines = dotify(ipt, "AF_INET", true)
+print(table.concat(lines, "\n"))
 
 ]]

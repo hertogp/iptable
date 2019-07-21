@@ -70,70 +70,6 @@ test_tbl_stack_pop(void)
 }
 
 void
-test_rdx_firstnode(void)
-{
-    table_t *ipt = tbl_create(NULL);
-    mu_assert(ipt);
-
-    mu_assert(rdx_firstnode(ipt, IPT_INET|IPT_INET6));
-    mu_assert(ipt->size == 2);
-    mu_assert(ipt->top->type == TRDX_NODE_HEAD);
-    mu_assert(ipt->top->elm  == ipt->head4);
-
-    mu_assert(tbl_stackpop(ipt));
-    mu_assert(ipt->size == 1);
-    mu_assert(ipt->top->type == TRDX_NODE_HEAD);
-    mu_assert(ipt->top->elm  == ipt->head6);
-
-    tbl_destroy(&ipt, NULL);
-}
-
-void
-test_rdx_nextnode(void)
-{
-    struct radix_node_head *rnh = NULL;
-    struct radix_mask_head *rmh = NULL;
-    int type;
-    table_t *ipt = tbl_create(NULL);  // empty but valid iptable instance
-
-    mu_assert(ipt);
-    mu_assert(rdx_firstnode(ipt, IPT_INET|IPT_INET6));
-    mu_assert(ipt->size == 2);  // [head4 head6]
-
-    // pop head4, its progeny should have been pushed
-    mu_assert(rdx_nextnode(ipt, &type, (void **)&rnh));
-    // stack -> [head4->rh.rnh_masks head6]
-    mu_eq(TRDX_NODE_HEAD, type, "%d");
-    mu_assert(ipt->head4 == rnh);
-    mu_assert(ipt->size == 2);
-
-    // pop head4's radix_mask_head, no progeny pushed (empty table)
-    mu_assert(rdx_nextnode(ipt, &type, (void **)&rmh));
-    // stack -> [head6]
-    mu_eq(TRDX_MASK_HEAD, type, "%d");
-    mu_assert(ipt->head4->rh.rnh_masks == rmh);
-    mu_assert(ipt->size == 1);
-
-
-    // pop head6, its progeny should have been pushed
-    mu_assert(rdx_nextnode(ipt, &type, (void **)&rnh));
-    // stack -> [head6->rh.rnh_masks]
-    mu_eq(TRDX_NODE_HEAD, type, "%d");
-    mu_assert(ipt->head6 == rnh);
-    mu_assert(ipt->size == 1);
-
-    // pop head6's radix_mask_head, no progeny pushed (empty table)
-    mu_assert(rdx_nextnode(ipt, &type, (void **)&rmh));
-    // stack -> []
-    mu_eq(TRDX_MASK_HEAD, type, "%d");
-    mu_assert(ipt->head6->rh.rnh_masks == rmh);
-    mu_assert(ipt->size == 0);
-    mu_assert(ipt->top == NULL);
-
-    tbl_destroy(&ipt, NULL);
-}
-
-void
 test_tbl_stack_again(void)
 {
     // these tests store int data from a int char on the stack, rather than the
@@ -166,7 +102,7 @@ test_tbl_stack_again(void)
     mu_assert(tbl_set(ipt, pfx, number+6, NULL));
 
     leafs = 0;
-    mu_assert(rdx_firstnode(ipt, IPT_INET|IPT_INET6));
+    mu_assert(rdx_firstnode(ipt, AF_INET));
     while(ipt->top) {
         mu_assert(rdx_nextnode(ipt, &type, &ptr));
         if (type > -1 && type < 5)
@@ -182,16 +118,58 @@ test_tbl_stack_again(void)
     mu_assert(ipt->top == NULL);
     mu_eq((size_t)0, ipt->size, "stack size (%lu)");
 
-    // The tree will have:
-    // - 1 ipv4 radix_node_head and 1 ipv4 radix_mask_head, plus
-    // - 1 ipv6 radix_node_head and 1 ipv6 radix_mask_head
-    mu_eq(1+1, types[TRDX_NODE_HEAD], "%d radix_node_head's");
-    mu_eq(1+1, types[TRDX_MASK_HEAD], "%d radix_mask_head's");
+    /* The tree has have:
+     * - 1 ipv4 radix_node_head and 1 ipv4 radix_mask_head, plus
+     * - 1 ipv6 radix_node_head and 1 ipv6 radix_mask_head
+     * We traversed the ipv4 tree.
+     */
+    mu_eq(1, types[TRDX_NODE_HEAD], "%d radix_node_head's");
+    mu_eq(1, types[TRDX_MASK_HEAD], "%d radix_mask_head's");
 
-    // The tree will have:
-    // - 3 ipv4 prefix-leafs + 3 ipv4 mask-leafs (num of different ipv4 masks)
-    // - 2 ipv6 prefix-leafs + 2 ipv6 mask-leafs (num of different ipv6 masks)
-    mu_eq(4+4+2+2, leafs, "%d node leafs");
+    /* The tree has:
+     * - 4 ipv4 prefix-leafs + 4 ipv4 mask-leafs (num of different ipv4 masks)
+     * - 2 ipv6 prefix-leafs + 2 ipv6 mask-leafs (num of different ipv6 masks)
+     */
+    mu_eq(4+4, leafs, "%d node leafs");
+
+
+    /*
+     * repeat the tests for IPv6
+     */
+
+    leafs = 0;
+    mu_assert(rdx_firstnode(ipt, AF_INET6));
+    while(ipt->top) {
+        mu_assert(rdx_nextnode(ipt, &type, &ptr));
+        if (type > -1 && type < 5)
+            types[type] += 1;
+        else
+            mu_false("unknown TRDX-type encountered!");
+        if (type == TRDX_NODE &&
+            RDX_ISLEAF(((struct radix_node *)ptr)) &&
+            !RDX_ISROOT(((struct radix_node *)ptr)))
+                leafs += 1;
+    }
+    // stack must exhausted
+    mu_assert(ipt->top == NULL);
+    mu_eq((size_t)0, ipt->size, "stack size (%lu)");
+
+    /* The tree has have:
+     * - 1 ipv4 radix_node_head and 1 ipv4 radix_mask_head, plus
+     * - 1 ipv6 radix_node_head and 1 ipv6 radix_mask_head
+     * We traversed the ipv6 tree.  The types stats of the ipv4 traversal are
+     * updated with the stats of the ipv6 traversel.
+     */
+
+    mu_eq(2, types[TRDX_NODE_HEAD], "%d radix_node_head's");
+    mu_eq(2, types[TRDX_MASK_HEAD], "%d radix_mask_head's");
+
+    /* The tree has:
+     * - 4 ipv4 prefix-leafs + 4 ipv4 mask-leafs (num of different ipv4 masks)
+     * - 2 ipv6 prefix-leafs + 2 ipv6 mask-leafs (num of different ipv6 masks)
+     * leafs was reset, so we should have 4 ipv6 leafs.
+     */
+    mu_eq(2+2, leafs, "%d node leafs");
 
     tbl_destroy(&ipt, NULL);
 }

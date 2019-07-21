@@ -28,6 +28,7 @@ typedef struct table_t {
     size_t count4;
     size_t count6;
     purge_f_t *purge;               // callback to free userdata
+    int itr_lock;                   // count of currently active iterators
     stackElm_t *top;                // only used to iterate across radix nodes
     size_t size;
 } table_t;

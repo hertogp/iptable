@@ -19,8 +19,12 @@
 /*
  * Test tbl's stack for iterating across radix nodes of all types.
  *
- * Uses stack pop/push and rdx_first/nextnode
- *
+ * nextnode(table_t *t, int *type, void **ptr) returns top of the stack:
+ * - pops the top
+ * - pushes its progeny
+ * - sets type to type of popped top element
+ * - sets ptr to popped top element
+ * - return 1 on success, 0 on failure
  */
 
 void
@@ -32,24 +36,25 @@ test_rdx_nextnode(void)
     table_t *ipt = tbl_create(NULL);  // empty but valid iptable instance
 
     mu_assert(ipt);
-    mu_assert(rdx_firstnode(ipt, IPT_INET|IPT_INET6));
-    mu_assert(ipt->size == 2);  // [head4 head6]
+    mu_assert(rdx_firstnode(ipt, AF_INET));
+    mu_assert(ipt->size == 1);  // t.top -> [head4]
 
     // pop head4, its progeny should have been pushed
     mu_assert(rdx_nextnode(ipt, &type, (void **)&rnh));
-    // stack -> [head4->rh.rnh_masks head6]
+    // stack -> [head4->rh.rnh_masks]
     mu_eq(TRDX_NODE_HEAD, type, "%d");
     mu_assert(ipt->head4 == rnh);
-    mu_assert(ipt->size == 2);
+    mu_assert(ipt->size == 1);
 
     // pop head4's radix_mask_head, no progeny pushed (empty table)
     mu_assert(rdx_nextnode(ipt, &type, (void **)&rmh));
-    // stack -> [head6]
+    // stack -> []
     mu_eq(TRDX_MASK_HEAD, type, "%d");
     mu_assert(ipt->head4->rh.rnh_masks == rmh);
-    mu_assert(ipt->size == 1);
+    mu_assert(ipt->size == 0);
 
-
+    /* repeat the process for IPv6 */
+    mu_assert(rdx_firstnode(ipt, AF_INET6));
     // pop head6, its progeny should have been pushed
     mu_assert(rdx_nextnode(ipt, &type, (void **)&rnh));
     // stack -> [head6->rh.rnh_masks]

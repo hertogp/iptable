@@ -245,7 +245,7 @@ describe("ipt:radixes(AF) ", function()
       ipt["3f::/90"] = 643;
       ipt["4f::/24"] = 643;
 
-      for node in ipt:radixes(iptable.AF_INET6) do
+      for node in ipt:radixes("AF_INET6") do
         -- all tables/nodes have type & address 
         assert.is_truthy(node._TYPE_);
         assert.is_truthy(node._MEM_);

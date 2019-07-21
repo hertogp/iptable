@@ -634,22 +634,22 @@ rdx_pairleaf(struct radix_node *oth) {
     return rn;
 }
 
+/*
+ * initialize the stack with the radix head nodes
+ */
+
 int
-rdx_firstnode(table_t *t, int af_fams)
+rdx_firstnode(table_t *t, int af_fam)
 {
-    // initialize the stack with the radix head nodes
 
-    // ensure a clean stack
-    while (t->top) tbl_stackpop(t);
+    while (t->top) tbl_stackpop(t);  /* clear the stack */
 
-    // need at least 1 supported IPT protocol
-    if (! IPT_VALID_PROTO(af_fams)) return 0;
-
-    if(af_fams & IPT_INET6)
-        tbl_stackpush(t, TRDX_NODE_HEAD, t->head6);
-
-    if(af_fams & IPT_INET)
+    if(af_fam == AF_INET)
         tbl_stackpush(t, TRDX_NODE_HEAD, t->head4);
+    else if(af_fam == AF_INET6)
+        tbl_stackpush(t, TRDX_NODE_HEAD, t->head6);
+    else
+        return 0; /* unknown af_family */
 
     return 1;
 }
@@ -744,7 +744,8 @@ tbl_create(purge_f_t *fp)
     // create a new iptable with 2 radix trees
     table_t *tbl = NULL;
 
-    tbl = calloc(sizeof(*tbl), 1);  // sets count's to zero & ptr's to NULL
+    /* calloc so all ptrs & counters are set to NULL/zero */
+    tbl = calloc(sizeof(*tbl), 1);
     if (tbl == NULL) return NULL;
 
     if (rn_inithead((void **)&tbl->head4, 8) == 0) { // IPv4 radix tree
@@ -756,6 +757,7 @@ tbl_create(purge_f_t *fp)
         free(tbl);
         return NULL;
     }
+
     tbl->purge = fp;
 
     return tbl;
@@ -818,6 +820,10 @@ tbl_destroy(table_t **t, void *pargs)
     return 1;
 }
 
+/*
+ * Get an exact match for addr/mask prefix.
+ */
+
 entry_t *
 tbl_get(table_t *t, const char *s)
 {
@@ -840,7 +846,12 @@ tbl_get(table_t *t, const char *s)
     if (! key_bylen(mask, mlen, af)) return NULL;
     if (! key_network(addr, mask)) return NULL;
 
-    entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match for pfx
+    entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
+
+    /* TODO: itr_gc
+     * if (entry->rn->rn_flags & RNF_ACTIVE) return entry;
+     * return NULL
+     */
 
     return entry;
 }
