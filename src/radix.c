@@ -241,7 +241,7 @@ rn_lookup(void *v_arg, void *m_arg, struct radix_head *head)
         x = rn_addmask(m_arg, head->rnh_masks, 1,
             head->rnh_treetop->rn_offset);
         if (x == NULL)
-            return (NULL);            // ipt: unknown mask, so fail
+            return (NULL);            // ipt: is this an error?
         netmask = x->rn_key;
 
         x = rn_match(v_arg, head);
@@ -264,7 +264,7 @@ rn_lookup(void *v_arg, void *m_arg, struct radix_head *head)
     if (LEN(x->rn_key) != LEN(v_arg) || bcmp(x->rn_key, v_arg, LEN(v_arg)))
         return (NULL);
 
-    /* Check if this is not host route */  // ipt: should be "is a host route"
+    /* Check if this is not host route */
     if (x->rn_mask != NULL)                // ipt: a host route has no mask
         return (NULL);
 

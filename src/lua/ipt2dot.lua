@@ -94,6 +94,9 @@ local function th_bgcolor(node)
     RADIX_MASK_HEAD = "gold",
     RADIX_MASK = "coral",
 
+    -- color by flag/state
+    _DELETE_ = "cyan",
+
     -- color by 'kind'
     RADIX_NODE_ROOT = "yellow",         -- flags are not mutually exclusive
     RADIX_NODE_LEAF = "green",          -- favor ROOT over LEAF/INTERNAL
@@ -103,6 +106,7 @@ local function th_bgcolor(node)
   }
 
   if (node == nil) then return bgcolors.nill end
+  if (node._DELETE_) then return bgcolors._DELETE_ end
 
   -- radix nodes with rn_mask NULL are in mask_tree and get different color
   if (node._NAME_ == "RADIX_NODE" and node.rn_mask == "(null)") then
@@ -116,7 +120,7 @@ local function th_bgcolor(node)
   if (node._ROOT_) then return bgcolors.RADIX_NODE_ROOT end
   if (node._LEAF_) then return bgcolors.RADIX_NODE_LEAF end
   if (node._INTERNAL_) then return bgcolors.RADIX_NODE_INTERNAL end
-  -- fallback to default
+
   return bgcolors.default
 end
 
@@ -132,6 +136,7 @@ local function t_flags(t)
   if (type(t) ~= "table") then return nil end
   local tag = ""
   tag = t._ROOT_ and "R" or ""
+  tag = t._DELETE_ and tag.."D" or tag
   tag = t._NORMAL_ and tag.."N" or tag
   tag = t._ACTIVE_ and tag.."A" or tag
   return tag

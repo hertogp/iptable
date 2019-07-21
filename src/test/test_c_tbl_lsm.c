@@ -13,6 +13,7 @@
 #include "minunit.h"         // the mu_test macros
 #include "test_c_tbl_lsm.h"
 
+#define NELEMS(x) ((int)(sizeof x / sizeof(x[0])))
 /*
  * Test cases
  *
@@ -40,14 +41,14 @@ test_tbl_lsm_good(void)
 {
 
     table_t *ipt = tbl_create(NULL);
-    entry_t *itm = NULL;
+    entry_t *e = NULL;
     testpfx_t pfx[6] = {
-        {"1.2.3.0/24",    1},   /* the least specific */
-        {"1.2.3.0/25",    2},
-        {"1.2.3.128/25",  4},
-        {"1.2.3.128/26",  8},
-        {"1.2.3.128/27", 16},
-        {"1.2.3.128/28", 32},
+        {"1.2.3.0/24",  1},
+        {"1.2.3.0/25",  2},
+        {"1.2.3.0/26",  4},
+        {"1.2.3.0/27",  8},
+        {"1.2.3.0/28", 16},
+        {"1.2.3.0/29", 32},
     };
 
     for (int i=0; i < 6; i++)
@@ -55,15 +56,17 @@ test_tbl_lsm_good(void)
 
     mu_eq(SIZE_T(6), ipt->count4, "%lu");
 
-    /* start search from a host address covered by almost all prefixes */
-    itm = tbl_lsm(ipt, "1.2.3.128");
-    if(itm) mu_eq(1, INT_VALUE(itm), "%d");
-    else mu_failed("lsm should %s", "NOT have failed");
+    /* get radix node of specific subnet */
+    for (int i=5; i > 0; i--) {
+        e = tbl_get(ipt, pfx[i].pfx);
+        if(e) {
+            mu_eq(pfx[i].dta, INT_VALUE(e), "%d");  /* check right pfx was found */
+            e = (entry_t *)tbl_lsm(e->rn);          /* should find less specific */
+            mu_eq(pfx[i-1].dta, INT_VALUE(e), "%d");
+        }
+        else mu_failed("tbl_get should %s", "NOT have failed");
+    }
 
-    /* start search from host address covered by 2 prefixes*/
-    itm = tbl_lsm(ipt, "1.2.3.4");
-    if(itm) mu_eq(1, INT_VALUE(itm), "%d");
-    else mu_failed("lsm should %s", "NOT have failed");
 
     tbl_destroy(&ipt, NULL);
 }
@@ -71,75 +74,33 @@ test_tbl_lsm_good(void)
 void
 test_tbl_lsm_zeromask(void)
 {
-
-    entry_t *itm = NULL;
+    /* search for a less specific prefix should find 0/0 if it exists */
     table_t *ipt = tbl_create(NULL);
+    entry_t *e = NULL;
+    testpfx_t pfx[] = {
+        {"0.0.0.0/0",   1},
+        {"1.2.3.0/29", 32},
+    };
 
     mu_assert(ipt);
-    testpfx_t pfx[6] = {
-        {"0.0.0.0/0",     1},   /* the least specific */
-        {"1.2.3.0/25",    2},
-        {"1.2.3.128/25",  4},
-        {"1.2.3.128/26",  8},
-        {"1.2.3.128/27", 16},
-        {"1.2.3.128/28", 32},
-    };
-
-    for (int i=0; i < 6; i++)
+    for (int i=0; i < 2; i++)
         mu_assert(tbl_set(ipt, pfx[i].pfx, &pfx[i].dta, NULL));
 
-    itm = tbl_lsm(ipt, "1.2.3.128");
-    if(itm) mu_eq(1, INT_VALUE(itm), "%d");
-    else mu_failed("lsm should %s", "NOT have failed");
+    mu_eq(SIZE_T(2), ipt->count4, "%lu");
 
-    itm = tbl_lsm(ipt, "1.2.3.5");
-    if(itm) mu_eq(1, INT_VALUE(itm), "%d");
-    else mu_failed("lsm should %s", "NOT have failed");
+    /* get radix node of specific subnet */
+    e = tbl_get(ipt, pfx[1].pfx);
+    if(e) {
+        mu_eq(pfx[1].dta, INT_VALUE(e), "%d");  /* check right pfx was found */
 
-    itm = tbl_lsm(ipt, "0/0");
-    if(itm) mu_eq(1, INT_VALUE(itm), "%d");
-    else mu_failed("lsm should %s", "NOT have failed");
-
-    tbl_destroy(&ipt, NULL);
-}
-
-void
-test_tbl_lsm_withmask(void)
-{
-    /* lsm for a.b.c.d/e should honor the mask */
-    entry_t *itm = NULL;
-    table_t *ipt = tbl_create(NULL);
-
-    testpfx_t pfx[6] = {
-        {"1.2.3.0/24",    1},   /* the least specific */
-        {"1.2.3.0/25",    2},
-        {"1.2.3.128/25",  4},
-        {"1.2.3.128/26",  8},
-        {"1.2.3.128/27", 16},
-        {"1.2.3.128/28", 32},
-    };
-
-    for (int i=0; i < 6; i++)
-        mu_assert(tbl_set(ipt, pfx[i].pfx, &pfx[i].dta, NULL));
-
-    /* search prefixes may have a mask */
-    itm = tbl_lsm(ipt, "1.2.3.128/25");
-    if(itm) mu_eq(1, INT_VALUE(itm), "%d");
-    else mu_failed("lsm should %s", "NOT have failed");
-
-    itm = tbl_lsm(ipt, "1.2.3.0/24");
-    if(itm) mu_eq(1, INT_VALUE(itm), "%d");
-    else mu_failed("lsm should %s", "NOT have failed");
-
-    /* lsm honors search mask (ie result's mask <= search mask) */
-    mu_assert(NULL == tbl_lsm(ipt, "1.2.3.0/23"));
-    mu_assert(NULL == tbl_lsm(ipt, "1.2.3.4/8"));
-
-    /* search prefixes not covered by any entry in the table */
-    mu_assert(NULL == tbl_lsm(ipt, "3.2.3.0/24"));
-    mu_assert(NULL == tbl_lsm(ipt, "3.2.3.0/24"));
-    mu_assert(NULL == tbl_lsm(ipt, "3.2.3.4"));
-    mu_assert(NULL == tbl_lsm(ipt, "3.2.3.0/25"));
+        /* tbl_lsm should find explicit 0/0 */
+        e = (entry_t *)tbl_lsm(e->rn);
+        if(e) {
+            mu_eq(pfx[0].dta, INT_VALUE(e), "%d");
+        }
+        else mu_failed("tbl_lsm should %s have failed", "NOT");
+    }
+    else mu_failed("tbl_get should %s have failed", "NOT");
 
     tbl_destroy(&ipt, NULL);
 }

@@ -69,6 +69,12 @@ typedef struct table_t {
 #define MSK_ISROOT(rm) (rm->rm_flags & RNF_ROOT)
 #define RDX_ISRIGHT_CHILD(rn) (rn->rn_parent->rn_right == rn)
 
+// TODO: itr_gc, new flag to indicate a leaf was deleted while an interator was
+// active, so its still in the tree but not acceptable as a match.  Hence,
+// tbl_lpm needs to check this flag and, if set, needs to find a less specific
+// match or fail the search.
+#define IPTF_DELETE 8
+
 // used to interpolate the value of CONST into string: "%"STRINGIFY(x)"s"
 #define STRINGIFY(x) STRINGIFY_x(x)
 #define STRINGIFY_x(x) #x
@@ -134,14 +140,12 @@ int rdx_flush(struct radix_node *, void *);
 table_t *tbl_create(purge_f_t *);
 entry_t *tbl_get(table_t *, const char *);
 entry_t *tbl_lpm(table_t *, const char *);
+struct radix_node *tbl_lsm(struct radix_node *);
 int tbl_set(table_t *, const char *, void *, void *);
 int tbl_del(table_t *, const char *, void *);
 int tbl_destroy(table_t **, void *);
 
-entry_t *tbl_lsm(table_t *, const char *);
 int tbl_walk(table_t *, walktree_f_t *, void *);
-int tbl_less(table_t *, const char *, int, walktree_f_t *, void *);
-int tbl_more(table_t *, const char *, int, walktree_f_t *, void *);
 int tbl_stackpush(table_t *, int, void *);
 int tbl_stackpop(table_t *);
 

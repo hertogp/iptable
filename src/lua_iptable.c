@@ -300,9 +300,9 @@ check_pfxstr(lua_State *L, int idx, size_t *len)
 /*
  * refp_create()  <--  [.. v ..]
  *
- * Store value at given index in the LUA_REGISTRY (a lua table), and return a
- * pointer to its reference value which is stored in new allocated memory.
- *
+ * Create a reference id for the lua_State given.
+ * This allocates an int pointer, gets the ref_id, stores it in the allocated
+ * space and returns a pointer to it.
  */
 
 static int *
@@ -1019,6 +1019,8 @@ push_rdx_node(lua_State *L, struct radix_node *rn)
         iptT_push_int(L, "_ROOT_", 1);
     if (rn->rn_flags & RNF_ACTIVE)
         iptT_push_int(L, "_ACTIVE_", 1);
+    if (rn->rn_flags & IPTF_DELETE)
+        iptT_push_int(L, "_DELETE_", 1);
 
     if(RDX_ISLEAF(rn)) {
       iptT_push_int(L, "_LEAF_", 1);
@@ -2094,18 +2096,40 @@ static int
 ipt_itr_gc(lua_State *L)
 {
   dbg_stack("inc(.) <--");
+  struct radix_node *rn, *nxt;
+  purge_t args;
 
   itr_gc_t *gc = luaL_checkudata(L, 1, LUA_IPT_ITR_GC);
 
   dbg_msg("gc->t is %p", (void *)gc->t);
-  dbg_msg("t->count4 is %lu", gc->t->count4);
-  dbg_msg("t->iterators is %d", gc->t->iterators);
   gc->t->itr_lock--;
+  if (gc->t->itr_lock) return 0;
 
-  /* if (gc->t->itr_lock == 0) */
-  /*   fprintf(stderr, "!"); */
+  /* iterator activity has ceased, so run the deferred deletions */
+  args.purge = gc->t->purge;
+  args.args = L;
+  args.head = NULL; /* set per rn to be deleted */
 
-  lua_settop(L, 0);
+  rn = rdx_firstleaf(&gc->t->head4->rh);
+
+  while(rn) {
+    nxt = rdx_nextleaf(rn);
+    if (rn->rn_flags & IPTF_DELETE) {
+        char dbuf[MAX_STRKEY];
+        fprintf(stderr, "itr_gc del %s/%d\n",
+            key_tostr(dbuf, rn->rn_key), key_tolen(rn->rn_mask));
+
+        if (KEY_IS_IP4(rn->rn_key))
+            args.head = gc->t->head4;
+        else
+            args.head = gc->t->head6;
+        rdx_flush(rn, &args);
+    }
+
+    rn = nxt;
+  }
+
+
 
   dbg_stack("out(.) ==>");
 

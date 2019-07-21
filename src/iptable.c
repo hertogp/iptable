@@ -506,23 +506,12 @@ rdx_firstleaf(struct radix_head *rh)
     return rn;
 }
 
-/* TODO: formalize once merge() has been fleshed out */
-/* struct radix_node * */
-/* rdx_maxleaf(struct radix_node *rn) */
-/* { */
-/*   /1* given a node, find the least specific, left-most leaf underneath *1/ */
-/*   while(!RDX_ISLEAF(rn)) rn = rn->rn_left; */
-/*   while(rn->rn_dupedkey) rn = rn->rn_dupedkey; */
-/*   return rn */
-/* } */
-
 struct radix_node *
 rdx_nextleaf(struct radix_node *rn)
 {
     /* given a node, find next leaf */
 
     if (rn == NULL) return NULL;        /* already done */
-    // if (! RDX_ISLEAF(rn)) return NULL;
 
     /* if rn is an INTERNAL node, return its first left leaf */
     if (! RDX_ISLEAF(rn)) {
@@ -618,19 +607,20 @@ rdx_pairleaf(struct radix_node *oth) {
 
     if (rn == NULL) return 0;
 
-    // _dumprn(">2>", rn);
-
     /* check key actually matches */
     if(key_cmp(pair, rn->rn_key) != 0)
       return NULL;
-
-    // _dumprn(">3>", rn);
 
     /* return the leaf with the same mask length */
     while( rn && rn->rn_bit != oth->rn_bit)
       rn = rn->rn_dupedkey;
 
-    // _dumprn(">>>", rn);
+    /* cannot return an inactive prefix */
+    if (rn->rn_flags & IPTF_DELETE) {
+        fprintf(stderr, "pairleaf: rn flagged as deleted\n");
+        return NULL;
+    }
+
     return rn;
 }
 
@@ -736,23 +726,25 @@ rdx_nextnode(table_t *t, int *type, void **ptr)
     return 1;
 }
 
-// tbl functions
+/*
+ * tbl functions
+ */
 
 table_t *
 tbl_create(purge_f_t *fp)
 {
-    // create a new iptable with 2 radix trees
+    /* create a new iptable with 2 radix trees */
     table_t *tbl = NULL;
 
     /* calloc so all ptrs & counters are set to NULL/zero */
     tbl = calloc(sizeof(*tbl), 1);
     if (tbl == NULL) return NULL;
 
-    if (rn_inithead((void **)&tbl->head4, 8) == 0) { // IPv4 radix tree
+    if (rn_inithead((void **)&tbl->head4, 8) == 0) {
         free(tbl);
         return NULL;
     }
-    if (rn_inithead((void **)&tbl->head6, 8) == 0) { // IPv6 radix tree
+    if (rn_inithead((void **)&tbl->head6, 8) == 0) {
         rn_detachhead((void **)&tbl->head4);
         free(tbl);
         return NULL;
@@ -766,7 +758,7 @@ tbl_create(purge_f_t *fp)
 int
 tbl_walk(table_t *t, walktree_f_t *f, void *fargs)
 {
-    // run f(args, leaf) on leafs in IPv4 tree and IPv6 tree
+    /* run f(args, leaf) on leafs in IPv4 tree and IPv6 tree */
     if (t == NULL) return 0;
     t->head4->rnh_walktree(&t->head4->rh, f, fargs);
     t->head6->rnh_walktree(&t->head6->rh, f, fargs);
@@ -833,7 +825,7 @@ tbl_get(table_t *t, const char *s)
     uint8_t mask[MAX_BINKEY];
     int mlen = -1, af = AF_UNSPEC;
     struct radix_node_head *head = NULL;
-    entry_t *entry = NULL;
+    entry_t *e = NULL;
 
     // get head, af, addr, mask, or bail on error
     if (t == NULL || s == NULL) return NULL;
@@ -846,14 +838,14 @@ tbl_get(table_t *t, const char *s)
     if (! key_bylen(mask, mlen, af)) return NULL;
     if (! key_network(addr, mask)) return NULL;
 
-    entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
+    e = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
 
-    /* TODO: itr_gc
-     * if (entry->rn->rn_flags & RNF_ACTIVE) return entry;
-     * return NULL
-     */
-
-    return entry;
+    /* TODO: itr_gc */
+    if (e && (e->rn->rn_flags & IPTF_DELETE)) {
+        fprintf(stderr, "tbl_get: rn was deleted\n");
+        return NULL;
+    }
+    return e;
 }
 
 int
@@ -865,7 +857,7 @@ tbl_set(table_t *t, const char *s, void *v, void *pargs)
 
     uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY], *treekey = NULL;
     int mlen = -1, af = AF_UNSPEC;
-    entry_t *entry = NULL;
+    entry_t *e = NULL;
     struct radix_node *rn = NULL;
     struct radix_node_head *head = NULL;
 
@@ -879,24 +871,26 @@ tbl_set(table_t *t, const char *s, void *v, void *pargs)
     else if (af == AF_INET6) head = t->head6;
     else return 0;
 
-    entry = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
-    if (entry) {
-        // update existing entry
-        if(entry->value && t->purge)
-            t->purge(pargs, &entry->value); // free userdata, if needed
-        entry->value = v;                   // set new userdata
+    e = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
+    if (e) {
+        /* update existing entry */
+        /* TODO:  itr_gc, ensure IPTF_DELETE flag is cleared */
+        e->rn->rn_flags &= ~IPTF_DELETE;
+        if(e->value && t->purge)
+            t->purge(pargs, &e->value); // free userdata, if needed
+        e->value = v;                   // set new userdata
 
     } else {
         // add new entry, need to donate a new key for the tree to keep
-        if (!(entry = calloc(sizeof(*entry),1))) return 0;
-        entry->value = v;
+        if (!(e = calloc(sizeof(* e),1))) return 0;
+        e->value = v;
         treekey = key_copy(addr);
 
-        rn = head->rnh_addaddr(treekey, mask, &head->rh, entry->rn);
+        rn = head->rnh_addaddr(treekey, mask, &head->rh, e->rn);
         if (!rn) {
             if (t->purge != NULL)
-                t->purge(pargs, &entry->value);
-            free(entry);
+                t->purge(pargs, &e->value);
+            free(e);
             free(treekey); // t'was not stored
             return 0;
         }
@@ -928,16 +922,26 @@ tbl_del(table_t *t, const char *s, void *pargs)
     else if (af == AF_INET6) head = t->head6;
     else return 0;
 
-    e = (entry_t *)head->rnh_deladdr(addr, mask, &head->rh);
-    if (! e) return 0;
+    /* TODO: itr_gc, flag for deletion if iterators are active */
+    if (t->itr_lock) {
+        /* iterator is active, so flag node (if any) as inactive */
+        e = (entry_t *)head->rnh_lookup(addr, mask, &head->rh);
+        if (! e) return 0;
+        /* turn on delete flag */
+        e->rn->rn_flags |= IPTF_DELETE;
+
+    } else {
+        e = (entry_t *)head->rnh_deladdr(addr, mask, &head->rh);
+        if (! e) return 0;
+
+        free(e->rn[0].rn_key);                      // free the key
+        if(e->value != NULL && t->purge != NULL)
+            t->purge(pargs, &e->value);    // free the user data
+        free(e);                                    // free the entry
+    }
 
     if (af == AF_INET) t->count4--;
     else t->count6--;
-
-    free(e->rn[0].rn_key);                      // free the key
-    if(e->value != NULL && t->purge != NULL)
-        t->purge(pargs, &e->value);    // free the user data
-    free(e);                                    // free the entry
 
     return 1;
 }
@@ -949,7 +953,8 @@ tbl_lpm(table_t *t, const char *s)
     struct radix_node_head *head = NULL;
     uint8_t addr[MAX_BINKEY];
     int mlen = -1, af = AF_UNSPEC;
-    entry_t *rv = NULL;
+    struct radix_node *rn;
+    entry_t *e = NULL; /* defaults to no match found */
 
     if (t == NULL || s == NULL) return NULL;
     if (! key_bystr(addr, &mlen, &af, s)) return NULL;
@@ -958,242 +963,81 @@ tbl_lpm(table_t *t, const char *s)
     else if (af == AF_INET6) head = t->head6;
     else return NULL;
 
-    rv = (entry_t *)head->rnh_matchaddr(addr, &head->rh);
+    /* rn will be the longest prefix match (if any) */
+    rn = head->rnh_matchaddr(addr, &head->rh);
 
-    return rv;
+    /* cannot return rn if it was flagged for deletion */
+    while(rn && (rn->rn_flags & IPTF_DELETE))
+        rn = tbl_lsm(rn);
+
+    e = rn ? (entry_t *)rn : NULL;
+
+    return e;
 }
 
-entry_t *
-tbl_lsm(table_t *t, const char *s)
+/*
+ * Given a leaf, find a less specific leaf or fail
+ * - used by tbl_lpm in case the match is flagged for deletion
+ */
+
+struct radix_node *
+tbl_lsm(struct radix_node *rn)
 {
-    // TODO: remove? Not used by lua_iptable.c
+    /* less specific match for rn'n address and masklength */
+    struct radix_node *org_rn;
+    int rn_bit = rn->rn_bit;
 
-    /* least specific match for address and masklength */
-    /*
-     * rn_bit = -1 - IPT_KEYOFFSET - masklen, so:
-     * /24 rn_bit = -33
-     * /25 rn_bit = -34
-     * /32 rn_bit = -41
-     *
-     */
-    struct radix_node_head *head = NULL;
-    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
-    int mlen = -1, af = AF_UNSPEC; //, done = 0;
-    struct radix_node *top, *base, *rn = NULL, *lsm = NULL;
+    if (rn == NULL) return NULL;
+    /* candidates are checked against rn's key, so it MUST be a leaf */
+    if (!RDX_ISLEAF(rn)) return NULL;
 
-    if (t == NULL || s == NULL) return NULL;
-    if (! key_bystr(addr, &mlen, &af, s)) return NULL;
+    /* search less specific entries in dupedkey chain, if any */
+    for(org_rn = rn; rn; rn = rn->rn_dupedkey)
+        if ((rn->rn_flags & RNF_NORMAL)
+            && rn_bit < rn->rn_bit)
+            return rn;
 
-    if (af == AF_INET) {
-      head = t->head4;
-      mlen = mlen < 0 ? IP4_MAXMASK : mlen;
-    } else if (af == AF_INET6) {
-      head = t->head6;
-      mlen = mlen < 0 ? IP6_MAXMASK : mlen;
-    } else return NULL;
-    if (! key_bylen(mask, mlen, af)) return NULL;
-    if (! key_network(addr, mask)) return NULL;
+    /* go to parent of dupedchain */
+    for (rn = org_rn; RDX_ISLEAF(rn);)
+        rn = rn->rn_parent;
 
-    // can't beat 0/0 for least specific match of all
-    if (head->rnh_nodes[0].rn_dupedkey) {
-      lsm = head->rnh_nodes[0].rn_dupedkey;
-      return (entry_t *)lsm;
-    }
+    /* go up the tree */
+    do {
 
-    /* search for TOP of subtree holding all the prefixes that might match */
-    for(rn = head->rh.rnh_treetop; rn->rn_bit >= 0;) {
-        if (RDX_ISLEAF(rn->rn_left) && !RDX_ISROOT(rn->rn_left)) break;
-        if (RDX_ISLEAF(rn->rn_right) && !RDX_ISROOT(rn->rn_right)) break;
-        if (addr[rn->rn_offset] & rn->rn_bmask)
-            rn = rn->rn_right;
-        else
-            rn = rn->rn_left;
-    }
+        struct radix_mask *m;
+        rn = rn->rn_parent;
+        m = rn->rn_mklist;
+        struct radix_node *x = rn;
+        while (m) {
+            if (m->rm_flags & RNF_NORMAL) {
+                if (rn_bit <= m->rm_bit && !(m->rm_leaf->rn_flags & IPTF_DELETE))
+                    return (m->rm_leaf);
+            } else {
+                // off = min(rn->rn_offset, matched_off);
+                // x = rn_search_m(v, rn, m->rm_mask);
+                /* search w/ mask */
+                for(; x->rn_bit >= 0;) {
+                    if((x->rn_bmask & m->rm_mask[x->rn_offset]) &&
+                       (x->rn_bmask & org_rn->rn_key[x->rn_offset]))
+                        x = x->rn_right;
+                    else
+                        x = x->rn_left;
+                }
+                while (x && x->rn_mask != m->rm_mask)
+                    x = x->rn_dupedkey;
+                //if (x && rn_satisfies_leaf(v, x, off))
+                //    return (x);
+                if (x && key_isin(org_rn->rn_key, x->rn_key, x->rn_mask))
+                    return x;
+            }
+            m = m->rm_mklist;
+        }
 
-    top = RDX_ISLEAF(rn) ? rn->rn_parent : rn;  /* top is an INTERNAL node */
-    lsm = NULL;
-
-    /* goto first LEFT LEAF, needed for the while-loop */
-    for (rn = top; !RDX_ISLEAF(rn); rn=rn->rn_left)
-        ;
-
-    /* Skip LEFT subtree if LEAF is no match and switch to RIGHT subtree */
-    if (!key_isin(addr, rn->rn_key, mask))
-        for (rn = top; !RDX_ISLEAF(rn); rn=rn->rn_left)
-            ;
-
-    int done = 0;
-    while (!done) {
-        base = rn;
-        if (lsm == NULL) lsm = rn;
-        /* check LEAF & its duplicate-chain for a less specific match */
-        for(; rn; rn = rn->rn_dupedkey)
-            lsm = rn->rn_bit > lsm->rn_bit ? rn : lsm;
-        rn = base;
-
-        // go up while "I am a right->child" & "not a ROOT" node
-        while(RDX_ISRIGHT_CHILD(rn) && !RDX_ISROOT(rn)
-                && rn->rn_parent != top)
-            rn = rn->rn_parent;
-
-        /* If rn is top's right child, we're done */
-        if (rn == top->rn_right) done = 1;
-        for (rn = rn->rn_parent->rn_right; !RDX_ISLEAF(rn); )
-            rn = rn->rn_left;
-        if (RDX_ISROOT(rn->rn_parent)) done = 1;
-    }
-
-    if (lsm != NULL && key_isin(addr, lsm->rn_key, lsm->rn_mask))
-        return (entry_t *)lsm;
+    } while (rn && (rn != rn->rn_parent) && !(rn->rn_flags & RNF_ROOT)); /* treetop */
 
     return NULL;
 }
 
-int
-tbl_less(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
-{
-    // TODO: remove? Not used from lua_iptable.c.
-
-    // find less specific prefixes relative to s & call f(fargs, rn)
-    // return 0 on failure, 1 on success
-    // - actually traverses almost the entire tree to find all candidates
-    struct radix_node_head *head = NULL;
-    struct radix_node *rn = NULL, *base = NULL;
-    uint8_t addr[MAX_BINKEY];
-    int mlen = -1, af = AF_UNSPEC, done = 0;
-    include = include > 0 ? -2 : -1;
-
-    // sanity checks
-    if (t == NULL || s == NULL) return 0;
-    if (f == NULL) return 0;
-    if (! key_bystr(addr, &mlen, &af, s)) return 0;
-
-    if (af == AF_INET) {
-        head = t->head4;
-        mlen = mlen < 0 ? IP4_MAXMASK : mlen;
-    } else if (af == AF_INET6) {
-        head = t->head6;
-        mlen = mlen < 0 ? IP6_MAXMASK : mlen;
-    } else return 0;
-
-    if (mlen == 0 && include == -1) return 1;  // a /0 can't be beat
-    mlen += IPT_KEYOFFSET;
-
-    // goto left most leaf
-    for(rn = head->rh.rnh_treetop; !RDX_ISLEAF(rn);)
-        rn = rn->rn_left;
-
-    // how to limit running around the tree for less specific prefixes?
-    /* rn = head->rnh_matchaddr(addr, &head->rh); */
-    /* if(rn == NULL) return 1; */
-    if (rn == NULL) return 1;
-
-    done = 0;
-    while (!done) {
-        base = rn;
-        // process leaf & its duplicates
-        for(; rn; rn = rn->rn_dupedkey) {
-            if (! RDX_ISROOT(rn) && rn->rn_bit + mlen > include)
-                if (key_isin(addr, rn->rn_key, rn->rn_mask))
-                    f(rn, fargs);
-        }
-        rn = base;
-
-        // go up while "I am a right->child" & "not a ROOT" node
-        while(RDX_ISRIGHT_CHILD(rn) && !RDX_ISROOT(rn))
-            rn = rn->rn_parent;
-
-        // go 1 up, then right & find the next left most *leaf*
-        for (rn = rn->rn_parent->rn_right; !RDX_ISLEAF(rn); )
-            rn = rn->rn_left;
-
-        if (rn->rn_flags & RNF_ROOT)
-            done = 1;
-    }
-
-    return 1;
-}
-
-int
-tbl_more(table_t *t, const char *s, int include, walktree_f_t *f, void *fargs)
-{
-    // TODO: rmove? Not used from lua_iptable.c.
-
-    // find more specific prefixes relative to s & call f(fargs, rn)
-    // return 0 on failure, 1 on success
-    // - actually traverses almost the entire tree to find all candidates
-    struct radix_node_head *head = NULL;
-    struct radix_node *rn = NULL, *base = NULL, *top = NULL;
-    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
-    int mlen = -1, af = AF_UNSPEC, done = 0;
-    include = include > 0 ? 0 : -1;
-
-    // sanity checks
-    if (t == NULL || s == NULL) return 0;
-    if (f == NULL) return 0;
-    if (! key_bystr(addr, &mlen, &af, s)) return 0;
-
-    // a non-inclusive search for a host address will never yield a result
-    if (mlen < 0 && include == -1) return 1;
-
-    if (af == AF_INET) {
-        head = t->head4;
-        mlen = mlen < 0 ? IP4_MAXMASK : mlen;
-    } else if (af == AF_INET6) {
-        head = t->head6;
-        mlen = mlen < 0 ? IP6_MAXMASK : mlen;
-    } else return 0;
-    if (! key_bylen(mask, mlen, af)) return 0;
-    if (! key_network(addr, mask)) return 0;
-
-    mlen += IPT_KEYOFFSET;
-
-    // descend tree while key-bits are non-masked
-    for (top = head->rh.rnh_treetop; !RDX_ISLEAF(top) && (top->rn_bit < mlen);) {
-        if (addr[top->rn_offset] & top->rn_bmask)
-            top = top->rn_right;  // bit is on
-        else
-            top = top->rn_left;   // bit is off
-    }
-
-    if (top == NULL) return 0;
-
-    // goto left most leaf
-    for(rn = top; !RDX_ISLEAF(rn);)
-        rn = rn->rn_left;
-
-    // ensure we're in the right subtree (prefix s may not be in the tree)
-    if (!key_isin(addr, rn->rn_key, mask)) return 0;
-
-    done = 0;
-    while (!done) {
-        base = rn;
-        // process leaf & its duplicates
-        for(; rn; rn = rn->rn_dupedkey) {
-            if (!RDX_ISROOT(rn) && rn->rn_bit + mlen < include)
-                f(rn, fargs);
-            else if (!RDX_ISROOT(rn) && mlen + include == 8)
-                f(rn, fargs);
-        }
-        if (base == top) break;  // no more leaves to visit
-        rn = base;
-
-        // go up while "I am a right->child" & "not a ROOT" node
-        while (!done && RDX_ISRIGHT_CHILD(rn) && !RDX_ISROOT(rn)) {
-            rn = rn->rn_parent;
-            done = (rn == top);
-        }
-        if (done) break;  // no need to goto any next leaf
-
-        // go 1 up, then right & find the next left most *leaf*
-        for (rn = rn->rn_parent->rn_right; !RDX_ISLEAF(rn);)
-            rn = rn->rn_left;
-
-        done = RDX_ISROOT(rn);
-    }
-
-    return 1;
-}
 
 int
 tbl_stackpush(table_t *t, int type, void *elm)

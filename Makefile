@@ -83,6 +83,7 @@ endif
 
 # Lua library (default target)
 $(TARGET): $(OBJS) $(DEPS)
+	@echo "Build TARGET $(TARGET)"
 	$(CC) $(LIBFLAG) $(LFLAGS) $(OBJS) -o $(TARGET)
 
 # https://www.gnu.org/software/make/manual/html_node/Target_002dspecific.html
@@ -92,6 +93,7 @@ debug DEBUG: clean $(TARGET)
 
 # C libary
 $(CTARGET): $(COBJS)
+	@echo "Build CTARGET $(CTARGET)"
 	$(CC) $(LIBFLAG) $(LFLAGS) $(SOFLAG) $(COBJS) -o $(CTARGET).$(VERSION)
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so.$(MAJOR)
@@ -101,12 +103,14 @@ $(BLDDIR):
 
 # object files
 $(BLDDIR)/%.o: $(SRCDIR)/%.c
+	@echo "BLDDIR OBJ FILES"
 	$(CC) $(CFLAGS) -I$(SRCDIR) -c $< -o $@
 
 # dependency files .d
 # - built first before others, hence the only one made dependent on 
 #   the existence of $BLDDIR
 $(BLDDIR)/%.d: $(SRCDIR)/%.c | $(BLDDIR)
+	@echo "Build dependency file for $<"
 	$(CC) -I$(SRCDIR) -MM -MQ$(BLDDIR)/$*.o -MF $@ $<
 
 # make install -or- luarocks install iptable
@@ -158,14 +162,17 @@ $(MU_TARGETS): %: $(BLDDIR)/%.out
 
 # build a unit test's mu-header
 $(MU_HEADERS): $(BLDDIR)/%.h: $(TSTDIR)/%.c
+	@echo "Build mu header file for $<"
 	$(SRCDIR)/mu_header.sh $< $@
 
 # build a unit test's obj file
 $(MU_OBJECTS): $(BLDDIR)/%.o: $(TSTDIR)/%.c $(BLDDIR)/%.h $(SRCDIR)/minunit.h
+	@echo "Build unit test obj file $@"
 	$(CC) -I$(BLDDIR) -I$(SRCDIR) $(CFLAGS) -o $@ -c $<
 
 # build a unit test runner
 $(MU_RUNNERS): $(BLDDIR)/%.out: $(BLDDIR)/%.o $(BLDDIR)/lib$(LIB).so
+	@echo "Build unit test runner $@"
 	$(CC) -L$(BLDDIR) -Wl,-rpath,.:$(BLDDIR) $< -o $@ -l$(LIB)
 
 
