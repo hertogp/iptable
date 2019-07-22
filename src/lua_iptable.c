@@ -46,7 +46,7 @@ static int *refp_create(lua_State *);
 static void refp_delete(void *, void **);
 static int isvalid(struct radix_node *);
 static int iter_bail(lua_State *);
-static int iter_fail(lua_State *);
+static int iter_fail_f(lua_State *);
 static inline int subtree_fail(struct radix_node *, int);
 
 
@@ -65,20 +65,19 @@ static int push_rdx_mask(lua_State *, struct radix_mask *);
 
 /* iterators */
 
-static int iter_hosts(lua_State *);
-static int iter_kv(lua_State *);
-static int iter_less(lua_State *);
-static int iter_masks(lua_State *);
-static int iter_merge(lua_State *);
-static int iter_more(lua_State *);
-static int iter_more_org(lua_State *);
+static int iter_hosts_f(lua_State *);
+static int iter_kv_f(lua_State *);
+static int iter_less_f(lua_State *);
+static int iter_masks_f(lua_State *);
+static int iter_merge_f(lua_State *);
+static int iter_more_f(lua_State *);
 static int iter_radix(lua_State *);
 
 /* iptable module functions */
 
 static int ipt_address(lua_State *);
 static int ipt_broadcast(lua_State *);
-static int ipt_hosts(lua_State *);
+static int iter_hosts(lua_State *);
 static int ipt_mask(lua_State *);
 static int ipt_neighbor(lua_State *L);
 static int ipt_network(lua_State *);
@@ -95,21 +94,20 @@ static int _index(lua_State *);
 static int _newindex(lua_State *);
 static int _len(lua_State *);
 static int _tostring(lua_State *);
-static int _pairs(lua_State *);
+static int iter_kv(lua_State *);
 static int counts(lua_State *);
-static int less(lua_State *);
-static int masks(lua_State *);
-static int merge(lua_State *);
-static int more(lua_State *);
-static int more_org(lua_State *);
-static int radixes(lua_State *);
+static int iter_less(lua_State *);
+static int iter_masks(lua_State *);
+static int iter_merge(lua_State *);
+static int iter_more(lua_State *);
+static int iter_radixes(lua_State *);
 
 /* iptable module function array */
 
 static const struct luaL_Reg funcs [] = {
     {"address", ipt_address},
     {"broadcast", ipt_broadcast},
-    {"hosts", ipt_hosts},
+    {"hosts", iter_hosts},
     {"mask", ipt_mask},
     {"neighbor", ipt_neighbor},
     {"network", ipt_network},
@@ -129,14 +127,13 @@ static const struct luaL_Reg meths [] = {
     {"__newindex", _newindex},
     {"__len", _len},
     {"__tostring", _tostring},
-    {"__pairs", _pairs},
+    {"__pairs", iter_kv},
     {"counts", counts},
-    {"masks", masks},
-    {"merge", merge},
-    {"more", more},
-    {"more_org", more_org},
-    {"less", less},
-    {"radixes", radixes},
+    {"masks", iter_masks},
+    {"merge", iter_merge},
+    {"more", iter_more},
+    {"less", iter_less},
+    {"radixes", iter_radixes},
     {NULL, NULL}
 };
 
@@ -388,7 +385,7 @@ isvalid(struct radix_node *rn)
 * Helper function to bail out of an iteration factory function.
 *
 * An iteration factory function MUST return a valid [iter_f] and optionally
-* an invariant and ctl_var. By returning iter_fail as [iter_f] we ensure
+* an invariant and ctl_var. By returning iter_fail_f as [iter_f] we ensure
 * the iteration in question will yield no results in Lua.
 *
 */
@@ -399,7 +396,7 @@ iter_bail(lua_State *L)
 
     lua_settop(L, 0);                        /* clear the stack */
     // lua_pop(L, lua_gettop(L));               /* clear the stack */
-    lua_pushcclosure(L, iter_fail, 0);       /* the iteration blocker */
+    lua_pushcclosure(L, iter_fail_f, 0);       /* the iteration blocker */
 
     dbg_stack("out(1) ==>");
 
@@ -407,14 +404,14 @@ iter_bail(lua_State *L)
 }
 
 /*
-* iter_fail  <--  [..], stack is ignored
+* iter_fail_f  <--  [..], stack is ignored
 *
 * An iteration func that terminates any iteration.
 *
 */
 
 static int
-iter_fail(lua_State *L)
+iter_fail_f(lua_State *L)
 {
     dbg_stack("ignored ->");
 
@@ -423,7 +420,7 @@ iter_fail(lua_State *L)
 }
 
 /*
- * iter_hosts()  <--  [h], h is nil on first call.
+ * iter_hosts_f()  <--  [h], h is nil on first call.
  *
  * The iter_f for iptable.hosts(pfx), yields the next host ip until stop value
  * is reached.  Ignores the stack: it uses upvalues for next, stop
@@ -431,7 +428,7 @@ iter_fail(lua_State *L)
  */
 
 static int
-iter_hosts(lua_State *L)
+iter_hosts_f(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
@@ -456,15 +453,15 @@ iter_hosts(lua_State *L)
 }
 
 /*
- * iter_kv()  <--  [t k]
+ * iter_kv_f()  <--  [t k]
  *
- * The iter_f for __pairs(), yields all k,v pairs in the tree(s).
+ * The iter_f for __iter_kv(), yields all k,v pairs in the tree(s).
  * - upvalue(1) is the leaf to process.
  *
  */
 
 static int
-iter_kv(lua_State *L)
+iter_kv_f(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
@@ -500,14 +497,14 @@ iter_kv(lua_State *L)
 }
 
 /*
- * iter_less()  <--  [t k], k is ignored
+ * iter_less_f()  <--  [t k], k is ignored
  *
  * Iterate across less specific prefixes relative to a given prefix.
  *
  */
 
 static int
-iter_less(lua_State *L)
+iter_less_f(lua_State *L)
 {
     char buf[MAX_STRKEY];
     table_t *t = check_table(L, 1);
@@ -537,13 +534,15 @@ iter_less(lua_State *L)
 }
 
 /*
- * iter_masks(lua_State *);
+ * iter_masks_f(lua_State *);
  *
  * iter_f for :masks(af), yields all masks used in af's radix mask tree.
+ * Masks are read-only: we donot interact directly with a radix mask tree.
  *
  */
 
-static int iter_masks(lua_State *L)
+static int
+iter_masks_f(lua_State *L)
 {
     dbg_stack("inc(.) <--");                       // [t m']
 
@@ -588,60 +587,6 @@ static int iter_masks(lua_State *L)
 }
 
 /*
- * helper to dedup a leaf
- * - puts all pfx,v in table on stack L
- * - returns last leaf of chain if duplicates were found, NULL otherwise
- */
-
-/* static struct radix_node *ipt_merge_dedup(lua_State *, struct radix_node *); */
-/* static struct radix_node * */
-/* ipt_merge_dedup(lua_State *L, struct radix_node *rn) { */
-/*     char buf[MAX_STRKEY]; */
-/*     struct radix_node *last = NULL; */
-/*     entry_t *e; */
-
-/*     dbg_stack("inc(.) <--"); */
-/*     if (rn == NULL) return NULL; */
-/*     if (!RDX_ISLEAF(rn)) return NULL; */
-
-/*     /1* goto top of dupedkey chain, if possible *1/ */
-/*     while(!RDX_ISROOT(rn->rn_parent) && RDX_ISLEAF(rn->rn_parent)) */
-/*         rn = rn->rn_parent; */
-/*     if (rn->rn_dupedkey == NULL) return NULL;  /1* no dupedkeys *1/ */
-
-/*     /1* collect (pfx, v) into lua table on stack L *1/ */
-/*     lua_newtable(L);                                        // [.. {}] */
-/*     last = rn; */
-/*     while(rn) { */
-/*         lua_pushfstring(L, "%s/%d", */
-/*                 key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask)); */
-/*         e = (entry_t *)rn; */
-/*         lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value); */
-/*         lua_settable(L, -3); */
-/*         last = rn; */
-/*         rn = rn->rn_dupedkey; */
-/*     } */
-
-/*     lua_pushfstring(L, "%s/%d", */
-/*             key_tostr(buf, last->rn_key), */
-/*             key_tolen(last->rn_mask));                      // [.. {} pfx] */
-/*     dbg_stack("dupedkeys"); */
-/*     lua_rotate(L, lua_gettop(L) - 1, 1);                    // [.. pfx {}] */
-/*     dbg_stack("dupedkeys"); */
-/*     return last; */
-/* } */
-
-/* static struct radix_node *ipt_merge_largest(struct radix_node *); */
-/* static struct radix_node * */
-/* ipt_merge_largest(struct radix_node *rn) { */
-/*     /1* return largest leaf in subtree starting at rn *1/ */
-
-/*     while(!RDX_ISLEAF(rn)) rn = rn->rn_left; */
-/*     while(rn->rn_dupedkey) rn = rn->rn_dupedkey; */
-/*     return rn; */
-/* } */
-
-/*
  * Iterate across prefixes that may be combined.
  *
  * Returns the supernet and a regular table with 2 or 3 pfx,value entries.
@@ -655,7 +600,7 @@ static int iter_masks(lua_State *L)
  */
 
 static int
-iter_merge(lua_State *L)
+iter_merge_f(lua_State *L)
 {
     dbg_stack("inc(.) <--");                   // [t p], upvalues(nxt, alt)
 
@@ -714,105 +659,9 @@ iter_merge(lua_State *L)
  * - top points to subtree where possible matches are located
  * - rn is the current leaf under consideration
  */
-static int
-iter_more_org(lua_State *L)
-{
-    dbg_stack("inc(.) <--");
-    lua_pop(L, lua_gettop(L));  // clear stack, not used
-
-    char buf[MAX_STRKEY];
-    struct radix_node *top = lua_touserdata(L, lua_upvalueindex(1));
-    struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(2));
-    struct entry_t *e = NULL;
-    int maxb = lua_tointeger(L, lua_upvalueindex(3));
-    size_t dummy;
-    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
-
-    if (rn == NULL) return 0;     /* we're done */
-    if (!isvalid(rn)) return 0;   /* TODO: error handling, rn was deleted */
-
-    if(!check_binkey(L, lua_upvalueindex(4), addr, &dummy)) return 0;
-    if(!check_binkey(L, lua_upvalueindex(5), mask, &dummy)) return 0;
-
-    dbg_msg("search msp %s/%d", key_tostr(buf, addr), key_tolen(mask));
-    dbg_msg("candidate  %s/%d", key_tostr(buf, rn->rn_key), key_tolen(rn->rn_mask));
-    dbg_msg("        rn %p", (void*)rn);
-
-    /* check LEAF and duplicates for more specific prefixes */
-    int matched = 0, done = 0;
-    while (! matched && ! done) {
-
-        /* check for match (only a non-ROOT-LEAF may match) */
-
-        if(RDX_ISLEAF(rn)
-                && !RDX_ISROOT(rn)
-                && rn->rn_bit <= maxb
-                && key_isin(addr, rn->rn_key, mask)) {
-
-            e = (entry_t *)rn;
-            lua_pushfstring(L, "%s/%d",
-                    key_tostr(buf, e->rn[0].rn_key),
-                    key_tolen(e->rn[0].rn_mask));
-            lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);
-            matched = 1;
-        }
-
-        dbg_msg("top %p, maxb %d, rn %p, rn_bit %d, match %d",
-          (void *)top, maxb, (void *)rn, rn->rn_bit, matched);
-
-        /* setup next leaf node, in top's subtree,  to try later on */
-
-        if (rn->rn_dupedkey) {
-            rn = rn->rn_dupedkey;      /* more dups to try */
-        } else {
-
-            /* if rn is dupedkey-child of RE-marker, we're done */
-            if (RDX_ISLEAF(rn->rn_parent)
-                && RDX_ISROOT(rn->rn_parent)
-                && (rn->rn_flags & RNF_NORMAL)){
-              done = 1;
-            }
-
-            /* end of the dupedkey chain, go back to top of chain */
-            while(RDX_ISLEAF(rn->rn_parent) && !RDX_ISROOT(rn->rn_parent)) {
-                rn=rn->rn_parent;
-            }
-
-            /* go back up top's subtree, while we're a right child */
-            while(RDX_ISRIGHT_CHILD(rn) && !RDX_ISROOT(rn)
-                && rn->rn_parent != top) {
-                rn = rn->rn_parent;
-            }
-
-            /* If rn is top's right child, we're done */
-            if (rn == top->rn_right) done = 1;
-
-            /* cross over to top's right subtree & goto its left-most leaf */
-            for (rn = rn->rn_parent->rn_right; !RDX_ISLEAF(rn); )
-                rn = rn->rn_left;
-
-            /* if rn is RE-marker (also a leaf), we're done */
-            if (RDX_ISROOT(rn->rn_parent)) done = 1;
-        }
-
-        if (done || matched) {
-            /* exiting while-loop, so save rn to upvalue for next call */
-            rn = done ? NULL : rn;
-            lua_pushlightuserdata(L, rn);
-            lua_replace(L, lua_upvalueindex(2));
-        }
-    }
-
-    if (matched) {
-        dbg_stack("out(2) ==>");
-        return 2;
-    }
-    dbg_stack("out (0)");
-    return 0;
-}
 
 static int
-iter_more(lua_State *L)
+iter_more_f(lua_State *L)
 {
     dbg_stack("inc(.) <--");
     lua_pop(L, lua_gettop(L));  // clear stack, not used
@@ -834,7 +683,9 @@ iter_more(lua_State *L)
 
     while (rn) {
 
+        /* costly key_isin check is last */
         if(key_tolen(rn->rn_mask) >= mlen
+                && !(rn->rn_flags & IPTF_DELETE)
                 && key_isin(addr, rn->rn_key, mask)) {
 
             e = (entry_t *)rn;
@@ -901,7 +752,7 @@ iter_radix(lua_State *L)
     return 0;
 }
 
-// table pushers (iter_radix/iter_merge) helpers
+// Table pushers (iter_radix/iter_merge_f) helpers
 
 static void
 iptT_push_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
@@ -954,6 +805,11 @@ iptT_push_kv(lua_State *L, struct radix_node *rn)
     lua_settable(L, -3);                                  // [.. {}]
 }
 
+/*
+ * push_rdx_<node-type>'s each translating a struct to a lua table.
+ * Will translate and push IPTF_DELETE'd nodes for completeness sake.
+ * The lua caller may decide herself what to do with those.
+ */
 
 static int
 push_rdx_node_head(lua_State *L, struct radix_node_head *rnh)
@@ -1486,7 +1342,7 @@ ipt_mask(lua_State *L)
  */
 
 static int
-ipt_hosts(lua_State *L)
+iter_hosts(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
@@ -1520,7 +1376,7 @@ ipt_hosts(lua_State *L)
         lua_pushlstring(L, (const char *)stop, IPT_KEYLEN(stop));
         dbg_stack("suc6! 2+");
     }
-    lua_pushcclosure(L, iter_hosts, 2);  // [.., func]
+    lua_pushcclosure(L, iter_hosts_f, 2);  // [.., func]
 
     dbg_stack("out(1) ==>");
 
@@ -1696,12 +1552,16 @@ counts(lua_State *L)
  */
 
 static int
-_pairs(lua_State *L)
+iter_kv(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
     table_t *t = check_table(L, 1);
     struct radix_node *rn = rdx_firstleaf(&t->head4->rh);
+
+    /* cannot start with a deleted key */
+    while(rn && (rn->rn_flags & IPTF_DELETE))
+        rn = rdx_nextleaf(rn);
 
     /* switch to ipv6 if ipv4 is empty tree */
     if (rn == NULL)
@@ -1713,9 +1573,9 @@ _pairs(lua_State *L)
 
     if (rn == NULL) return iter_bail(L);
 
-
     lua_pushlightuserdata(L, rn);        // [t rn], rn is 1st node
-    lua_pushcclosure(L, iter_kv, 1);     // [t f], rn as upvalue(1)
+    iptL_push_itr_gc(L, t);              // [t rn gc], itr garbage collector
+    lua_pushcclosure(L, iter_kv_f, 2);   // [t f]
     lua_rotate(L, 1, 1);                 // [f t]
     lua_pushnil(L);                      // [f t nil]
 
@@ -1746,108 +1606,9 @@ subtree_fail(struct radix_node *rn, int mlen) {
  * prefix given.  Note this traverses the entire tree if pfx has a /0 mask.
  *
  */
-static int
-more_org(lua_State *L)
-{
-    dbg_stack("inc(.) <--");
-
-    size_t len = 0;
-    int af = AF_UNSPEC, mlen = -1, maxb = -1;
-    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
-    struct radix_node_head *head = NULL;
-    struct radix_node *rn = NULL, *top = NULL;
-
-    table_t *t = check_table(L, 1);
-    const char *pfx = check_pfxstr(L, 2, &len);
-
-    if (! key_bystr(addr, &mlen, &af, pfx)) {
-        /* TODO: err hdlr - set errno & bail: iter_bail(L, errno) */
-        lua_pushfstring(L, "more(): invalid prefix %s", lua_tostring(L, 2));
-        lua_error(L);
-    }
-    if (lua_gettop(L) == 3 && lua_isboolean(L, 3))
-        maxb = 0;
-
-    lua_pop(L, lua_gettop(L) - 1);  // [t]
-
-    if (af == AF_INET) {
-      head = t->head4;
-      mlen = mlen < 0 ? IP4_MAXMASK : mlen;
-    } else if (af == AF_INET6) {
-      head = t->head6;
-      mlen = mlen < 0 ? IP6_MAXMASK : mlen;
-    } else return iter_bail(L);
-
-    if (! key_bylen(mask, mlen, af) || ! key_network(addr, mask)) {
-        /* TODO: err hdlr - set errno & bail: iter_bail(L, errno) */
-        lua_pushliteral(L, "more(): error converting prefix");
-        lua_error(L);
-    }
-
-    /*
-     * rn_bit >= maxb, and in case mlen==0 and 0/0 is present in the tree,
-     * it's rn_bit is -1 and not -1-IPT_KEYOFFSET-mlen like for all other
-     * leafs
-     *
-     */
-
-    maxb = (mlen == 0) ? maxb - 1 : maxb - 1 - IPT_KEYOFFSET - mlen;
-
-    /* descend the tree towards a possible matching leaf */
-    for(rn = head->rh.rnh_treetop; !RDX_ISLEAF(rn);)
-        if (addr[rn->rn_offset] & rn->rn_bmask)
-            rn = rn->rn_right;
-        else
-            rn = rn->rn_left;
-
-    /* go up to INTERNAL node governing the tree of this leaf */
-    for(top=rn->rn_parent; top->rn_bit>mlen+IPT_KEYOFFSET; top=top->rn_parent)
-        if (RDX_ISROOT(top)) break;
-
-    /* goto LEFT subtree, first LEAF */
-    for (rn = top; !RDX_ISLEAF(rn); rn=rn->rn_left)
-        ;
-
-    /*
-     * If the search ends up on the default ROOT 0/0 node, it has failed if
-     * mlen != 0 and no matches are possible.  Note: ROOT's 0.0.0.0 rn_key has
-     * a keylength of 0 bytes(!) and thus will always match any other key when
-     * using key_isin to check for a match.  Hence the first check is for a
-     * subtree failure and then a key_isin check is done.
-     *
-     * If the search ends up on some 'real' LEAF node, key_isin can be used to
-     * check the leaf actually matches.  Required since the trie is path
-     * compressed.
-     *
-     */
-
-    if (subtree_fail(rn, mlen) || !key_isin(addr, rn->rn_key, mask)) {
-        /* switch to RIGHT subtree */
-        for (rn = top->rn_right; !RDX_ISLEAF(rn); rn=rn->rn_left)
-            ;
-        if (subtree_fail(rn, mlen) || !key_isin(addr, rn->rn_key, mask))
-          rn = NULL;
-    }
-
-    /* the upvalues for the iterator: subtreetop, current node & maxbit */
-    lua_pushlightuserdata(L, top);
-    lua_pushlightuserdata(L, rn);
-    lua_pushinteger(L, maxb);
-    lua_pushlstring(L, (const char *)addr, (size_t)IPT_KEYLEN(addr));
-    lua_pushlstring(L, (const char *)mask, (size_t)IPT_KEYLEN(mask));
-
-                                                   // [t top rn max addr mask]
-    lua_pushcclosure(L, iter_more_org, 5);         // [t f]
-    lua_rotate(L, 1, 1);                           // [f t]
-    lua_pushnil(L);                                // [f t nil]
-
-    dbg_stack("out(1) ==>");  // [iter_f invariant ctl_var]
-
-    return 3;
-}
 
 static int
-more(lua_State *L)
+iter_more(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
@@ -1862,12 +1623,11 @@ more(lua_State *L)
     const char *pfx = check_pfxstr(L, 2, &len);
 
     if (! key_bystr(addr, &mlen, &af, pfx)) {
-        /* TODO: err hdlr - set errno & bail: iter_bail(L, errno) */
         lua_pushfstring(L, "more(): invalid prefix %s", lua_tostring(L, 2));
         lua_error(L);
     }
     if (lua_gettop(L) == 3 && lua_isboolean(L, 3))
-        inclusive = 1;
+      inclusive = lua_toboolean(L, 3);
     if (af == AF_INET) {
       head = t->head4;
       mlen = mlen < 0 ? IP4_MAXMASK : mlen;
@@ -1876,11 +1636,10 @@ more(lua_State *L)
       mlen = mlen < 0 ? IP6_MAXMASK : mlen;
     } else return iter_bail(L);
     if (! key_bylen(mask, mlen, af) || ! key_network(addr, mask)) {
-        /* TODO: err hdlr - set errno & bail: iter_bail(L, errno) */
-        lua_pushliteral(L, "more(): error converting prefix");
-        lua_error(L);
+      lua_pushliteral(L, "more(): error converting prefix");
+      lua_error(L);
     }
-    lua_pop(L, lua_gettop(L) - 1);  // [t]
+    lua_pop(L, lua_gettop(L) - 1);                // [t]
 
     maxb = (mlen > 0) ? -1 - IPT_KEYOFFSET - mlen : -2;
     for(top = head->rh.rnh_treetop; !RDX_ISLEAF(top) && top->rn_bit >= maxb;)
@@ -1889,7 +1648,8 @@ more(lua_State *L)
         else
             top = top->rn_left;
 
-    for (rn = top->rn_parent; !RDX_ISLEAF(rn);)  /* first, left-most, leaf */
+    /* iter_more_f deals with IPTF_DELETE'd nodes */
+    for (rn = top->rn_parent; !RDX_ISLEAF(rn);)   /* first, left-most, leaf */
         rn = rn->rn_left;
 
     /* iterator upvalues: sub-treetop, fst-leaf, inclusive, addr, mask */
@@ -1899,7 +1659,7 @@ more(lua_State *L)
     lua_pushlstring(L, (const char *)addr, (size_t)IPT_KEYLEN(addr));
     lua_pushlstring(L, (const char *)mask, (size_t)IPT_KEYLEN(mask));
     iptL_push_itr_gc(L, t);
-    lua_pushcclosure(L, iter_more, 6);            // [t f]
+    lua_pushcclosure(L, iter_more_f, 6);            // [t f]
     lua_rotate(L, 1, 1);                          // [f t]
 
     dbg_stack("out(1) ==>");
@@ -1912,15 +1672,16 @@ more(lua_State *L)
  *
  * Iterate across prefixes in the tree that are less specific than pfx.
  * - search may include pfx itself in the results, if incl is true.
- * - iter_less takes (pfx, mlen, af)
+ * - iter_less_f takes (pfx, mlen, af)
  *
  */
 
 static int
-less(lua_State *L)
+iter_less(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
+    table_t *t = check_table(L, 1);
     size_t len = 0;
     int mlen = 0, inclusive = 0, af = AF_UNSPEC;
     uint8_t addr[MAX_BINKEY];
@@ -1948,7 +1709,8 @@ less(lua_State *L)
 
     lua_pushstring(L, buf);                              // [t pfx]
     lua_pushinteger(L, mlen);                            // [t pfx mlen]
-    lua_pushcclosure(L, iter_less, 2);                   // [t f]
+    iptL_push_itr_gc(L, t);                              // [t pfx mlen gc]
+    lua_pushcclosure(L, iter_less_f, 3);                 // [t f]
     lua_rotate(L, 1, 1);                                 // [f t]
 
     dbg_stack("out(2) ==>");
@@ -1974,7 +1736,7 @@ less(lua_State *L)
  */
 
 static
-int masks(lua_State *L) { 
+int iter_masks(lua_State *L) { 
 
     dbg_stack("inc(.) <--");                         // [t af]
 
@@ -2019,7 +1781,7 @@ int masks(lua_State *L) {
     /*
      * find first leaf in mask tree, maybe NULL if all that is stored in the
      * tree is a single, explicit 0/0 entry in which case only the zero-mask
-     * needs to be returned by iter_masks
+     * needs to be returned by iter_masks_f
      *
      */
 
@@ -2027,7 +1789,7 @@ int masks(lua_State *L) {
     lua_pushlightuserdata(L, rn);                    // [t rn]
     lua_pushinteger(L, af);                          // [t rn af]
     lua_pushstring(L, strmask);                      // [t rn af zm]
-    lua_pushcclosure(L, iter_masks, 3);              // [t f]
+    lua_pushcclosure(L, iter_masks_f, 3);              // [t f]
     lua_rotate(L, 1, 1);                             // [f t]
 
     dbg_stack("out(2) ==>");
@@ -2043,7 +1805,7 @@ int masks(lua_State *L) {
  */
 
 static int
-merge(lua_State *L)
+iter_merge(lua_State *L)
 {
     dbg_stack("inc(.) <--");                  // [t af]
 
@@ -2061,7 +1823,7 @@ merge(lua_State *L)
     lua_pushlightuserdata(L, rn);             // [t af rn]
     lua_pushlightuserdata(L, NULL);           // [t af rn NULL]
     iptL_push_itr_gc(L, t);                   // [t af rn NULL gc]
-    lua_pushcclosure(L, iter_merge, 3);       // [t f]
+    lua_pushcclosure(L, iter_merge_f, 3);       // [t f]
     lua_rotate(L, 1, -1);                     // [f t]
 
     dbg_stack("out(2) ==>");
@@ -2127,17 +1889,11 @@ ipt_itr_gc(lua_State *L)
   while(rn) {
     nxt = rdx_nextleaf(rn);
     if (rn->rn_flags & IPTF_DELETE) {
-        if (KEY_IS_IP4(rn->rn_key))
-            args.head = gc->t->head4;
-        else
-            args.head = gc->t->head6;
+        args.head = KEY_IS_IP4(rn->rn_key) ? gc->t->head4 : gc->t->head6;
         rdx_flush(rn, &args);
     }
-
     rn = nxt;
   }
-
-
 
   dbg_stack("out(.) ==>");
 
@@ -2154,7 +1910,7 @@ ipt_itr_gc(lua_State *L)
  */
 
 static int
-radixes(lua_State *L)
+iter_radixes(lua_State *L)
 {
     dbg_stack("inc(.) <--");                        // [t af maskp]
 

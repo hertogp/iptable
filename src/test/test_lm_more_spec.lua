@@ -49,6 +49,35 @@ describe("ipt:more(pfx): ", function()
       assert.are_equal(1+2+4+8+16+32+64+128, sum);
     end)
 
+    it("ignores more specifics that were deleted", function()
+      local t = iptable.new();
+      assert.is_truthy(t);
+
+      t["10.10.10.0/24"] = 1
+      t["10.10.10.0/25"] = 2
+      t["10.10.10.0/26"] = 3
+      t["10.10.10.0/27"] = 4  -- will be deleted in iterator-loop
+      t["10.10.10.0/28"] = 5
+      t["10.10.10.0/29"] = 6
+      t["10.10.10.0/30"] = 7
+
+      for k, v in pairs(t) do
+
+        t["10.10.10.0/27"] = nil
+
+        -- non-inclusive
+        local cnt = 0;
+        for p in t:more("10.10.10.0/24") do cnt = cnt + 1 end
+        assert.are_equal(5, cnt);
+
+        -- inclusive
+        cnt = 0;
+        for p in t:more("10.10.10.0/24", true) do cnt = cnt + 1 end
+        assert.are_equal(6, cnt);
+        break
+      end
+    end)
+
     it("handles non-existing search prefixes", function()
       local sum = 0;
       local search_pfx = "10.10.10.0/24";
@@ -485,6 +514,7 @@ describe("ipt:more(pfx6): ", function()
         end -- for mask
       end -- for stem
     end)
+
 
   end)
 end)

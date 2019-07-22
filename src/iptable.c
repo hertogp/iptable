@@ -926,6 +926,7 @@ tbl_del(table_t *t, const char *s, void *pargs)
         e = (entry_t *)head->rnh_lookup(addr, mask, &head->rh);
         if (!e || (e->rn->rn_flags & IPTF_DELETE)) return 0;
         e->rn->rn_flags |= IPTF_DELETE;
+        /* fprintf(stderr, "flagged %s", s); */
 
     } else {
         e = (entry_t *)head->rnh_deladdr(addr, mask, &head->rh);
