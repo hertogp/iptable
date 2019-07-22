@@ -482,8 +482,12 @@ iter_kv(lua_State *L)
     lua_pushfstring(L, "%s/%d", saddr, key_tolen(rn->rn_mask)); // [t k k']
     lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);        // [t k k' v']
 
-    /* get next leaf node, switch to ipv6 tree when ipv4 has been traversed */
+    /* get next, non-deleted leaf node */
     rn = rdx_nextleaf(rn);
+    while(rn && (rn->rn_flags & IPTF_DELETE))
+        rn = rdx_nextleaf(rn);
+
+    /* switch to ipv6 tree when ipv4 tree is exhausted */
     if (rn == NULL && KEY_IS_IP4(e->rn[0].rn_key))
         rn = rdx_firstleaf(&t->head6->rh);
 
@@ -1698,10 +1702,17 @@ _pairs(lua_State *L)
 
     table_t *t = check_table(L, 1);
     struct radix_node *rn = rdx_firstleaf(&t->head4->rh);
+
+    /* switch to ipv6 if ipv4 is empty tree */
     if (rn == NULL)
         rn = rdx_firstleaf(&t->head6->rh);
 
+    /* cannot start with a deleted key */
+    while(rn && (rn->rn_flags & IPTF_DELETE))
+        rn = rdx_nextleaf(rn);
+
     if (rn == NULL) return iter_bail(L);
+
 
     lua_pushlightuserdata(L, rn);        // [t rn], rn is 1st node
     lua_pushcclosure(L, iter_kv, 1);     // [t f], rn as upvalue(1)
@@ -2049,7 +2060,8 @@ merge(lua_State *L)
 
     lua_pushlightuserdata(L, rn);             // [t af rn]
     lua_pushlightuserdata(L, NULL);           // [t af rn NULL]
-    lua_pushcclosure(L, iter_merge, 2);       // [t f]
+    iptL_push_itr_gc(L, t);                   // [t af rn NULL gc]
+    lua_pushcclosure(L, iter_merge, 3);       // [t f]
     lua_rotate(L, 1, -1);                     // [f t]
 
     dbg_stack("out(2) ==>");
@@ -2115,10 +2127,6 @@ ipt_itr_gc(lua_State *L)
   while(rn) {
     nxt = rdx_nextleaf(rn);
     if (rn->rn_flags & IPTF_DELETE) {
-        char dbuf[MAX_STRKEY];
-        fprintf(stderr, "itr_gc del %s/%d\n",
-            key_tostr(dbuf, rn->rn_key), key_tolen(rn->rn_mask));
-
         if (KEY_IS_IP4(rn->rn_key))
             args.head = gc->t->head4;
         else

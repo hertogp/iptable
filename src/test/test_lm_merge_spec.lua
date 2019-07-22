@@ -132,6 +132,8 @@ describe("ipt:merge(): ", function()
       ipt["192.168.1.128/26"] = 1
       ipt["192.168.1.192/26"] = 1
 
+      assert.is_equal(7, #ipt)
+
       local done = false
       while(not done) do
         done = true
@@ -141,9 +143,39 @@ describe("ipt:merge(): ", function()
           done = false
         end
       end
+
       assert.is_equal(1, #ipt)
     end)
 
+    it("handles repeated deletes", function()
+      local ipt = iptable.new()
+      local n
+      ipt["192.168.1.0/24"] = 1
+      ipt["192.168.1.0/25"] = 1
+
+      assert.is_equal(2, #ipt)
+
+      for n = 1, 10 do ipt["192.168.1.0/25"] = nil end
+      assert.is_equal(1, #ipt)
+
+      for n = 1, 10 do ipt["192.168.1.0/24"] = nil end
+      assert.is_equal(0, #ipt)
+
+    end)
+
+    it("handles repeated adds", function()
+      local ipt = iptable.new()
+      local n
+
+      assert.is_equal(0, #ipt)
+
+      for n = 1, 10 do ipt["192.168.1.0/25"] = 1 end
+      assert.is_equal(1, #ipt)
+
+      for n = 1, 10 do ipt["192.168.1.0/24"] = 1 end
+      assert.is_equal(2, #ipt)
+
+    end)
 
   end)
 end)

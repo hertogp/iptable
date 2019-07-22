@@ -443,21 +443,21 @@ rdx_flush(struct radix_node *rn, void *args)
     /* invalidate the entry before it's freed */
     *entry->rn[0].rn_key = -1;  /* illegal KEYLEN */
     free(entry->rn[0].rn_key);
-    entry->rn[0].rn_key = NULL;
+    /* entry->rn[0].rn_key = NULL; */
 
-    /* entry's leaf node - NULLify any pointers */
-    rn->rn_parent = NULL;
-    rn->rn_mklist = NULL;
-    rn->rn_flags = 0;
-    rn->rn_mask = NULL;
-    rn->rn_dupedkey = NULL;
+    /* /1* entry's leaf node - NULLify any pointers *1/ */
+    /* rn->rn_parent = NULL; */
+    /* rn->rn_mklist = NULL; */
+    /* rn->rn_flags = 0; */
+    /* rn->rn_mask = NULL; */
+    /* rn->rn_dupedkey = NULL; */
 
-    /* entry's internal node - NULLify any pointers */
-    rn = &entry->rn[1];
-    rn->rn_parent = NULL;
-    rn->rn_mklist = NULL;
-    rn->rn_left = NULL;
-    rn->rn_right = NULL;
+    /* /1* entry's internal node - NULLify any pointers *1/ */
+    /* rn = &entry->rn[1]; */
+    /* rn->rn_parent = NULL; */
+    /* rn->rn_mklist = NULL; */
+    /* rn->rn_left = NULL; */
+    /* rn->rn_right = NULL; */
 
     if (entry->value != NULL && arg->purge != NULL)
         arg->purge(arg->args, &entry->value);
@@ -505,6 +505,12 @@ rdx_firstleaf(struct radix_head *rh)
 
     return rn;
 }
+/*
+ * Given a radix_node (INTERNAL or LEAF), find the next leaf in the tree. Note
+ * that the caller must check the IPTF_DELETE flag herself.  Reason is to allow
+ * upper logic to be performed across both deleted and normal leafs, such as
+ * actually deleting the flagged nodes..
+ */
 
 struct radix_node *
 rdx_nextleaf(struct radix_node *rn)
@@ -526,7 +532,8 @@ rdx_nextleaf(struct radix_node *rn)
      * The right-end marker is the only (root)leaf with a keylen of 255 since
      * the key, including its keylen byte, is all-ones.  It takes a full mask
      * to create a 'normal' leaf with the all-broadcast address, hence the
-     * right-end marker root-leaf can have at most 1 dupedkey child.
+     * right-end marker root-leaf can have at most 1 dupedkey child since masks
+     * are always applied to keys prior to storing them in the tree.
      */
 
     if(RDX_ISLEAF(rn->rn_parent)
@@ -563,10 +570,9 @@ rdx_nextleaf(struct radix_node *rn)
  *
  * Find and return the leaf whose key forms a pair with the given leaf
  * node such that both fit in an enclosing supernet with the given leaf's
- * masklength - 1.
+ * masklength-1.
  * Note:
- * - 0/0 itself, has no pair leaf.
- * - 0.0.0.0/1 and 128.0.0.0/1 are a pair; combined they yield 0/0.
+ * - 0/0 is the 'ultimate' supernet which combines 0.0.0.0/1 and 128.0.0.0/1
  */
 
 struct radix_node *
@@ -578,15 +584,6 @@ rdx_pairleaf(struct radix_node *oth) {
     if(oth == NULL) return NULL;
     if(! RDX_ISLEAF(oth)) return NULL;
     if(! key_bypair(pair, oth->rn_key, oth->rn_mask)) return NULL;
-
-    //char dbuf[MAX_STRKEY];
-    //fprintf(stderr, "stem key %s/%d\n",
-    //  key_tostr(dbuf, oth->rn_key), key_tolen(oth->rn_mask));
-
-    //fprintf(stderr, "pair key %s/%d (rb_bit %d, maxb %d)\n",
-    //  key_tostr(dbuf, pair), key_tolen(oth->rn_mask),
-    //  oth->rn_bit, IPT_KEYOFFSET + key_tolen(oth->rn_mask));
-    // _dumprn("oth", oth);
 
     /* goto up the tree to the governing internal node */
     maxb = IPT_KEYOFFSET + key_tolen(oth->rn_mask);
@@ -616,10 +613,8 @@ rdx_pairleaf(struct radix_node *oth) {
       rn = rn->rn_dupedkey;
 
     /* cannot return an inactive prefix */
-    if (rn->rn_flags & IPTF_DELETE) {
-        fprintf(stderr, "pairleaf: rn flagged as deleted\n");
+    if (rn->rn_flags & IPTF_DELETE)
         return NULL;
-    }
 
     return rn;
 }
@@ -840,11 +835,10 @@ tbl_get(table_t *t, const char *s)
 
     e = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
 
-    /* TODO: itr_gc */
-    if (e && (e->rn->rn_flags & IPTF_DELETE)) {
-        fprintf(stderr, "tbl_get: rn was deleted\n");
+    /* itr_gc, node deleted but not yet gc'd */
+    if (e && (e->rn->rn_flags & IPTF_DELETE))
         return NULL;
-    }
+
     return e;
 }
 
@@ -873,12 +867,16 @@ tbl_set(table_t *t, const char *s, void *v, void *pargs)
 
     e = (entry_t *)head->rnh_lookup(addr, mask, &head->rh); // exact match
     if (e) {
-        /* update existing entry */
-        /* TODO:  itr_gc, ensure IPTF_DELETE flag is cleared */
-        e->rn->rn_flags &= ~IPTF_DELETE;
+        /* purge called to free userdata */
         if(e->value && t->purge)
-            t->purge(pargs, &e->value); // free userdata, if needed
-        e->value = v;                   // set new userdata
+            t->purge(pargs, &e->value);
+        e->value = v;
+
+        /* no need to update stats if e was not flagged as deleted */
+        if((e->rn->rn_flags & IPTF_DELETE) == 0)
+            return 1;
+
+        e->rn->rn_flags &= ~IPTF_DELETE;  // clear delete flag
 
     } else {
         // add new entry, need to donate a new key for the tree to keep
@@ -888,16 +886,17 @@ tbl_set(table_t *t, const char *s, void *v, void *pargs)
 
         rn = head->rnh_addaddr(treekey, mask, &head->rh, e->rn);
         if (!rn) {
-            if (t->purge != NULL)
+            if (t->purge)
                 t->purge(pargs, &e->value);
             free(e);
             free(treekey); // t'was not stored
             return 0;
         }
 
-        if (af == AF_INET) t->count4++;
-        else t->count6++;
     }
+
+    if (af == AF_INET) t->count4++;
+    else t->count6++;
 
     return 1;
 }
@@ -922,24 +921,22 @@ tbl_del(table_t *t, const char *s, void *pargs)
     else if (af == AF_INET6) head = t->head6;
     else return 0;
 
-    /* TODO: itr_gc, flag for deletion if iterators are active */
     if (t->itr_lock) {
-        /* iterator is active, so flag node (if any) as inactive */
+        /* active iterator(s), so flag node (if any & needed) for DELETION */
         e = (entry_t *)head->rnh_lookup(addr, mask, &head->rh);
-        if (! e) return 0;
-        /* turn on delete flag */
+        if (!e || (e->rn->rn_flags & IPTF_DELETE)) return 0;
         e->rn->rn_flags |= IPTF_DELETE;
 
     } else {
         e = (entry_t *)head->rnh_deladdr(addr, mask, &head->rh);
-        if (! e) return 0;
-
+        if (!e) return 0;
         free(e->rn[0].rn_key);                      // free the key
         if(e->value != NULL && t->purge != NULL)
-            t->purge(pargs, &e->value);    // free the user data
+            t->purge(pargs, &e->value);             // free the user data
         free(e);                                    // free the entry
     }
 
+    /* if we get here, a non-deleted node was found, so decrement counter */
     if (af == AF_INET) t->count4--;
     else t->count6--;
 
