@@ -38,26 +38,26 @@ int luaopen_iptable(lua_State *);
 
 /* helper funtions */
 
-table_t *check_table(lua_State *, int);
-static int check_binkey(lua_State *, int, uint8_t *, size_t *);
-const char *check_pfxstr(lua_State *, int, size_t *);
+table_t *iptL_get_table(lua_State *, int);
+static int iptL_get_binkey(lua_State *, int, uint8_t *, size_t *);
+const char *iptL_get_pfxstr(lua_State *, int, size_t *);
 static int ipt_itr_gc(lua_State *);
-static int *refp_create(lua_State *);
-static void refp_delete(void *, void **);
+static int *iptL_refp_create(lua_State *);
+static void iptL_refp_delete(void *, void **);
 static int iter_bail(lua_State *);
 static int iter_fail_f(lua_State *);
 
 /* iter_xxx() helpers */
 
 static void iptL_push_itr_gc(lua_State *, table_t *);
-static void iptT_push_fstr(lua_State *, const char *, const char *, const void *);
-static void iptT_push_int(lua_State *, const char *, int);
-static void iptT_push_kv(lua_State *, struct radix_node *);
-static int push_rdx_node_head(lua_State *, struct radix_node_head *);
-static int push_rdx_node(lua_State *, struct radix_node *);
-static int push_rdx_head(lua_State *, struct radix_head *);
-static int push_rdx_mask_head(lua_State *, struct radix_mask_head *);
-static int push_rdx_mask(lua_State *, struct radix_mask *);
+static void iptT_set_fstr(lua_State *, const char *, const char *, const void *);
+static void iptT_set_int(lua_State *, const char *, int);
+static void iptT_set_kv(lua_State *, struct radix_node *);
+static int iptL_push_rnh(lua_State *, struct radix_node_head *);
+static int iptL_push_rn(lua_State *, struct radix_node *);
+static int iptL_push_rh(lua_State *, struct radix_head *);
+static int iptL_push_rmh(lua_State *, struct radix_mask_head *);
+static int iptL_push_rm(lua_State *, struct radix_mask *);
 
 
 /* iterators */
@@ -86,13 +86,13 @@ static int ipt_tostr(lua_State *);
 
 /* iptable instance methods */
 
-static int _gc(lua_State *);
-static int _index(lua_State *);
-static int _newindex(lua_State *);
-static int _len(lua_State *);
-static int _tostring(lua_State *);
+static int iptm_gc(lua_State *);
+static int iptm_index(lua_State *);
+static int iptm_newindex(lua_State *);
+static int iptm_len(lua_State *);
+static int iptm_tostring(lua_State *);
+static int iptm_counts(lua_State *);
 static int iter_kv(lua_State *);
-static int counts(lua_State *);
 static int iter_less(lua_State *);
 static int iter_masks(lua_State *);
 static int iter_merge(lua_State *);
@@ -119,13 +119,13 @@ static const struct luaL_Reg funcs [] = {
 /* iptable instance methods array */
 
 static const struct luaL_Reg meths [] = {
-    {"__gc", _gc},
-    {"__index", _index},
-    {"__newindex", _newindex},
-    {"__len", _len},
-    {"__tostring", _tostring},
+    {"__gc", iptm_gc},
+    {"__index", iptm_index},
+    {"__newindex", iptm_newindex},
+    {"__len", iptm_len},
+    {"__tostring", iptm_tostring},
     {"__pairs", iter_kv},
-    {"counts", counts},
+    {"counts", iptm_counts},
     {"masks", iter_masks},
     {"merge", iter_merge},
     {"more", iter_more},
@@ -193,16 +193,16 @@ luaopen_iptable (lua_State *L)
  */
 
 table_t *
-check_table(lua_State *L, int index)
+iptL_get_table(lua_State *L, int index)
 {
     void **t = luaL_checkudata(L, index, LUA_IPTABLE_ID);
     luaL_argcheck(L, t != NULL, index, "`iptable' expected");
     return (table_t *)*t;
 }
 
-int check_int(lua_State *L, int, const char *);
+int iptL_get_int(lua_State *L, int, const char *);
 int
-check_int(lua_State *L, int idx, const char *msg)
+iptL_get_int(lua_State *L, int idx, const char *msg)
 {
     if (! lua_isinteger(L, idx)) {
         lua_pushstring(L, msg);
@@ -213,25 +213,26 @@ check_int(lua_State *L, int idx, const char *msg)
 }
 
 /*
- * check out an AF_family or default to af_default.
+ * check out an AF_family or default to 'af_default' given.
  * If af_default is NULL, this will raise an error if no known AF_family is
  * given.
  */
 
-int check_af(lua_State *L, int, const char*);
+int iptL_get_af(lua_State *L, int, const char*);
 int
-check_af(lua_State *L, int idx, const char *af_default)
+iptL_get_af(lua_State *L, int idx, const char *af_default)
 {
     static const char *const af_fam[] = {"AF_UNSPEC", "AF_INET", "AF_INET6",
         NULL };
     static const int af_num[] = {AF_UNSPEC, AF_INET, AF_INET6};
+
     int af = luaL_checkoption(L, idx, af_default, af_fam);
 
     return af_num[af];
 }
 
 /*
- * check_binkey()  <--  [ .. k ..]
+ * iptL_get_binkey()  <--  [ .. k ..]
  *
  * Copy a binary key, either an address or a mask, at given 'idx' into given
  * 'buf'.  'buf' size is assumed to be MAX_BINKEY.  A binary key is a byte
@@ -242,7 +243,7 @@ check_af(lua_State *L, int idx, const char *af_default)
  */
 
 static int
-check_binkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
+iptL_get_binkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
 {
     const char *key = NULL;
 
@@ -260,7 +261,7 @@ check_binkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
 }
 
 /*
- * check_pfxstr()  <--  [.. s ..]
+ * iptL_get_pfxstr()  <--  [.. s ..]
  *
  * Checks if given index is a string and yields a const char ptr to it or NULL.
  * Sets len to the string length reported by Lua's stack manager.  Lua owns the
@@ -269,7 +270,7 @@ check_binkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
  */
 
 const char *
-check_pfxstr(lua_State *L, int idx, size_t *len)
+iptL_get_pfxstr(lua_State *L, int idx, size_t *len)
 {
     /* return const char to a (prefix) string.  NULL on failure. */
     const char *pfx = NULL;
@@ -280,27 +281,15 @@ check_pfxstr(lua_State *L, int idx, size_t *len)
 }
 
 /*
- * ud_create()
- *
- * Stores a given int value in newly allocated memory and returns its pointer.
- *
- * The int value is a LUA_REGISTRYINDEX reference value where the actual
- * userdata is stored.  The ref-value's pointer is part of an entry_t which is
- * what is stored/retrieved from the radix tree by casting radix node pointers
- * to pointer to entry_t.  See _index().
- *
- */
-
-/*
- * refp_create()  <--  [.. v ..]
+ * iptL_refp_create()  <--  [..]
  *
  * Create a reference id for the lua_State given.
- * This allocates an int pointer, gets the ref_id, stores it in the allocated
+ * This allocates an int pointer, gets a new ref_id, stores it in the allocated
  * space and returns a pointer to it.
  */
 
 static int *
-refp_create(lua_State *L)
+iptL_refp_create(lua_State *L)
 {
     int *refp = calloc(1, sizeof(int));
     *refp = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -308,14 +297,14 @@ refp_create(lua_State *L)
 }
 
 /*
- * refp_delete()
+ * iptL_refp_delete()
  *
  * Delete a value from LUA_REGISTRYINDEX indexed by **r (which is treated as an
  * **int).  This function acts as the purge_f_t (see iptable.h) for the table.
  *
  */
 
-static void refp_delete(void *L, void **r)
+static void iptL_refp_delete(void *L, void **r)
 {
     lua_State *LL = L;
     int **refp = (int **)r;
@@ -371,7 +360,7 @@ iter_fail_f(lua_State *L)
 // iptable module functions
 
 /*
- * .new()  <--  []
+ * iptable.new()  <--  []
  *
  * Create and return a new iptable instance.
  *
@@ -386,7 +375,7 @@ ipt_new(lua_State *L)
     dbg_stack("inc(.) <--");
 
     void **t = lua_newuserdata(L, sizeof(void **));
-    *t = tbl_create(refp_delete);             // usr_delete func to free values
+    *t = tbl_create(iptL_refp_delete);             // usr_delete func to free values
 
     if (*t == NULL) {
         lua_pushliteral(L, "error creating iptable");
@@ -402,7 +391,7 @@ ipt_new(lua_State *L)
 }
 
 /*
- * .tobin()  <--  [str]
+ * iptable.tobin()  <--  [str]
  *
  * Return byte array for binary key, masklength & AF for a given prefix, nil on
  * errors.  Note: byte array is [LEN-byte | key-bytes].
@@ -417,7 +406,7 @@ ipt_tobin(lua_State *L)
     int af, mlen;
     uint8_t addr[MAX_BINKEY];
     size_t len = 0;
-    const char *pfx = check_pfxstr(L, 1, &len);
+    const char *pfx = iptL_get_pfxstr(L, 1, &len);
 
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
 
@@ -431,7 +420,7 @@ ipt_tobin(lua_State *L)
 }
 
 /*
- * tostr()  <--  [binkey]
+ * iptable.tostr()  <--  [binkey]
  *
  * Return string representation for a binary key, nil on errors
  *
@@ -446,7 +435,7 @@ ipt_tostr(lua_State *L)
     char str[MAX_STRKEY];
     size_t len = 0;
 
-    if (!check_binkey(L, 1, key, &len)) return 0;
+    if (!iptL_get_binkey(L, 1, key, &len)) return 0;
     if (len != (size_t)IPT_KEYLEN(key)) return 0; // illegal binary
     if (key_tostr(str, key) == NULL) return 0;
 
@@ -458,7 +447,7 @@ ipt_tostr(lua_State *L)
 }
 
 /*
- * .tolen()  <--  [key]
+ * iptable.tolen()  <--  [key]
  *
  * Return the number of consecutive msb 1-bits, nil on errors.
  * - stops at the first zero bit.
@@ -474,7 +463,7 @@ ipt_tolen(lua_State *L)
     size_t len = 0;
     int mlen = -1;
 
-    if (!check_binkey(L, 1, buf, &len)) return 0;
+    if (!iptL_get_binkey(L, 1, buf, &len)) return 0;
 
     mlen = key_tolen(buf);
     lua_pushinteger(L, mlen);
@@ -485,7 +474,7 @@ ipt_tolen(lua_State *L)
 }
 
 /*
- * .size()  <--  [pfx]
+ * iptable.size()  <--  [pfx]
  *
  * Returns the number of hosts in a given prefix, nil on errors
  * - uses Lua's arithmatic (2^hostbits), since ipv6 can get large.
@@ -502,7 +491,7 @@ ipt_size(lua_State *L)
     int af = AF_UNSPEC, mlen = -1, hlen = -1;
     const char *pfx = NULL;
 
-    pfx = check_pfxstr(L, 1, &len);
+    pfx = iptL_get_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (AF_UNKNOWN(af)) return 0;
 
@@ -517,7 +506,7 @@ ipt_size(lua_State *L)
 }
 
 /*
- * .address()  <--  [str]
+ * iptable.address()  <--  [str]
  *
  * Return host address, masklen and af_family for pfx; nil on errors.
  *
@@ -534,7 +523,7 @@ ipt_address(lua_State *L)
     int af = AF_UNSPEC, mlen = -1;
     const char *pfx = NULL;
 
-    pfx = check_pfxstr(L, 1, &len);
+    pfx = iptL_get_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_tostr(buf, addr)) return 0;
@@ -549,7 +538,7 @@ ipt_address(lua_State *L)
 }
 
 /*
- * .network()  <--  [pfx]
+ * iptable.network()  <--  [pfx]
  *
  * Return network address, masklen and af_family for pfx; nil on errors.
  *
@@ -566,7 +555,7 @@ ipt_network(lua_State *L)
     int af = AF_UNSPEC, mlen = -1;
     const char *pfx = NULL;
 
-    pfx = check_pfxstr(L, 1, &len);
+    pfx = iptL_get_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_network(addr, mask)) return 0;
@@ -582,7 +571,7 @@ ipt_network(lua_State *L)
 }
 
 /*
- * .neighbor(pfx)  <--  [str]
+ * iptable.neighbor(pfx)  <--  [str]
  *
  * Given a prefix, return the neighbor prefix, masklen and af_family, such that
  * both can be combined into a supernet with masklen -1; nil on errors.
@@ -600,7 +589,7 @@ ipt_neighbor(lua_State *L)
     int af = AF_UNSPEC, mlen = -1;
     const char *pfx = NULL;
 
-    pfx = check_pfxstr(L, 1, &len);
+    pfx = iptL_get_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (mlen == 0) return 0;                        /* 0/0 has no neighbor */
     if (! key_bylen(mask, mlen, af)) return 0;
@@ -616,7 +605,7 @@ ipt_neighbor(lua_State *L)
     return 3;
 }
 
-/* .broadcast()  <--  [pfx]
+/* iptable.broadcast()  <--  [pfx]
  *
  * Return broadcast address, masklen and af_family for pfx; nil on errors.
  *
@@ -633,7 +622,7 @@ ipt_broadcast(lua_State *L)
     uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
     const char *pfx = NULL;
 
-    pfx = check_pfxstr(L, 1, &len);
+    pfx = iptL_get_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) return 0;
     if (! key_bylen(mask, mlen, af)) return 0;
     if (! key_broadcast(addr, mask)) return 0;
@@ -649,15 +638,15 @@ ipt_broadcast(lua_State *L)
 }
 
 /*
- * iptable.mask()  <--  [num]
+ * iptable.mask(af, masklengh, [invert])  <--  [af, num, bool]
  *
  * Returns mask (as string) for mlen bits given, Nil on errors
- * - mlen < 0 means inverse mask of mlen, so mlen = -8 -> 0.255.255.255
+ * - mlen < 0 means host/full mask
+ * - inverted means to invert the mask (default is false).
  *
- * TODO: normally mlen==-1 means 'no mask present so default to MAXMASK', but
- * here we deviate.  Better to create imask(af, mlen) and maintain the notion
- * of mlen==-1 and return an inverse mask of max mask.
- *
+ * TODO:
+ * o add bool parameter instead of using -mlen to convey desire for inversion
+ * o restore mlen<0 to mean IPx_MAXMASK
  */
 
 static int
@@ -686,12 +675,14 @@ ipt_mask(lua_State *L)
     return 1;
 }
 
-
 /*
- * .hosts()  <--  [pfx incl], incl is optional.
+ * iptable.hosts(pfx [, incl])  <--  [pfx [incl]]
  *
- * Iterate across host adresses in prefix pfx, if incl is true, the network
- * and broadcast addresses are included as well.
+ * Iterate across host adresses in prefix pfx.
+ *
+ * The optional incl argument defaults to false, when given & true, the network
+ * and broadcast address will be included in the iteration results.  If pfx has
+ * no mask, the af's max mask is used.
  *
  */
 
@@ -709,7 +700,7 @@ iter_hosts(lua_State *L)
     if (lua_gettop(L) == 2 && lua_isboolean(L, 2))
         inclusive = lua_toboolean(L, 2);  // include netw/bcast (or not)
 
-    pfx = check_pfxstr(L, 1, &len);
+    pfx = iptL_get_pfxstr(L, 1, &len);
     if (! key_bystr(addr, &mlen, &af, pfx)) fail = 1;
     if (! key_bystr(stop, &mlen, &af, pfx)) fail = 1;
     if (! key_bylen(mask, mlen, af)) fail = 1;
@@ -754,8 +745,8 @@ iter_hosts_f(lua_State *L)
     uint8_t next[MAX_BINKEY], stop[MAX_BINKEY];
     char buf[MAX_STRKEY];
 
-    if (!check_binkey(L, lua_upvalueindex(1), next, &nlen)) return 0;
-    if (!check_binkey(L, lua_upvalueindex(2), stop, &slen)) return 0;
+    if (!iptL_get_binkey(L, lua_upvalueindex(1), next, &nlen)) return 0;
+    if (!iptL_get_binkey(L, lua_upvalueindex(2), stop, &slen)) return 0;
     if (key_cmp(next, stop) == 0) return 0;
 
     key_tostr(buf, next);                               /* return cur val */
@@ -781,10 +772,10 @@ iter_hosts_f(lua_State *L)
  */
 
 static int
-_gc(lua_State *L) {
+iptm_gc(lua_State *L) {
     dbg_stack("inc(.) <--");
 
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
     tbl_destroy(&t, L);
 
     dbg_stack("out(0) ==>");
@@ -804,25 +795,25 @@ _gc(lua_State *L) {
  */
 
 static int
-_newindex(lua_State *L)
+iptm_newindex(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
     const char *pfx = NULL;
     size_t len = 0;
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
     int *refp = NULL;
 
-    pfx = check_pfxstr(L, 2, &len);
+    pfx = iptL_get_pfxstr(L, 2, &len);
 
     if (lua_isnil(L, -1)) {
         tbl_del(t, pfx, L);
         dbg_msg("tbl_del on %s", pfx);
     }
     else {
-        if ((refp = refp_create(L)))
+        if ((refp = iptL_refp_create(L)))
             if (! tbl_set(t, pfx, refp, L))
-                refp_delete(L, (void**)&refp);
+                iptL_refp_delete(L, (void**)&refp);
     }
 
     dbg_stack("out(0) ==>");
@@ -841,7 +832,7 @@ _newindex(lua_State *L)
  */
 
 static int
-_index(lua_State *L)
+iptm_index(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
@@ -849,8 +840,8 @@ _index(lua_State *L)
     size_t len = 0;
     const char *pfx = NULL;
 
-    table_t *t = check_table(L, 1);
-    pfx = check_pfxstr(L, 2, &len);
+    table_t *t = iptL_get_table(L, 1);
+    pfx = iptL_get_pfxstr(L, 2, &len);
 
     if(pfx)
         entry = strchr(pfx, '/') ? tbl_get(t, pfx) : tbl_lpm(t, pfx);
@@ -876,11 +867,11 @@ _index(lua_State *L)
  */
 
 static int
-_len(lua_State *L)
+iptm_len(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
     lua_pushinteger(L, t->count4 + t->count6);
 
     dbg_stack("out(1) ==>");
@@ -891,16 +882,16 @@ _len(lua_State *L)
 /*
  * _tostring()  <--  [t]
  *
- * Return a string representation of the iptable instance (with counts).
+ * Return a string representation of the iptable instance (with iptm_counts).
  *
  */
 
 static int
-_tostring(lua_State *L)
+iptm_tostring(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
     lua_pushfstring(L, "iptable{#ipv4=%d, #ipv6=%d}", t->count4, t->count6);
 
     dbg_stack("out(1) ==>");
@@ -909,18 +900,18 @@ _tostring(lua_State *L)
 }
 
 /*
- * :counts()  <--  [t]
+ * t:iptm_counts()  <--  [t]
  *
- * Return both ipv4 and ipv6 counts as two numbers.
+ * Return both ipv4 and ipv6 iptm_counts as two numbers.
  *
  */
 
 static int
-counts(lua_State *L)
+iptm_counts(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
     lua_pushinteger(L, t->count4);         // [t count4]
     lua_pushinteger(L, t->count6);         // [t count4 count6]
 
@@ -930,7 +921,7 @@ counts(lua_State *L)
 }
 
 /*
- * _pairs()  <--  [t]
+ * iter_kv  <--  [t]  --> for pairs(t)
  *
  * Setup iteration across key,value-pairs in the table.  The first ipv4 or ipv6
  * leaf node is pushed.  The iter_pairs iterator uses nextleaf to go through
@@ -944,7 +935,7 @@ iter_kv(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
     struct radix_node *rn = rdx_firstleaf(&t->head4->rh);
 
     /* cannot start with a deleted key */
@@ -987,7 +978,7 @@ iter_kv_f(lua_State *L)
 
     char saddr[MAX_STRKEY];
 
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
     struct radix_node *rn = lua_touserdata(L, lua_upvalueindex(1));
     entry_t *e = (entry_t *)rn;
 
@@ -1035,8 +1026,8 @@ iter_more(lua_State *L)
     struct radix_node *rn = NULL, *top = NULL;
     int inclusive = 0;
 
-    table_t *t = check_table(L, 1);
-    const char *pfx = check_pfxstr(L, 2, &len);
+    table_t *t = iptL_get_table(L, 1);
+    const char *pfx = iptL_get_pfxstr(L, 2, &len);
 
     if (! key_bystr(addr, &mlen, &af, pfx)) {
         lua_pushfstring(L, "more(): invalid prefix %s", lua_tostring(L, 2));
@@ -1105,8 +1096,8 @@ iter_more_f(lua_State *L)
     uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
 
     if (rn == NULL) return 0;     /* we're done */
-    if(!check_binkey(L, lua_upvalueindex(4), addr, &dummy)) return 0;
-    if(!check_binkey(L, lua_upvalueindex(5), mask, &dummy)) return 0;
+    if(!iptL_get_binkey(L, lua_upvalueindex(4), addr, &dummy)) return 0;
+    if(!iptL_get_binkey(L, lua_upvalueindex(5), mask, &dummy)) return 0;
     mlen = key_tolen(mask);
     mlen = inclusive ? mlen : mlen + 1;
 
@@ -1154,14 +1145,14 @@ iter_less(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
     size_t len = 0;
     int mlen = 0, inclusive = 0, af = AF_UNSPEC;
     uint8_t addr[MAX_BINKEY];
     const char *pfx;
     char buf[MAX_STRKEY];
 
-    pfx = check_pfxstr(L, 2, &len);
+    pfx = iptL_get_pfxstr(L, 2, &len);
     if (pfx == NULL || len < 1) return iter_bail(L);
 
     if (lua_gettop(L) > 2 && lua_isboolean(L, 3))
@@ -1202,7 +1193,7 @@ static int
 iter_less_f(lua_State *L)
 {
     char buf[MAX_STRKEY];
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
     entry_t *e;
     const char *pfx = lua_tostring(L, lua_upvalueindex(1));
     int mlen = lua_tointeger(L, lua_upvalueindex(2));
@@ -1257,7 +1248,7 @@ int iter_masks(lua_State *L) {
     struct radix_node_head *rnh;
     struct radix_node *rn;
     int isnum = 0, af = AF_UNSPEC;
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
 
     if (lua_gettop(L) != 2)
         return iter_bail(L);                         // no AF_family
@@ -1374,8 +1365,8 @@ iter_merge(lua_State *L)
     dbg_stack("inc(.) <--");                  // [t af]
 
     struct radix_node *rn;
-    table_t *t = check_table(L, 1);
-    int af = check_int(L, 2, "expected an AF_family number");
+    table_t *t = iptL_get_table(L, 1);
+    int af = iptL_get_int(L, 2, "expected an AF_family number");
 
     lua_pop(L, 1);                            // [t]
     if (af == AF_INET)
@@ -1452,9 +1443,9 @@ iter_merge_f(lua_State *L)
 
     /* new table and add key,value pairs */
     lua_newtable(L);                                              // [s {}]
-    iptT_push_kv(L, rn);
-    iptT_push_kv(L, pair);
-    if (super) iptT_push_kv(L, super);
+    iptT_set_kv(L, rn);
+    iptT_set_kv(L, pair);
+    if (super) iptT_set_kv(L, super);
 
     dbg_stack("out(2) ==>");
 
@@ -1513,7 +1504,7 @@ ipt_itr_gc(lua_State *L)
   /* iterator activity has ceased, so run the deferred deletions */
   args.purge = gc->t->purge;
   args.args = L;
-  args.head = NULL; /* set per rn to be deleted */
+  args.head = NULL; /* set per rn type (ipv4 vs ipv6) */
 
   rn = rdx_firstleaf(&gc->t->head4->rh);
 
@@ -1545,8 +1536,8 @@ iter_radixes(lua_State *L)
 {
     dbg_stack("inc(.) <--");                        // [t af maskp]
 
-    table_t *t = check_table(L, 1);
-    int af_fam = check_af(L, 2, "AF_INET");
+    table_t *t = iptL_get_table(L, 1);
+    int af_fam = iptL_get_af(L, 2, "AF_INET");
     int maskp = lua_toboolean(L, 3);
 
     /* pushes af_fam's radix_node_head onto t's stack */
@@ -1577,7 +1568,7 @@ iter_radix(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
-    table_t *t = check_table(L, 1);
+    table_t *t = iptL_get_table(L, 1);
     void *node;
     int type;
 
@@ -1587,16 +1578,16 @@ iter_radix(lua_State *L)
 
     switch (type) {
         case TRDX_NODE_HEAD:
-            return push_rdx_node_head(L, node);
+            return iptL_push_rnh(L, node);
         case TRDX_HEAD:
-            return push_rdx_head(L, node);
+            return iptL_push_rh(L, node);
         case TRDX_NODE:
-            return push_rdx_node(L, node);
+            return iptL_push_rn(L, node);
         case TRDX_MASK_HEAD:
             if (! lua_tointeger(L, lua_upvalueindex(1))) return 0;
-            return push_rdx_mask_head(L, node);
+            return iptL_push_rmh(L, node);
         case TRDX_MASK:
-            return push_rdx_mask(L, node);
+            return iptL_push_rm(L, node);
     }
 
     dbg_msg(" `-> unhandled node type %d!", type);
@@ -1604,10 +1595,10 @@ iter_radix(lua_State *L)
     return 0;
 }
 
-// Table pushers (iter_radix/iter_merge_f) helpers
+// k,v-setters for Table on top of L (iter_radix/iter_merge_f) helpers
 
 static void
-iptT_push_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
+iptT_set_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
 {
     if (! lua_istable(L, -1)) {
         dbg_msg("need stack top to be a %s", "table");
@@ -1620,7 +1611,7 @@ iptT_push_fstr(lua_State *L, const char *k, const char *fmt, const void *v)
 }
 
 static void
-iptT_push_int(lua_State *L, const char *k, int v)
+iptT_set_int(lua_State *L, const char *k, int v)
 {
     if (! lua_istable(L, -1)) {
         dbg_msg("need stack top to be a %s", "table");
@@ -1632,8 +1623,14 @@ iptT_push_int(lua_State *L, const char *k, int v)
     lua_settable(L, -3);
 }
 
+/* iptT_set_kv(L, rn)
+ *
+ * set (rn->rn_key, v) on Table on top of L, based on pfx provided and its
+ * value stored (indirectly) in the corresponding radix tree.
+ */
+
 static void
-iptT_push_kv(lua_State *L, struct radix_node *rn)
+iptT_set_kv(lua_State *L, struct radix_node *rn)
 {
     char buf[MAX_STRKEY];
     entry_t *e;
@@ -1664,19 +1661,19 @@ iptT_push_kv(lua_State *L, struct radix_node *rn)
  */
 
 static int
-push_rdx_node_head(lua_State *L, struct radix_node_head *rnh)
+iptL_push_rnh(lua_State *L, struct radix_node_head *rnh)
 {
     // create table and populate its fields for rnh
     dbg_stack("inc(.) <--");
 
     lua_newtable(L);
-    iptT_push_fstr(L, "_MEM_", "%p", rnh);
-    iptT_push_int(L, "_TYPE_", TRDX_NODE_HEAD);
-    iptT_push_fstr(L, "_NAME_", "%s", "RADIX_NODE_HEAD");
+    iptT_set_fstr(L, "_MEM_", "%p", rnh);
+    iptT_set_int(L, "_TYPE_", TRDX_NODE_HEAD);
+    iptT_set_fstr(L, "_NAME_", "%s", "RADIX_NODE_HEAD");
 
     // rh goes into a subtable
     lua_pushliteral(L, "rh");
-    push_rdx_head(L, &rnh->rh);
+    iptL_push_rh(L, &rnh->rh);
     lua_settable(L, -3);
 
     // rnh_nodes -> {_MEM_,..{{RDX[0]}, {RDX[1]}, {RDX[2]}}}
@@ -1684,16 +1681,16 @@ push_rdx_node_head(lua_State *L, struct radix_node_head *rnh)
 
     // new subtable: array of 3 RDX nodes; table has MEM/NAME but no type
     lua_newtable(L);
-    iptT_push_fstr(L, "_MEM_", "%p", rnh->rnh_nodes);
-    iptT_push_fstr(L, "_NAME_", "%s", "RNH_NODES[3]");
+    iptT_set_fstr(L, "_MEM_", "%p", rnh->rnh_nodes);
+    iptT_set_fstr(L, "_NAME_", "%s", "RNH_NODES[3]");
     lua_pushinteger(L, 1);
-    push_rdx_node(L, &rnh->rnh_nodes[0]);
+    iptL_push_rn(L, &rnh->rnh_nodes[0]);
     lua_settable(L, -3);
     lua_pushinteger(L, 2);
-    push_rdx_node(L, &rnh->rnh_nodes[1]);
+    iptL_push_rn(L, &rnh->rnh_nodes[1]);
     lua_settable(L, -3);
     lua_pushinteger(L, 3);
-    push_rdx_node(L, &rnh->rnh_nodes[2]);
+    iptL_push_rn(L, &rnh->rnh_nodes[2]);
     lua_settable(L, -3);  // last entry is subtable
 
     lua_settable(L, -3);
@@ -1704,7 +1701,7 @@ push_rdx_node_head(lua_State *L, struct radix_node_head *rnh)
 }
 
 static int
-push_rdx_node(lua_State *L, struct radix_node *rn)
+iptL_push_rn(lua_State *L, struct radix_node *rn)
 {
     // create table and populate its fields for rn
     // - uses the convenience rn->field_names
@@ -1713,53 +1710,53 @@ push_rdx_node(lua_State *L, struct radix_node *rn)
 
     lua_newtable(L);
 
-    iptT_push_fstr(L, "_MEM_", "%p", rn);
-    iptT_push_int(L, "_TYPE_", TRDX_NODE);
-    iptT_push_fstr(L, "_NAME_", "%s", "RADIX_NODE");
+    iptT_set_fstr(L, "_MEM_", "%p", rn);
+    iptT_set_int(L, "_TYPE_", TRDX_NODE);
+    iptT_set_fstr(L, "_NAME_", "%s", "RADIX_NODE");
 
-    iptT_push_fstr(L, "rn_mklist", "%p", rn->rn_mklist);
-    iptT_push_fstr(L, "rn_parent", "%p", rn->rn_parent);
-    iptT_push_int(L, "rn_bit", rn->rn_bit);
+    iptT_set_fstr(L, "rn_mklist", "%p", rn->rn_mklist);
+    iptT_set_fstr(L, "rn_parent", "%p", rn->rn_parent);
+    iptT_set_int(L, "rn_bit", rn->rn_bit);
     // its a char, pushed as int => print("%02x", 0xff & int_val)
-    iptT_push_int(L, "rn_bmask", rn->rn_bmask);
-    iptT_push_int(L, "rn_flags", rn->rn_flags);
+    iptT_set_int(L, "rn_bmask", rn->rn_bmask);
+    iptT_set_int(L, "rn_flags", rn->rn_flags);
 
     // set _RNF_FLAGs_
     if (rn->rn_flags & RNF_NORMAL)
-        iptT_push_int(L, "_NORMAL_", 1);
+        iptT_set_int(L, "_NORMAL_", 1);
     if (rn->rn_flags & RNF_ROOT)
-        iptT_push_int(L, "_ROOT_", 1);
+        iptT_set_int(L, "_ROOT_", 1);
     if (rn->rn_flags & RNF_ACTIVE)
-        iptT_push_int(L, "_ACTIVE_", 1);
+        iptT_set_int(L, "_ACTIVE_", 1);
     if (rn->rn_flags & IPTF_DELETE)
-        iptT_push_int(L, "_DELETE_", 1);
+        iptT_set_int(L, "_DELETE_", 1);
 
     if(RDX_ISLEAF(rn)) {
-      iptT_push_int(L, "_LEAF_", 1);
-      iptT_push_fstr(L, "rn_key", "%s", key_tostr(key, rn->rn_key));
-      iptT_push_fstr(L, "rn_mask", "%s", key_tostr(key, rn->rn_mask));
-      iptT_push_fstr(L, "rn_dupedkey", "%p", rn->rn_dupedkey);
+      iptT_set_int(L, "_LEAF_", 1);
+      iptT_set_fstr(L, "rn_key", "%s", key_tostr(key, rn->rn_key));
+      iptT_set_fstr(L, "rn_mask", "%s", key_tostr(key, rn->rn_mask));
+      iptT_set_fstr(L, "rn_dupedkey", "%p", rn->rn_dupedkey);
 
       /* additional diagnostics */
       if (rn->rn_key)
-        iptT_push_int(L, "_rn_key_LEN", 0xff & IPT_KEYLEN(rn->rn_key));
+        iptT_set_int(L, "_rn_key_LEN", 0xff & IPT_KEYLEN(rn->rn_key));
       else
-        iptT_push_int(L, "_rn_key_LEN", -1);
+        iptT_set_int(L, "_rn_key_LEN", -1);
 
       if (rn->rn_mask) {
-        iptT_push_int(L, "_rn_mask_LEN", IPT_KEYLEN(rn->rn_mask));
-        iptT_push_int(L, "_rn_mlen", key_tolen(rn->rn_mask));
+        iptT_set_int(L, "_rn_mask_LEN", IPT_KEYLEN(rn->rn_mask));
+        iptT_set_int(L, "_rn_mlen", key_tolen(rn->rn_mask));
       } else {
-        iptT_push_int(L, "_rn_mask_LEN", -1); /* may happen in mask tree */
-        iptT_push_int(L, "_rn_mlen", key_tolen(rn->rn_key));
+        iptT_set_int(L, "_rn_mask_LEN", -1); /* may happen in mask tree */
+        iptT_set_int(L, "_rn_mlen", key_tolen(rn->rn_key));
       }
 
 
     } else {
-      iptT_push_int(L, "_INTERNAL_", 1);
-      iptT_push_int(L, "rn_offset", rn->rn_offset);
-      iptT_push_fstr(L, "rn_left", "%p", rn->rn_left);
-      iptT_push_fstr(L, "rn_right", "%p", rn->rn_right);
+      iptT_set_int(L, "_INTERNAL_", 1);
+      iptT_set_int(L, "rn_offset", rn->rn_offset);
+      iptT_set_fstr(L, "rn_left", "%p", rn->rn_left);
+      iptT_set_fstr(L, "rn_right", "%p", rn->rn_right);
     }
 
     dbg_stack("out(1) ==>");
@@ -1767,54 +1764,60 @@ push_rdx_node(lua_State *L, struct radix_node *rn)
     return 1;
 }
 
+/* push a radix head onto L (as a table)
+ */
+
 static int
-push_rdx_head(lua_State *L, struct radix_head *rh)
+iptL_push_rh(lua_State *L, struct radix_head *rh)
 {
     // create table and populate its fields for rn
     dbg_stack("inc(.) <--");
 
     lua_newtable(L);
-    iptT_push_fstr(L, "_MEM_", "%p", rh);
-    iptT_push_int(L, "_TYPE_", TRDX_HEAD);
-    iptT_push_fstr(L, "_NAME_", "%s", "RADIX_HEAD");
+    iptT_set_fstr(L, "_MEM_", "%p", rh);
+    iptT_set_int(L, "_TYPE_", TRDX_HEAD);
+    iptT_set_fstr(L, "_NAME_", "%s", "RADIX_HEAD");
 
-    iptT_push_fstr(L, "rnh_treetop", "%p", rh->rnh_treetop);
-    iptT_push_fstr(L, "rnh_masks", "%p", rh->rnh_masks);
+    iptT_set_fstr(L, "rnh_treetop", "%p", rh->rnh_treetop);
+    iptT_set_fstr(L, "rnh_masks", "%p", rh->rnh_masks);
 
     dbg_stack("out(1) ==>");
 
     return 1;
 }
 
+/* push a radix mask head onto L (as a table)
+ */
+
 static int
-push_rdx_mask_head(lua_State *L, struct radix_mask_head *rmh)
+iptL_push_rmh(lua_State *L, struct radix_mask_head *rmh)
 {
     // create table and populate its fields for rn
     dbg_stack("inc(.) <--");
 
     lua_newtable(L);
-    iptT_push_fstr(L, "_MEM_", "%p", rmh);
-    iptT_push_int(L, "_TYPE_", TRDX_MASK_HEAD);
-    iptT_push_fstr(L, "_NAME_", "%s", "RADIX_MASK_HEAD");
+    iptT_set_fstr(L, "_MEM_", "%p", rmh);
+    iptT_set_int(L, "_TYPE_", TRDX_MASK_HEAD);
+    iptT_set_fstr(L, "_NAME_", "%s", "RADIX_MASK_HEAD");
 
     lua_pushliteral(L, "head");
-    push_rdx_head(L, &rmh->head);
+    iptL_push_rh(L, &rmh->head);
     lua_settable(L, -3);
 
     lua_pushliteral(L, "mask_nodes");
 
     // new subtable: an array of 3 radix_node's
     lua_newtable(L);
-    iptT_push_fstr(L, "_MEM_", "%p", rmh->mask_nodes);
-    iptT_push_fstr(L, "_NAME_", "%s", "MASK_NODES[3]");
+    iptT_set_fstr(L, "_MEM_", "%p", rmh->mask_nodes);
+    iptT_set_fstr(L, "_NAME_", "%s", "MASK_NODES[3]");
     lua_pushinteger(L, 1);
-    push_rdx_node(L, &rmh->mask_nodes[0]);
+    iptL_push_rn(L, &rmh->mask_nodes[0]);
     lua_settable(L, -3);
     lua_pushinteger(L, 2);
-    push_rdx_node(L, &rmh->mask_nodes[1]);
+    iptL_push_rn(L, &rmh->mask_nodes[1]);
     lua_settable(L, -3);
     lua_pushinteger(L, 3);
-    push_rdx_node(L, &rmh->mask_nodes[2]);
+    iptL_push_rn(L, &rmh->mask_nodes[2]);
     lua_settable(L, -3);
 
     lua_settable(L, -3);  // mask_nodes -> subtable/array
@@ -1825,7 +1828,7 @@ push_rdx_mask_head(lua_State *L, struct radix_mask_head *rmh)
 }
 
 static int
-push_rdx_mask(lua_State *L, struct radix_mask *rm)
+iptL_push_rm(lua_State *L, struct radix_mask *rm)
 {
     // create table and populate its fields for rn
     dbg_stack("inc(.) <--");
@@ -1833,35 +1836,34 @@ push_rdx_mask(lua_State *L, struct radix_mask *rm)
     char key[MAX_STRKEY];
 
     lua_newtable(L);
-    iptT_push_fstr(L, "_MEM_", "%p", rm);
-    iptT_push_int(L, "_TYPE_", TRDX_MASK);
-    iptT_push_fstr(L, "_NAME_", "%s", "RADIX_MASK");
+    iptT_set_fstr(L, "_MEM_", "%p", rm);
+    iptT_set_int(L, "_TYPE_", TRDX_MASK);
+    iptT_set_fstr(L, "_NAME_", "%s", "RADIX_MASK");
 
-    iptT_push_int(L, "rm_bit", rm->rm_bit);
-    iptT_push_int(L, "rm_unused", rm->rm_unused);
-    iptT_push_int(L, "rm_flags", rm->rm_flags);
+    iptT_set_int(L, "rm_bit", rm->rm_bit);
+    iptT_set_int(L, "rm_unused", rm->rm_unused);
+    iptT_set_int(L, "rm_flags", rm->rm_flags);
 
     // set _RNF_FLAGs_
-    if (rm->rm_flags & RNF_NORMAL) iptT_push_int(L, "_NORMAL_", 1);
-    if (rm->rm_flags & RNF_ROOT)   iptT_push_int(L, "_ROOT_", 1);
-    if (rm->rm_flags & RNF_ACTIVE) iptT_push_int(L, "_ACTIVE_", 1);
+    if (rm->rm_flags & RNF_NORMAL) iptT_set_int(L, "_NORMAL_", 1);
+    if (rm->rm_flags & RNF_ROOT)   iptT_set_int(L, "_ROOT_", 1);
+    if (rm->rm_flags & RNF_ACTIVE) iptT_set_int(L, "_ACTIVE_", 1);
 
-    iptT_push_fstr(L, "rm_mklist", "%p", rm->rm_mklist);
-    iptT_push_int(L, "rm_refs", rm->rm_refs);
+    iptT_set_fstr(L, "rm_mklist", "%p", rm->rm_mklist);
+    iptT_set_int(L, "rm_refs", rm->rm_refs);
 
     if (rm->rm_flags & RNF_NORMAL) {
       // NOTE: if its a NORMAL 'radix_mask' then union -> rm_leaf else rm_mask
       // - see radix.c:377 and and radix.c:773
-      iptT_push_int(L, "_LEAF_", 1);
-      iptT_push_fstr(L, "rm_leaf", "%p", rm->rm_leaf);
+      iptT_set_int(L, "_LEAF_", 1);
+      iptT_set_fstr(L, "rm_leaf", "%p", rm->rm_leaf);
 
     } else {
-      iptT_push_int(L, "_INTERNAL_", 1);
-      iptT_push_fstr(L, "rm_mask", "%s", key_tostr(key, rm->rm_mask));
+      iptT_set_int(L, "_INTERNAL_", 1);
+      iptT_set_fstr(L, "rm_mask", "%s", key_tostr(key, rm->rm_mask));
     }
 
     dbg_stack("out(1) ==>");
 
     return 1;
 }
-
