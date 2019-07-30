@@ -19,7 +19,7 @@ test_key_cmp_ipv4_good(void)
     uint8_t *a = malloc(5*sizeof(uint8_t));
     uint8_t *b = malloc(5*sizeof(uint8_t));
 
-    *a = *b = 1 + IP4_KEYLEN;
+    *a = *b = IP4_KEYLEN;
 
     // a == b
     *(a+1) = *(b+1) = 0xff;
@@ -34,7 +34,7 @@ test_key_cmp_ipv4_good(void)
     mu_true(key_cmp(b, a) == 1);
 
     // now ignore last byte
-    *a = *b = IP4_KEYLEN;
+    *a = *b = IP4_KEYLEN - 1;
     mu_true(key_cmp(a, b) == 0);
 
 
@@ -60,14 +60,14 @@ test_key_cmp_ipv4_bad(void)
     uint8_t *b = malloc(5*sizeof(uint8_t));
 
     // init key memory
-    *a = *b = 1 + IP4_KEYLEN;
+    *a = *b = IP4_KEYLEN;
     *(a+1) = *(b+1) = 0xff;
     *(a+2) = *(b+2) = 0xff;
     *(a+3) = *(b+3) = 0xff;
     *(a+4) = *(b+4) = 0xff;
 
     // different keylengths should yield error
-    *a = IP4_KEYLEN;
+    *a = IP4_KEYLEN-1;
     mu_true(key_cmp(a, b) == -2);
 
     // a NULL ptr also yields an error

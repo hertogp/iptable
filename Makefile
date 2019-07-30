@@ -50,6 +50,8 @@ DEPS=$(FILES:%.c=$(BLDDIR)/%.d)
 SRCS=$(FILES:%.c=$(SRCDIR)/%.c)
 OBJS=$(FILES:%.c=$(BLDDIR)/%.o)
 COBJS=$(filter-out $(lastword $(OBJS)), $(OBJS))
+DOCSRC=$(filter-out %radix.c, $(SRCS))
+DOCS=$(DOCSRC:$(SRCDIR)/%.c=$(DOCDIR)/%.md)
 
 # Flags
 CFLAGS=  -std=gnu99
@@ -83,7 +85,6 @@ endif
 
 # Lua library (default target)
 $(TARGET): $(OBJS) $(DEPS)
-	@echo "Build TARGET $(TARGET)"
 	$(CC) $(LIBFLAG) $(LFLAGS) $(OBJS) -o $(TARGET)
 
 # https://www.gnu.org/software/make/manual/html_node/Target_002dspecific.html
@@ -93,7 +94,6 @@ debug DEBUG: clean $(TARGET)
 
 # C libary
 $(CTARGET): $(COBJS)
-	@echo "Build CTARGET $(CTARGET)"
 	$(CC) $(LIBFLAG) $(LFLAGS) $(SOFLAG) $(COBJS) -o $(CTARGET).$(VERSION)
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so.$(MAJOR)
@@ -103,14 +103,12 @@ $(BLDDIR):
 
 # object files
 $(BLDDIR)/%.o: $(SRCDIR)/%.c
-	@echo "BLDDIR OBJ FILES"
 	$(CC) $(CFLAGS) -I$(SRCDIR) -c $< -o $@
 
 # dependency files .d
 # - built first before others, hence the only one made dependent on 
 #   the existence of $BLDDIR
 $(BLDDIR)/%.d: $(SRCDIR)/%.c | $(BLDDIR)
-	@echo "Build dependency file for $<"
 	$(CC) -I$(SRCDIR) -MM -MQ$(BLDDIR)/$*.o -MF $@ $<
 
 # make install -or- luarocks install iptable
@@ -152,7 +150,17 @@ c_test: $(CTARGET) $(MU_RUNNERS)
 	@$(foreach runner, $(MU_RUNNERS), $(VGRIND) $(VOPTS) ./$(runner);)
 	@echo "\n--- done ---\n\n"
 
-# # run a single unit test
+# generate API documentation from code comments
+POPTS=+lists_without_preceding_blankline
+
+$(DOCS): $(DOCDIR)/%.md: $(SRCDIR)/%.c $(SRCDIR)/%.h
+	grep -E "^(/\*| \*)" $(SRCDIR)/$*.h| cut --bytes=4- > $(DOCDIR)/$*.md
+	grep -E "^(/\*| \*)" $(SRCDIR)/$*.c| cut --bytes=4- >> $(DOCDIR)/$*.md
+	pandoc -f markdown$(POPTS) $(DOCDIR)/$*.md -o $(DOCDIR)/$*.pdf
+
+doc: $(DOCSRC:$(SRCDIR)%.c=$(DOCDIR)%.md)
+
+# run a single unit test
 $(MU_TARGETS): %: $(BLDDIR)/%.out
 	@echo "@ $@"
 	@echo "* $*"
@@ -162,17 +170,14 @@ $(MU_TARGETS): %: $(BLDDIR)/%.out
 
 # build a unit test's mu-header
 $(MU_HEADERS): $(BLDDIR)/%.h: $(TSTDIR)/%.c
-	@echo "Build mu header file for $<"
 	$(SRCDIR)/mu_header.sh $< $@
 
 # build a unit test's obj file
 $(MU_OBJECTS): $(BLDDIR)/%.o: $(TSTDIR)/%.c $(BLDDIR)/%.h $(SRCDIR)/minunit.h
-	@echo "Build unit test obj file $@"
 	$(CC) -I$(BLDDIR) -I$(SRCDIR) $(CFLAGS) -o $@ -c $<
 
 # build a unit test runner
 $(MU_RUNNERS): $(BLDDIR)/%.out: $(BLDDIR)/%.o $(BLDDIR)/lib$(LIB).so
-	@echo "Build unit test runner $@"
 	$(CC) -L$(BLDDIR) -Wl,-rpath,.:$(BLDDIR) $< -o $@ -l$(LIB)
 
 
@@ -189,6 +194,8 @@ echo:
 	@echo "SRCS        = $(SRCS)"
 	@echo "OBJS        = $(OBJS)"
 	@echo "DEPS        = $(DEPS)"
+	@echo "DOCSRC      = $(DOCSRC)"
+	@echo "DOCS        = $(DOCS)"
 	@echo
 	@echo "CTARGET     = $(CTARGET)"
 	@echo "COBJS       = $(COBJS)"
@@ -227,7 +234,7 @@ echo:
 	@echo "$(MU_OBJECTS)"
 	@echo "$(MU_RUNNERS)"
 
-# BSD sources - update (runs unconditionally)
+# (always) update the BSD sources
 bsd:
 	@wget -N -P $(DOCDIR)/$@ -i $(D_DOC)/$@.urls
 	@ls -lpah $(DOCDIR)/$@

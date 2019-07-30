@@ -20,7 +20,7 @@ test_key_masked_ipv4_good(void)
     uint8_t *m = malloc(5*sizeof(uint8_t));
 
     // init key memory
-    *a = *m = 1 + IP4_KEYLEN;
+    *a = *m = IP4_KEYLEN;
 
     // mask last byte
     *(a+1) = *(m+1) = 0xff;

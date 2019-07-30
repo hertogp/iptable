@@ -5,6 +5,7 @@ his/
 tmp/
 scr/
 img/
+doc/*.md
 _todo.md
 _notes.c
 

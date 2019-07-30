@@ -28,7 +28,7 @@ test_key_isin_simple(void)
     * Test simple matches
     */
 
-    uint8_t a[IP4_KEYLEN+1], b[IP4_KEYLEN+1], m[IP4_KEYLEN+1];
+    uint8_t a[IP4_KEYLEN], b[IP4_KEYLEN], m[IP4_KEYLEN];
 
     a[0] = b[0] = m[0] = 0x05;  /* LEN byte */
     a[1] = b[1] = m[1] = 0x00;
@@ -121,7 +121,7 @@ test_key_isin_lenbyte(void)
    * test LEN byte behaviour
    */
 
-    uint8_t a[IP4_KEYLEN+1], b[IP4_KEYLEN+1], m[IP4_KEYLEN+1];
+    uint8_t a[IP4_KEYLEN], b[IP4_KEYLEN], m[IP4_KEYLEN];
 
     a[0] = 0x00; b[0] = m[0] = 0x05;  /* LEN byte */
 
@@ -138,7 +138,7 @@ test_key_isin_lenbyte(void)
 void
 test_key_isin_masks(void)
 {
-    uint8_t a[IP4_KEYLEN+1], b[IP4_KEYLEN+1], m[IP4_KEYLEN+1];
+    uint8_t a[IP4_KEYLEN], b[IP4_KEYLEN], m[IP4_KEYLEN];
 
     a[0] = b[0] = m[0] = 0x05;  /* LEN byte */
     a[1] = b[1] = 0x01;

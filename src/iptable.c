@@ -1,6 +1,9 @@
+/* # iptable.c
+ */
+
 #include <stdio.h>        // printf
 #include <sys/types.h>    // u_char
-/* #include <sys/socket.h> */
+// #include <sys/socket.h>
 #include <stddef.h>       // offsetof
 #include <stdlib.h>       // malloc / calloc
 // #include <netinet/in.h>   // sockaddr_in
@@ -11,19 +14,43 @@
 #include "radix.h"
 #include "iptable.h"
 
-/* static char rn_zeros[RDX_MAX_KEYLEN]; */
+/*
+ *
+ * ### `max_mask`
+ *
+ * ```c
+ *  uint8_t max_mask[RDX_MAX_KEYLEN] = {-1, .., -1};
+ *  ```
+ *
+ * `max_mask` serves as an AF family's default mask in case one is needed, but
+ * not supplied.  Thus missing masks are interpreted as host masks.
+ *
+ */
 
-/* all_ones used as max mask in cases where none was supplied */
-uint8_t  all_ones[RDX_MAX_KEYLEN] = {
+uint8_t  max_mask[RDX_MAX_KEYLEN] = {
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1,
 };
 
+/*
+ * ## Key functions
+ *
+ */
 
-
-// -- helpers - KEY functions
+/*
+ * ### `key_alloc`
+ * ```c
+ *   uint8_t *key_alloc(int af);
+ * ```
+ *
+ * Allocate space for a binary key of AF family type `af` and return its
+ * pointer.  Supported `af` types include:
+ * - `AF_INET`, for ipv4 protocol family
+ * - `AF_INET6`, for the ipv6 protocol family
+ *
+ */
 
 uint8_t *
 key_alloc(int af)
@@ -31,9 +58,9 @@ key_alloc(int af)
     uint8_t *key = NULL, keylen = 0;
 
     if (af == AF_INET)
-        keylen = 1 + IP4_KEYLEN;               // 5
+        keylen = IP4_KEYLEN;
     else if (af == AF_INET6)
-        keylen = 1 + IP6_KEYLEN;               // 17
+        keylen = IP6_KEYLEN;
     else return NULL;                          // unknown AF family
 
     key = calloc(sizeof(uint8_t), keylen);     // zero initialized
@@ -41,6 +68,17 @@ key_alloc(int af)
 
     return key;
 }
+
+/*
+ * ### `key_copy`
+ * ```c
+ *    uint8_t *key_copy(uint8_t *src);
+ * ```
+ * Copies binary key `src` into newly allocated space and returns its pointer.
+ * The src key must have a valid first length byte.
+ * $0 <= KEY\_LEN(src) <= MAX\_KEYLEN$.  Returns
+ * `NULL` on failure.
+ */
 
 uint8_t *
 key_copy(uint8_t *src)
@@ -53,12 +91,19 @@ key_copy(uint8_t *src)
     return key;
 }
 
+/*
+ * ### `key_bystr`
+ * ```c
+ *    uint8_t *key_bystr(uint8_t *dst, int *mlen, int *af, const char *s);
+ * ```
+ * Store string s' binary key in dst. Returns NULL on failure.  Also sets mlen
+ * and  af. mlen=-1 when no mask was supplied.  Assumes dst size MAX_BINKEY,
+ * which fits both ipv4/ipv6.
+ */
+
 uint8_t *
 key_bystr(uint8_t *dst, int *mlen, int *af, const char *s)
 {
-    // Store string s' binary key in dst. Returns NULL on failure
-    // Also sets mlen and  af. mlen=-1 when no mask was supplied
-    // Assumes dst size MAX_BINKEY, which fits both ipv4/ipv6
 
     *mlen = -1;                                   // the mask as length
     *af = AF_UNSPEC;
@@ -85,7 +130,7 @@ key_bystr(uint8_t *dst, int *mlen, int *af, const char *s)
         if (*mlen > IP6_MAXMASK) return NULL;
         strncpy(buf, s, INET6_ADDRSTRLEN);
         if(slash) buf[slash - s]='\0';
-        IPT_KEYLEN(dst) = FAM_KEYLEN(AF_INET6);
+        IPT_KEYLEN(dst) = KEY_LEN_FAM(AF_INET6);
         inet_pton(AF_INET6, buf, IPT_KEYPTR(dst));
         *af = AF_INET6;
         return dst;
@@ -108,7 +153,7 @@ key_bystr(uint8_t *dst, int *mlen, int *af, const char *s)
         if(c < 0 || c > 255) return NULL;
         if(d < 0 || d > 255) return NULL;
 
-        IPT_KEYLEN(dst) = FAM_KEYLEN(AF_INET);
+        IPT_KEYLEN(dst) = KEY_LEN_FAM(AF_INET);
         *(dst+1) = a;  // bigendian, so 'a' goes first
         *(dst+2) = b;
         *(dst+3) = c;
@@ -119,6 +164,12 @@ key_bystr(uint8_t *dst, int *mlen, int *af, const char *s)
 
     return NULL;  // failed
 }
+
+/* ### `key_bylen`
+ * ```c
+ *   uint8_t *key_bylen(uint8_t *binkey, int mlen, int af);
+ * ```
+ */
 
 uint8_t *
 key_bylen(uint8_t *binkey, int mlen, int af)
@@ -132,11 +183,11 @@ key_bylen(uint8_t *binkey, int mlen, int af)
     if(af == AF_INET6) {
         mlen = mlen == -1 ? IP6_MAXMASK : mlen;
         if (mlen < 0 || mlen > IP6_MAXMASK) return NULL;
-        keylen = 1 + IP6_KEYLEN;
+        keylen = IP6_KEYLEN;
     } else if (af == AF_INET) {
         mlen = mlen == -1 ? IP4_MAXMASK : mlen;
         if (mlen < 0 || mlen > IP4_MAXMASK) return NULL;
-        keylen = 1 + IP4_KEYLEN;
+        keylen = IP4_KEYLEN;
     } else return NULL;
 
     IPT_KEYLEN(binkey) = keylen;
@@ -149,8 +200,10 @@ key_bylen(uint8_t *binkey, int mlen, int af)
     return binkey;
 }
 
-/* int key_bypair(a, b, m)
- *
+/* ### `key_bypair`
+ * ```c
+ *   uint8_t * key_bypair(uint8_t *a, const void *b, const void *m);
+ * ```
  * Set key a such that a/m and b/m are a pair that fit in key/m-1.
  * Assumes masks are contiguous.
  */
@@ -183,6 +236,13 @@ key_bypair(uint8_t *a, const void *b, const void *m)
     return a;
 }
 
+/* ### `key_tolen`
+ * ```c
+ *   int key_tolen(void *key);
+ * ```
+ * Count the number of consequtive 1-bits, starting with the msb first.
+ */
+
 int key_tolen(void *key)
 {
     // counts the nr of consequtive 1-bits starting with the MSB first.
@@ -211,6 +271,11 @@ int key_tolen(void *key)
     return cnt;
 }
 
+/* ### `key_tostr`
+ * ```c
+ *   const char *key_tostr(char *dst, void *src);
+ * ```
+ */
 const char *
 key_tostr(char *dst, void *src)
 {
@@ -225,11 +290,17 @@ key_tostr(char *dst, void *src)
 
     if (dst == NULL || src == NULL) return NULL;
 
-    if(IPT_KEYLEN(key) > IP4_KEYLEN+1)
+    if(IPT_KEYLEN(key) > IP4_KEYLEN)
         return inet_ntop(AF_INET6, IPT_KEYPTR(key), dst, INET6_ADDRSTRLEN);
 
     return inet_ntop(AF_INET, IPT_KEYPTR(key), dst, INET_ADDRSTRLEN);
 }
+
+/* ### `key_incr`
+ * ```c
+ *   int key_incr(void *key);
+ * ```
+ */
 
 int
 key_incr(void *key)
@@ -247,6 +318,12 @@ key_incr(void *key)
     return 1;
 }
 
+/* ### `key_decr`
+ * ```c
+ *   int key_decr(void *key);
+ * ```
+ */
+
 int
 key_decr(void *key)
 {
@@ -261,12 +338,12 @@ key_decr(void *key)
     return 1;
 }
 
-/*
- * key_invert()
- *
+/* ###`key_invert`
+ * ```c
+ *   int key_invert(void *key);
+ * ```
  * inverts a key, usefull for a mask.  Assumes the LEN-byte indicates how many
  * bytes must be (and can be safely) inverted.
- *
  */
 
 int
@@ -283,6 +360,12 @@ key_invert(void *key)
 
   return 1;
 }
+
+/* ### `key_network`
+ * ```c
+ *   int key_network(void *key, void *mask);
+ * ```
+ */
 
 int
 key_network(void *key, void *mask)
@@ -309,9 +392,11 @@ key_network(void *key, void *mask)
     return 1;
 }
 
-/*
- * key_broadcast() - set key to broadcast address, using mask
- *
+/* ### `key_broadcast`
+ * ```c
+ *   int key_broadcast(void *key, void *mask);
+ * ```
+ * set key to broadcast address, using mask
  * - 1 on success, 0 on failure
  * - mask LEN <= key LEN, 'missing' mask bytes are taken to be 0x00
  *   (a radix tree artifact).
@@ -340,10 +425,16 @@ key_broadcast(void *key, void *mask)
     return 1;
 }
 
+/* ### `key_cmp`
+ * ```c
+ *   int key_cmp(void *a, void *b);
+ * ```
+ * Returns -1 if a<b, 0 if a==b, 1 if a>b; or -2 on errors
+ */
+
 int
 key_cmp(void *a, void *b)
 {
-    // -1 if a<b, 0 if a==b, 1 if a>b, -2 on errors
     uint8_t keylen, *aa = a, *bb = b;
 
     if (aa == NULL || bb == NULL) return -2;       // need real keys
@@ -359,7 +450,10 @@ key_cmp(void *a, void *b)
     return 0;
 }
 
-/* key_isin(a, b, m)
+/* ### `key_isin`
+ * ```c
+ *   int key_isin(void *a, void *b, void *m);
+ * ```
  * return 1 iff a/m includes b, 0 otherwise
  * note:
  * - also means b/m includes a
@@ -378,7 +472,7 @@ key_isin(void *a, void *b, void *m)
     // if((matchlen = IPT_KEYLEN(aa)) != IPT_KEYLEN(bb)) return 0;
     matchlen = min(IPT_KEYLEN(aa), IPT_KEYLEN(bb));
     matchlen = mm ? min(matchlen, IPT_KEYLEN(mm)) : matchlen;
-    mm = mm ? mm+1 : all_ones;
+    mm = mm ? mm+1 : max_mask;
 
     aa++; bb++;
     for (; --matchlen > 0; aa++, bb++, mm++)
@@ -387,8 +481,16 @@ key_isin(void *a, void *b, void *m)
     return 1;
 }
 
+/* ## radix node functions
+ */
 
-// radix node functions
+/* ### _dumprn`
+ * ```c
+ *   void _dumprn(const char *s, struct radix_node *rn);
+ * ```
+ * dump radix node characteristics to stderr
+ */
+
 void _dumprn(const char *s, struct radix_node *rn)
 {
     char dbuf[MAX_STRKEY];
@@ -408,8 +510,11 @@ void _dumprn(const char *s, struct radix_node *rn)
     fprintf(stderr, "\n");
 }
 
-/*
- * rdx_flush() - free user controlled resources.
+/* ### `rdx_flush`
+ * ```c
+ *   int rdx_flush(struct radix_node *rn, void *args);
+ * ```
+ * free user controlled resources.
  *
  * Called by walktree, rdx_flush:
  * - frees the key and, if applicable,
@@ -419,7 +524,6 @@ void _dumprn(const char *s, struct radix_node *rn)
  * Note: rdx_flush is called from walktree and only on _LEAF_ nodes, so the rn
  * pointer is cast to pointer to entry_t.  As a walktree_f_t, it always returns
  * the value 0 to indicate success, otherwise the walkabout would stop.
- *
  */
 
 int
@@ -445,20 +549,6 @@ rdx_flush(struct radix_node *rn, void *args)
     free(entry->rn[0].rn_key);
     /* entry->rn[0].rn_key = NULL; */
 
-    /* /1* entry's leaf node - NULLify any pointers *1/ */
-    /* rn->rn_parent = NULL; */
-    /* rn->rn_mklist = NULL; */
-    /* rn->rn_flags = 0; */
-    /* rn->rn_mask = NULL; */
-    /* rn->rn_dupedkey = NULL; */
-
-    /* /1* entry's internal node - NULLify any pointers *1/ */
-    /* rn = &entry->rn[1]; */
-    /* rn->rn_parent = NULL; */
-    /* rn->rn_mklist = NULL; */
-    /* rn->rn_left = NULL; */
-    /* rn->rn_right = NULL; */
-
     if (entry->value != NULL && arg->purge != NULL)
         arg->purge(arg->args, &entry->value);
 
@@ -467,13 +557,15 @@ rdx_flush(struct radix_node *rn, void *args)
     return 0;
 }
 
-/*
+/* ### `rdx_firstleaf`
+ * ```c
+ *   struct radix_node *rdx_firstleaf(struct radix_head *rh);
+ * ```
  * Find first non-ROOT leaf of in the prefix or mask tree
  * Return NULL if none found.
  *
  * Note: the /0 mask is never stored in the mask tree even if stored explicitly
  * using prefix/0.  Hence, the /0 mask won't be found by this function.
- *
  */
 
 struct radix_node *
@@ -505,7 +597,11 @@ rdx_firstleaf(struct radix_head *rh)
 
     return rn;
 }
-/*
+
+/* ### `rdx_nxtleaf`
+ * ```c
+ *   struct radix_node *rdx_nextleaf(struct radix_node *rn);
+ * ```
  * Given a radix_node (INTERNAL or LEAF), find the next leaf in the tree. Note
  * that the caller must check the IPTF_DELETE flag herself.  Reason is to allow
  * upper logic to be performed across both deleted and normal leafs, such as
@@ -551,7 +647,7 @@ rdx_nextleaf(struct radix_node *rn)
         rn = rn->rn_parent;
 
     /* go up while rn is a right child */
-    while(!RDX_ISLEAF(rn->rn_parent) && RDX_ISRIGHT_CHILD(rn))
+    while(!RDX_ISLEAF(rn->rn_parent) && RDX_ISRCHILD(rn))
         rn = rn->rn_parent;
 
     /* go up&right, then straight left */
@@ -565,9 +661,10 @@ rdx_nextleaf(struct radix_node *rn)
     return rn;
 }
 
-/*
- * pairleaf(rn)
- *
+/* ### `pairleaf`
+ * ```c
+ *   struct radix_node *pairleaf(struct radix_node *oth);
+ * ```
  * Find and return the leaf whose key forms a pair with the given leaf
  * node such that both fit in an enclosing supernet with the given leaf's
  * masklength-1.
@@ -619,7 +716,10 @@ rdx_pairleaf(struct radix_node *oth) {
     return rn;
 }
 
-/*
+/* ### `rdx_firstnode`
+ * ```c
+ *   int rdx_firstnode(table_t *t, int af_fam);
+ * ```
  * initialize the stack with the radix head nodes
  */
 
@@ -639,13 +739,18 @@ rdx_firstnode(table_t *t, int af_fam)
     return 1;
 }
 
+/* ### `rdx_nextnode`
+ * ```c
+ *   int rdx_nextnode(table_t *t, int *type, void **ptr);
+ * ```
+ * pop top and set type & node, push its progeny
+ * - stackpush will ignore NULL pointers, so its safe to push those
+ * return 1 on success with type,ptr set
+ * return 0 on failure (eg stack exhausted or unknown type)
+ */
 int
 rdx_nextnode(table_t *t, int *type, void **ptr)
 {
-    // pop top and set type & node, push its progeny
-    // - stackpush will ignore NULL pointers, so its safe to push those
-    // return 1 on success with type,ptr set
-    // return 0 on failure (eg stack exhausted or unknown type)
 
     *ptr = NULL;
     *type = TRDX_NONE;
@@ -721,14 +826,19 @@ rdx_nextnode(table_t *t, int *type, void **ptr)
     return 1;
 }
 
-/*
- * tbl functions
+/* ## table functions
+ */
+
+/* ### `tbl_create`
+ * ```c
+ *   table_t *tbl_create(purge_f_t *fp):
+ * ```
+ * Create a new iptable with 2 radix trees.
  */
 
 table_t *
 tbl_create(purge_f_t *fp)
 {
-    /* create a new iptable with 2 radix trees */
     table_t *tbl = NULL;
 
     /* calloc so all ptrs & counters are set to NULL/zero */
@@ -750,10 +860,15 @@ tbl_create(purge_f_t *fp)
     return tbl;
 }
 
+/* ### `tbl_walk`
+ * ```c
+ *   int tbl_walk(table_t *t, walktree_f_t *f, void *fargs);
+ * ```
+ * run f(args, leaf) on leafs in IPv4 tree and IPv6 tree
+ */
 int
 tbl_walk(table_t *t, walktree_f_t *f, void *fargs)
 {
-    /* run f(args, leaf) on leafs in IPv4 tree and IPv6 tree */
     if (t == NULL) return 0;
     t->head4->rnh_walktree(&t->head4->rh, f, fargs);
     t->head6->rnh_walktree(&t->head6->rh, f, fargs);
@@ -761,11 +876,14 @@ tbl_walk(table_t *t, walktree_f_t *f, void *fargs)
    return 1;
 }
 
-/*
+/* ### `tbl_destroy`
+ * ```c
+ *   int tbl_destroy(table_t **t, void *pargs);
+ * ```
  * Destroy table, free all resources owned by table and user
  * - return 1 on success, 0 on failure
- *
  */
+
 int
 tbl_destroy(table_t **t, void *pargs)
 {
@@ -807,7 +925,10 @@ tbl_destroy(table_t **t, void *pargs)
     return 1;
 }
 
-/*
+/* ### `tbl_get`
+ * ```c
+ *   entry_t *tbl_get(table_t *t, const char *s);
+ * ```
  * Get an exact match for addr/mask prefix.
  */
 
@@ -841,6 +962,12 @@ tbl_get(table_t *t, const char *s)
 
     return e;
 }
+
+/* ### `tbl_set`
+ * ```c
+ *   int tbl_set(table_t *t, const char *s, void *v, void *pargs);
+ * ```
+ */
 
 int
 tbl_set(table_t *t, const char *s, void *v, void *pargs)
@@ -901,6 +1028,12 @@ tbl_set(table_t *t, const char *s, void *v, void *pargs)
     return 1;
 }
 
+/* ### `tbl_del`
+ * ```c
+ *   int tbl_del(table_t *t, const char *s, void *pargs);
+ * ```
+ */
+
 int
 tbl_del(table_t *t, const char *s, void *pargs)
 {
@@ -944,6 +1077,12 @@ tbl_del(table_t *t, const char *s, void *pargs)
     return 1;
 }
 
+/* ### `tbl_lpm`
+ * ```c
+ *   entry_t *tbl_lpm(table_t *t, const char *s);
+ * ```
+ */
+
 entry_t *
 tbl_lpm(table_t *t, const char *s)
 {
@@ -973,7 +1112,10 @@ tbl_lpm(table_t *t, const char *s)
     return e;
 }
 
-/*
+/* ### `tbl_lsm`
+ * ```c
+ *   struct radix_node *tbl_lsm(struct radix_node *rn);
+ * ```
  * Given a leaf, find a less specific leaf or fail
  * - used by tbl_lpm in case the match is flagged for deletion
  */
@@ -1036,6 +1178,11 @@ tbl_lsm(struct radix_node *rn)
     return NULL;
 }
 
+/* ### `tbl_stackpush`
+ * ```c
+ *   int tbl_stackpush(table_t *t, int type, void *elm);
+ * ```
+ */
 
 int
 tbl_stackpush(table_t *t, int type, void *elm)
@@ -1058,6 +1205,12 @@ tbl_stackpush(table_t *t, int type, void *elm)
 
     return 1;
 }
+
+/* ### `tbl_stackpop`
+ * ```c
+ *   int tbl_stackpop(table_t *t);
+ * ```
+ */
 
 int
 tbl_stackpop(table_t *t)

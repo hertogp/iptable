@@ -18,7 +18,7 @@ test_key_incr_ipv4_good(void)
 {
     uint8_t *addr = malloc(5 * sizeof(uint8_t));
 
-    *addr = IP4_KEYLEN + 1;  // i.e. 5
+    *addr = IP4_KEYLEN;  // set LEN byte of byte array
 
     // incr 0.0.0.0
     *(addr+1) = 0x00;

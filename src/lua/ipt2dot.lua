@@ -1,4 +1,3 @@
---
 ------------------------------------------------------------------------------
 --         File:  ipt2dot.lua
 --
@@ -6,17 +5,7 @@
 --
 --  Description:  convert iptable radix tree to graphviz code
 --
---      Options:  ---
--- Requirements:  ---
---         Bugs:  ---
---        Notes:  ---
---       Author:  YOUR NAME (), <>
--- Organization:  
---      Version:  1.0
---      Created:  22-06-19
---     Revision:  ---
 ------------------------------------------------------------------------------
---
 
 local F = assert(string.format)
 
@@ -95,7 +84,7 @@ local function th_bgcolor(node)
     RADIX_MASK = "coral",
 
     -- color by flag/state
-    _DELETE_ = "cyan",
+    _DELETE_ = "red",
 
     -- color by 'kind'
     RADIX_NODE_ROOT = "yellow",         -- flags are not mutually exclusive

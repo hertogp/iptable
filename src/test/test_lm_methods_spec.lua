@@ -247,10 +247,10 @@ describe("ipt:radixes(AF) ", function()
 
       for node in ipt:radixes("AF_INET6") do
         -- all tables/nodes have type & address 
-        assert.is_truthy(node._TYPE_);
+        assert.is_truthy(node._NAME_);
         assert.is_truthy(node._MEM_);
         -- check fields based on node type
-        if (node._TYPE_ == iptable.RDX_NODE_HEAD) then
+        if (node._NAME_ == "RADIX_NODE_HEAD") then
           -- NOTE: the function ptr values are skipped
           assert.is_truthy(node.rh);
           assert.is_truthy(node.rnh_nodes);
@@ -259,7 +259,7 @@ describe("ipt:radixes(AF) ", function()
           -- superficial check on subtables for radix nodes
           for idx, radix in ipairs(node.rnh_nodes) do
             -- each (sub)table/struct has a type & mem address
-            assert.is_equal(radix._TYPE_, iptable.RDX_NODE);
+            assert.is_equal(radix._NAME_, "RADIX_NODE");
             assert.is_truthy(radix._MEM_);
             assert.is_truthy(radix._ROOT_);
             if (idx == 2) then
@@ -270,11 +270,11 @@ describe("ipt:radixes(AF) ", function()
 
           end
 
-        elseif (node._TYPE_ == iptable.RDX_HEAD) then
+        elseif (node._NAME_ == "RADIX_HEAD") then
           assert.is_truthy(node.rnh_treetop);
           assert.is_truthy(node.rnh_masks);
 
-        elseif (node._TYPE_ == iptable.RDX_NODE) then
+        elseif (node._NAME_ == "RADIX_NODE") then
           assert.is_truthy(node.rn_mklist);
           assert.is_truthy(node.rn_parent);
           assert.is_truthy(node.rn_bit);
@@ -292,7 +292,7 @@ describe("ipt:radixes(AF) ", function()
             assert.False("radix node neither LEAF nor INTERNAL?");
           end
 
-        elseif (node._TYPE_ == iptable.RDX_MASK_HEAD) then
+        elseif (node._NAME_ == "RADIX_MASK_HEAD") then
           assert.is_truthy(node.head);
           assert.is_truthy(node.mask_nodes);
           assert.is_equal(3, #node.mask_nodes);
@@ -300,7 +300,7 @@ describe("ipt:radixes(AF) ", function()
           -- superficial check on subtables of radix nodes
           for idx, radix in ipairs(node.mask_nodes) do
             -- each (sub)table/struct has a type & mem address
-            assert.is_equal(radix._TYPE_, iptable.RDX_NODE);
+            assert.is_equal(radix._NAME_, "RADIX_NODE");
             assert.is_truthy(radix._MEM_);
             assert.is_truthy(radix._ROOT_);
             if (idx == 2) then
@@ -310,7 +310,7 @@ describe("ipt:radixes(AF) ", function()
             end
           end
 
-        elseif (node._TYPE_ == iptable.RDX_MASK) then
+        elseif (node._NAME_ == "RADIX_MASK") then
           assert.is_truthy(node.rm_bit);
           assert.is_truthy(node.rm_unused);  -- yes, its there as well
           assert.is_truthy(node.rm_mklist);
@@ -321,7 +321,7 @@ describe("ipt:radixes(AF) ", function()
           end
           -- assert.is_truthy(node.rm_refs);
         else
-          mu_false("unexpected radix node type");
+          assert.False(F("unexpected radix node name %q", node._NAME_));
         end
       end
 

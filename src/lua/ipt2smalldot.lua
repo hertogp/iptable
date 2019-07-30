@@ -26,6 +26,7 @@ local function t_flags(t)
   -- string radix node flags together
   if (type(t) ~= "table") then return nil end
   local tag = t._ROOT_ and "R" or ""
+  tag = t._DELETE_ and tag.."D" or tag
   tag = t._NORMAL_ and tag.."N" or tag
   tag = t._ACTIVE_ and tag.."A" or tag
   return tag
@@ -96,11 +97,12 @@ end
 
 local M = {} -- the module
 
-function dotify(ipt, title, ...)
+function dotify(ipt, af_fam)
   local lines = {}
   local graph = {   -- collector for graph info
-    nodes = {},
+    masks = masks,
     edges = {},
+    nodes = {},
   }
 
   -- start the graph
@@ -111,9 +113,9 @@ function dotify(ipt, title, ...)
   lines[#lines+1] = F("  ranksep=%q;", "1.0 equally")
 
   -- collect all RADIX node types of AF_families given (...)
-  for radix in ipt:radixes(...) do
+  for radix in ipt:radixes(af_fam) do
     -- skip the radix tree stuff
-    if radix._NAME_ == "RADIX_MASK_HEAD" then break end
+    -- if radix._NAME_ == "RADIX_MASK_HEAD" then break end
     tbl2dot(graph, radix)
   end
 

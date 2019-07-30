@@ -34,13 +34,13 @@ test_key_alloc_good(void)
 
     // keys are allocated with appropiate LEN byte set (total array length)
     key = key_alloc(AF_INET);
-    mu_eq(1 + IP4_KEYLEN, IPT_KEYLEN(key), "%d");
+    mu_eq(IP4_KEYLEN, IPT_KEYLEN(key), "%d");
     mu_eq(AF_INET, KEY_AF_FAM(key), "%d");   // same test
     mu_true(KEY_IS_IP4(key));                // same test
     free(key);
 
     key = key_alloc(AF_INET6);
-    mu_eq(1 + IP6_KEYLEN, IPT_KEYLEN(key), "%d");
+    mu_eq(IP6_KEYLEN, IPT_KEYLEN(key), "%d");
     mu_eq(AF_INET6, KEY_AF_FAM(key), "%d");  // same test
     mu_true(KEY_IS_IP6(key));                // same test
     free(key);

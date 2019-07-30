@@ -22,7 +22,7 @@ test_key_tolen_good(void)
     // - all tests set *bytes*, so network byte order is ensured
 
     // set IPv4 addr keylen
-    *addr = 1 + IP4_KEYLEN;
+    *addr = IP4_KEYLEN;
 
     // len 0
     *(addr+1) = 0x00;

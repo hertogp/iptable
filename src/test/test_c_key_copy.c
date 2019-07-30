@@ -63,7 +63,7 @@ test_key_copy_good(void)
     free(key);
 
     // some random bytes - ipv6
-    IPT_KEYLEN(src) = 1 + IP6_KEYLEN;
+    IPT_KEYLEN(src) = IP6_KEYLEN;
     for(int i=0; i < MAX_BINKEY; i++)
         *(src+i) = 0x00;
 
