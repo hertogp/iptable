@@ -28,6 +28,7 @@
 // LIPTE_SUCCESS *must* be first in the enumeration.
 // LIPTE_ZZZ *must* be last in the enumeration.
 typedef enum {
+    LIPTE_NONE,
     LIPTE_AF,
     LIPTE_ARG,
     LIPTE_BIN,
@@ -36,7 +37,7 @@ typedef enum {
     LIPTE_ITER,
     LIPTE_LIDX,
     LIPTE_LVAL,
-    LIPTE_NONE,
+    LIPTE_MLEN,
     LIPTE_PFX,
     LIPTE_RDX,
     LIPTE_TOBIN,
@@ -48,15 +49,16 @@ typedef enum {
 
 // the list *ends* with NULL, LIPTE_ZZZ *must* be last in enum above.
 static const char *const lipt_errors[] = {
-    [LIPTE_NONE]    = "nil",  // string is actually returned as nil
+    [LIPTE_NONE]    = "nil",  // iptable.strerror will return a real nil
     [LIPTE_AF]      = "unknown address family",
     [LIPTE_ARG]     = "wrong type of argument",
-    [LIPTE_BIN]     = "illegal binary key/mask",
     [LIPTE_BINOP]   = "binary operation failed",
+    [LIPTE_BIN]     = "illegal binary key/mask",
     [LIPTE_FAIL]    = "unspecified error",
     [LIPTE_ITER]    = "internal iteration error",
     [LIPTE_LIDX]    = "invalid Lua stack index",
     [LIPTE_LVAL]    = "invalid Lua stack (up)value",
+    [LIPTE_MLEN]    = "invalid mask length",
     [LIPTE_PFX]     = "invalid prefix string",
     [LIPTE_RDX]     = "unhandled radix node type",
     [LIPTE_TOBIN]   = "error converting string to binary",

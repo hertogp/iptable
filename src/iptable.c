@@ -165,6 +165,76 @@ key_bystr(uint8_t *dst, int *mlen, int *af, const char *s)
     return NULL;  // failed
 }
 
+/*
+ * ### `key_byfit`
+ * ```c
+ *   uint_8t *key_byfit(uint8_t *m, uint8_t *a, uint8_t *b)
+ * ```
+ * Set `m` to the largest possible mask such that:
+ * - `a`'s network address is still `a` itself, and
+ * - `a`'s broadcast address is less than, or equal to, `b` address
+ *   Note: the function assumes a <= b.
+ */
+
+uint8_t _bmask(uint8_t n, uint8_t b);
+uint8_t _bmask(uint8_t n, uint8_t b)
+{
+    /* Return the minimal mask possible bounded by [n,b] inclusive.
+     * Minimal meaning the least amount of network bits
+     */
+    uint8_t m = (n & -n)-1, max = b - n;
+
+    while (m > max)
+        m = m >> 1;
+    return ~m;
+}
+
+uint8_t *
+key_byfit(uint8_t *m, uint8_t *a, uint8_t *b)
+{
+  uint8_t *x, *xmax, *xmark, *y, *z;
+  int af, trail = 0xFF;
+
+  if ( m == NULL || a == NULL || b == NULL)
+    return NULL;
+  if (IPT_KEYLEN(a) != IPT_KEYLEN(b))
+    return NULL;
+  af = KEY_AF_FAM(a);
+  if (AF_UNKNOWN(af))
+    return NULL;
+  *m = IPT_KEYLEN(a);  /* set mask's LEN byte */
+
+  /* set mask bytes that honor 'a's lowest 1-bit and 'b' as a maximum */
+  xmark = NULL;  /* points to the first byte where y,z differ, if any */
+  xmax = m + *m; x = m+1; y=a+1; z=b+1;
+  for (; x < xmax; x++, y++, z++) {
+    if (xmark) {
+      *x = 0x00;
+      trail &= *z;
+    } else if (*y == *z) {
+      *x = 0xFF;
+    } else {
+      *x = _bmask(*y, *z);
+      xmark = x;
+    }
+  }
+
+  if (trail != 0xFF) {
+    /* need to ensure the broadcast address: (y|~m) <= z, since there
+     * are trailing bytes < 0xFF.  So if the broadcast address, at the xmark
+     * spot equals *z's byte, the mask needs to be expanded by 1 bit.
+     */
+    y = a + (xmark - m);
+    z = b + (xmark - m);
+    if ((0xFF & (*y | ~*xmark)) == *z) {
+      /* note: *xmark = ~((~*xmark)>>1) does NOT work (!?) */
+      *xmark = 0x80 | (*xmark >> 1);
+    }
+  }
+
+  return m;
+}
+
 /* ### `key_bylen`
  * ```c
  *   uint8_t *key_bylen(uint8_t *binkey, int mlen, int af);
@@ -306,16 +376,16 @@ int
 key_incr(void *key)
 {
     /* 1 on success, 0 on failure: increments key, wraps from max to 0 */
-    uint8_t *k = key;
-    if (k == NULL) return 0;
 
-    int off = IPT_KEYLEN(k);
-    if (off < 1) return 0;
+  uint8_t *x = key, *k = key;
+  if (key == NULL) return 0;
 
-    while(!(*(k + --off)+=1))
-        ;
+  for(x = x + *x - 1; x > k; x--) {
+    if ((*x = *x + 1))
+      break;
+  }
 
-    return 1;
+  return 1;
 }
 
 /* ### `key_decr`

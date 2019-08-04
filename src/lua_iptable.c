@@ -65,45 +65,50 @@ static int iptL_pushrh(lua_State *, struct radix_head *);
 static int iptL_pushrmh(lua_State *, struct radix_mask_head *);
 static int iptL_pushrm(lua_State *, struct radix_mask *);
 
-// iterators
+// module level iterators
 
+static int iter_hosts(lua_State *);
 static int iter_hosts_f(lua_State *);
+static int iter_interval(lua_State *);
+static int iter_interval_f(lua_State *);
+
+// instance level iterators
+
+static int iter_kv(lua_State *);
 static int iter_kv_f(lua_State *);
+static int iter_less(lua_State *);
 static int iter_less_f(lua_State *);
+static int iter_masks(lua_State *);
 static int iter_masks_f(lua_State *);
+static int iter_merge(lua_State *);
 static int iter_merge_f(lua_State *);
+static int iter_more(lua_State *);
 static int iter_more_f(lua_State *);
 static int iter_radix(lua_State *);
+static int iter_radixes(lua_State *);
 
 // iptable module functions
 
 static int ipt_address(lua_State *);
 static int ipt_broadcast(lua_State *);
-static int ipt_strerror(lua_State *);
-static int iter_hosts(lua_State *);
 static int ipt_mask(lua_State *);
 static int ipt_neighbor(lua_State *L);
 static int ipt_network(lua_State *);
 static int ipt_new(lua_State *);
 static int ipt_size(lua_State *);
+static int ipt_strerror(lua_State *);
 static int ipt_tobin(lua_State *);
 static int ipt_tolen(lua_State *);
 static int ipt_tostr(lua_State *);
 
 // iptable instance methods
 
+static int iptm_counts(lua_State *);
 static int iptm_gc(lua_State *);
 static int iptm_index(lua_State *);
-static int iptm_newindex(lua_State *);
 static int iptm_len(lua_State *);
+static int iptm_newindex(lua_State *);
 static int iptm_tostring(lua_State *);
-static int iptm_counts(lua_State *);
-static int iter_kv(lua_State *);
-static int iter_less(lua_State *);
-static int iter_masks(lua_State *);
-static int iter_merge(lua_State *);
-static int iter_more(lua_State *);
-static int iter_radixes(lua_State *);
 
 // iptable module function array
 
@@ -111,6 +116,7 @@ static const struct luaL_Reg funcs [] = {
     {"address", ipt_address},
     {"broadcast", ipt_broadcast},
     {"hosts", iter_hosts},
+    {"interval", iter_interval},
     {"mask", ipt_mask},
     {"neighbor", ipt_neighbor},
     {"network", ipt_network},
@@ -292,7 +298,8 @@ iptL_gettable(lua_State *L, int idx)
  */
 
 
-static int iptL_getaf(lua_State *L, int idx, int *af)
+static int
+iptL_getaf(lua_State *L, int idx, int *af)
 {
     static const char *const af_fam[] = {"AF_INET", "AF_INET6", NULL };
     static const int af_num[] = {AF_INET, AF_INET6};
@@ -638,7 +645,7 @@ ipt_address(lua_State *L)
     if (! key_bystr(addr, &mlen, &af, pfx))
         return lipt_errbail(L, LIPTE_PFX);
     if (! key_bylen(mask, mlen, af))
-        return lipt_errbail(L, LIPTE_TOBIN);
+        return lipt_errbail(L, LIPTE_MLEN);
     if (! key_tostr(buf, addr))
         return lipt_errbail(L, LIPTE_TOSTR);
 
@@ -723,7 +730,7 @@ ipt_network(lua_State *L)
     if (! key_bystr(addr, &mlen, &af, pfx))
         return lipt_errbail(L, LIPTE_PFX);
     if (! key_bylen(mask, mlen, af))
-        return lipt_errbail(L, LIPTE_TOBIN);
+        return lipt_errbail(L, LIPTE_MLEN);
 
     if (! key_network(addr, mask))
         return lipt_errbail(L, LIPTE_BINOP);
@@ -764,7 +771,7 @@ ipt_neighbor(lua_State *L)
     if (mlen == 0)
        return lipt_errbail(L, LIPTE_NONE);  /* Only a /0 has no neighbor*/
     if (! key_bylen(mask, mlen, af))
-        return lipt_errbail(L, LIPTE_TOBIN);
+        return lipt_errbail(L, LIPTE_MLEN);
     if (! key_bypair(nbor, addr, mask))
         return lipt_errbail(L, LIPTE_BINOP);
 
@@ -801,7 +808,7 @@ ipt_broadcast(lua_State *L)
     if (! key_bystr(addr, &mlen, &af, pfx))
         return lipt_errbail(L, LIPTE_PFX);
     if (! key_bylen(mask, mlen, af))
-        return lipt_errbail(L, LIPTE_TOBIN);
+        return lipt_errbail(L, LIPTE_MLEN);
     if (! key_broadcast(addr, mask))
         return lipt_errbail(L, LIPTE_BINOP);
     if (! key_tostr(buf, addr))
@@ -819,14 +826,18 @@ ipt_broadcast(lua_State *L)
 /*
  * ### `iptable.mask`
  * ```lua
- *   mask, af, mlen = iptable.mask(af, mlen [,true])
+ *   mask, af, mlen = iptable.mask(af, mlen, invert?)
+ * ```
+ * ```c
+ *   static int ipt_mask(lua_State *L); // <-- [af, mlen, invert?]
  * ```
  * Returns the mask, as a string, for the given address family `af` and mask
- * length `mlen` Inverts the mask if the optional 3rd argument evaluates to
- * true.
+ * length `mlen`. Inverts the mask if the optional argument `invert` evaluates
+ * to true.
  *
  * TODO:
- * - [ ] add invert parm instead of using -mlen to convey desire for inversion
+ * - [x] update doc string
+ * - [x] add invert parm instead of using -mlen to convey desire for inversion
  * - [x] restore mlen<0 to mean IPx_MAXMASK
  */
 
@@ -835,22 +846,22 @@ ipt_mask(lua_State *L)
 {
     dbg_stack("inc(.) <--");  // [af, mlen, invert]
 
-    int af = AF_UNSPEC, mlen = -1, isnum = 0;
+    int af = AF_UNSPEC, mlen = -1, isnum = 0, invert = 0;
     char buf[MAX_STRKEY];
     uint8_t mask[MAX_BINKEY];
 
-    af = lua_tointegerx(L, 1, &isnum);
-    if (! isnum)
-        return lipt_errbail(L, LIPTE_ARG);
+    if (! iptL_getaf(L, 1, &af))
+            return lipt_errbail(L, LIPTE_ARG);
     if (AF_UNKNOWN(af))
         return lipt_errbail(L, LIPTE_AF);
-
     mlen = lua_tointegerx(L, 2, &isnum);
     if (! isnum)
         return lipt_errbail(L, LIPTE_ARG);
-    if (! key_bylen(mask, mlen < 0 ? -mlen : mlen, af))
-        return lipt_errbail(L, LIPTE_TOBIN);
-    if (mlen < 0 && ! key_invert(mask))
+    invert = lua_toboolean(L, 3);
+
+    if (! key_bylen(mask, mlen, af))
+        return lipt_errbail(L, LIPTE_MLEN);
+    if (invert && ! key_invert(mask))
         return lipt_errbail(L, LIPTE_BINOP);
     if (! key_tostr(buf, mask))
         return lipt_errbail(L, LIPTE_TOSTR);
@@ -886,7 +897,7 @@ iter_hosts(lua_State *L)
         inclusive = lua_toboolean(L, 2);  // include netw/bcast (or not)
 
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return iter_bail(L, LIPTE_ARG);
     if (! key_bystr(addr, &mlen, &af, pfx)) fail = 1;
     if (! key_bystr(stop, &mlen, &af, pfx)) fail = 1;
     if (! key_bylen(mask, mlen, af)) fail = 1;
@@ -954,7 +965,113 @@ iter_hosts_f(lua_State *L)
     return 1;
 }
 
+/*
+ * ### `iptable.interval`
+ * ```c
+ *   static int ipt_interval(lua_State *L) // <-- [start, stop]
+ * ```
+ * ```lua
+ *   for pfx in iptable.interval("10.10.10.0", "10.10.10.8") do
+ *     print(pfx)
+ *   end
+ * -- would print
+ *  10.10.10.0/30
+ *  10.10.10.4/30
+ *  10.10.10.8/32
+ * ```
+ * Iterate across the prefixes that, combined, cover the address space
+ * between the `start` & `stop` addresses given (inclusive).  Any masks in
+ * either `start` or `stop` are ignored.
+ *
+ * TODO:
+ * - [x] add doc
+ * - [ ] add key_byival (key by interval)
+ * - [ ] implement ipt_range with it
+ */
 
+static int
+iter_interval(lua_State *L)
+{
+    dbg_stack("(inc) <--");   // <-- [start, stop]
+
+    uint8_t start[MAX_BINKEY], stop[MAX_BINKEY];
+    const char *pfx = NULL;
+    int mlen = -1, af = AF_UNSPEC;
+    size_t len;
+
+    /* pickup start */
+    if (! iptL_getpfxstr(L, 1, &pfx, &len))
+        return iter_bail(L, LIPTE_ARG);
+    if (! key_bystr(start, &mlen, &af, pfx))
+        return iter_bail(L, LIPTE_PFX);
+    if (AF_UNKNOWN(af))
+        return iter_bail(L, LIPTE_AF);
+
+    /* pickup stop */
+    if (! iptL_getpfxstr(L, 2, &pfx, &len))
+        return iter_bail(L, LIPTE_ARG);
+    if (! key_bystr(stop, &mlen, &af, pfx))
+        return iter_bail(L, LIPTE_PFX);
+    if (AF_UNKNOWN(af))
+        return iter_bail(L, LIPTE_AF);
+
+    lua_pushlstring(L, (const char *)start, IPT_KEYLEN(start));
+    lua_pushlstring(L, (const char *)stop, IPT_KEYLEN(stop));
+    lua_pushinteger(L, 0); /* wrap around protection */
+    lua_pushcclosure(L, iter_interval_f, 3);
+
+    dbg_stack("out(1) ==>");
+
+    return 1;
+}
+
+static int
+iter_interval_f(lua_State *L)
+{
+    dbg_stack("(inc) <--");
+
+    uint8_t start[MAX_BINKEY], stop[MAX_BINKEY], mask[MAX_BINKEY];
+    size_t klen;
+    char buf[MAX_STRKEY];
+
+    if (lua_tointeger(L, lua_upvalueindex(3)))
+        return 0;  /* all done */
+    if (! iptL_getbinkey(L, lua_upvalueindex(1), start, &klen))
+        return lipt_errbail(L, LIPTE_LVAL);
+    if (! iptL_getbinkey(L, lua_upvalueindex(2), stop, &klen))
+        return lipt_errbail(L, LIPTE_LVAL);
+
+    if (key_cmp(start, stop) > 0)
+        return 0;  /* all done */
+
+    if (! key_byfit(mask, start, stop))
+        return lipt_errbail(L, LIPTE_BINOP);
+
+    /* push the result; [pfx] */
+    lua_settop(L, 0);
+    lua_pushfstring(L, "%s/%d", key_tostr(buf, start), key_tolen(mask));
+
+    /* setup next start address */
+    if (! key_broadcast(start, mask))
+        return lipt_errbail(L, LIPTE_BINOP);
+
+    /* wrap around protection, current pfx is the last one */
+    if (key_cmp(start, stop) == 0) {
+        lua_pushinteger(L, 1);
+        lua_replace(L, lua_upvalueindex(3));
+    } else {
+        if (! key_incr(start))
+            return lipt_errbail(L, LIPTE_BINOP);
+        lua_pushlstring(L, (const char *)start, (size_t)IPT_KEYLEN(start));
+        lua_replace(L, lua_upvalueindex(1));
+    }
+
+    /* wrap around protection */
+
+    dbg_stack("out(1) ==>");
+
+    return 1;
+}
 /*
  * ## instance methods
  */
@@ -1224,8 +1341,10 @@ iter_more(lua_State *L)
     } else
       return iter_bail(L, LIPTE_AF);
 
-    if (! key_bylen(mask, mlen, af) || ! key_network(addr, mask))
-        return iter_bail(L, LIPTE_PFX);
+    if (! key_bylen(mask, mlen, af))
+        return iter_bail(L, LIPTE_MLEN);
+    if (! key_network(addr, mask))
+        return iter_bail(L, LIPTE_BINOP);
     lua_pop(L, lua_gettop(L) - 1);                // [t]
 
     maxb = (mlen > 0) ? -1 - IPT_KEYOFFSET - mlen : -2;

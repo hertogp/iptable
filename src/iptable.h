@@ -70,10 +70,10 @@
 
 /* ### KEY_x
  * `KEY_IS_IP4(k)`
- * : detects ipv4 binary key by checking the byte array's length
+ * : checks for an ipv4 binary key by checking the byte array's length
  *
  * `KEY_IS_IP4(k)`
- * : detects ipv6 binary key by checking the byte array's length
+ * : checks for an ipv6 binary key by checking the byte array's length
  *
  * `KEY_AF_FAM(k)`
  * : returns `AF_INET(6)` or `AF_UNSPEC` based on binary key length
@@ -317,6 +317,7 @@ void _dumprn(const char *, struct radix_node *);
 
 uint8_t *key_bystr(uint8_t *, int *, int *, const char *);
 uint8_t *key_bylen(uint8_t *, int, int);
+uint8_t * key_byfit(uint8_t *m, uint8_t *a, uint8_t *b);
 uint8_t *key_bypair(uint8_t *, const void *, const void *);
 const char *key_tostr(char *, void *);
 int key_tolen(void *);
