@@ -16,16 +16,18 @@
 void
 test_key_incr_ipv4_good(void)
 {
-    uint8_t *addr = malloc(5 * sizeof(uint8_t));
-
-    *addr = IP4_KEYLEN;  // set LEN byte of byte array
+    uint8_t addr[5] = {IP4_KEYLEN,0,0,0,0};
 
     // incr 0.0.0.0
     *(addr+1) = 0x00;
     *(addr+2) = 0x00;
     *(addr+3) = 0x00;
     *(addr+4) = 0x00;
-    mu_true(key_incr(addr));
+    mu_true(key_incr(addr, 1));
+    mu_eq(0x05, *(addr+0), "keylength %i");
+    mu_eq(0x00, *(addr+1), "%i");
+    mu_eq(0x00, *(addr+2), "%i");
+    mu_eq(0x00, *(addr+3), "%i");
     mu_eq(0x01, *(addr+4), "%i");
 
     // incr 0.0.0.255 propagates
@@ -33,7 +35,8 @@ test_key_incr_ipv4_good(void)
     *(addr+2) = 0x00;
     *(addr+3) = 0x00;
     *(addr+4) = 0xff;
-    mu_true(key_incr(addr));
+    mu_true(key_incr(addr, 1));
+    mu_eq(0x05, *(addr+0), "keylength %i");
     mu_eq(0x00, *(addr+1), "%i");
     mu_eq(0x00, *(addr+2), "%i");
     mu_eq(0x01, *(addr+3), "%i");
@@ -44,7 +47,8 @@ test_key_incr_ipv4_good(void)
     *(addr+2) = 0x00;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mu_true(key_incr(addr));
+    mu_true(key_incr(addr, 1));
+    mu_eq(0x05, *(addr+0), "keylength %i");
     mu_eq(0x00, *(addr+1), "%i");
     mu_eq(0x01, *(addr+2), "%i");
     mu_eq(0x00, *(addr+3), "%i");
@@ -55,22 +59,23 @@ test_key_incr_ipv4_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mu_true(key_incr(addr));
+    mu_true(key_incr(addr, 1));
+    mu_eq(0x05, *(addr+0), "keylength %i");
     mu_eq(0x01, *(addr+1), "%i");
     mu_eq(0x00, *(addr+2), "%i");
     mu_eq(0x00, *(addr+3), "%i");
     mu_eq(0x00, *(addr+4), "%i");
 
-    // incr 255.255.255.255 -> wraps to 0.0.0.0
+    // incr 255.255.255.255 -> wraps to 0.0.0.0 but yields NULL
     *(addr+1) = 0xff;
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mu_true(key_incr(addr));
+    mu_false(key_incr(addr, 1));
+    mu_eq(0x05, *(addr+0), "keylength %i");
     mu_eq(0x00, *(addr+1), "%i");
     mu_eq(0x00, *(addr+2), "%i");
     mu_eq(0x00, *(addr+3), "%i");
     mu_eq(0x00, *(addr+4), "%i");
 
-    free(addr);
 }

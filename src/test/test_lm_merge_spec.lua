@@ -11,20 +11,13 @@
 package.cpath = "./build/?.so;"
 package.path = "./src/lua/?.lua"
 
-local dotify = require("ipt2smalldot")
-
--- helpers
-
 F = string.format
-
--- tests
 
 describe("ipt:merge(): ", function()
 
-  expose("instance ipt: ", function()
+  expose("iptable", function()
     iptable = require("iptable");
     assert.is_truthy(iptable);
-
 
     it("finds prefixes that are able to merge", function()
       local cnt = 0
@@ -32,11 +25,11 @@ describe("ipt:merge(): ", function()
       assert.is_truthy(ipt);
 
       ipt["1.2.3.0/24"] = 1     -- sole supernet entry
-      ipt["1.2.3.0/25"] = 2     -- paired w/ the next entry
+      ipt["1.2.3.0/25"] = 2     -- pair w/ the next entry
       ipt["1.2.3.128/25"] = 4
-      ipt["1.2.3.0/26"] = 8     -- paired w/ the next entry
+      ipt["1.2.3.0/26"] = 8     -- pair w/ the next entry
       ipt["1.2.3.64/26"] = 16
-      ipt["1.2.3.128/26"] = 32  -- paired w/ the next entry
+      ipt["1.2.3.128/26"] = 32  -- pair w/ the next entry
       ipt["1.2.3.192/26"] = 64
 
       for p, t in ipt:merge(iptable.AF_INET) do cnt = cnt + 1 end
@@ -48,18 +41,18 @@ describe("ipt:merge(): ", function()
 
       ipt["1.2.3.0/24"] = 1     -- sole supernet entry
 
-      ipt["1.2.3.0/25"] = 2     -- paired w/ the next entry
+      ipt["1.2.3.0/25"] = 2     -- pair w/ the next entry
       ipt["1.2.3.128/25"] = 4
 
-      ipt["1.2.3.0/26"] = 8     -- paired w/ the next entry
+      ipt["1.2.3.0/26"] = 8     -- pair w/ the next entry
       ipt["1.2.3.64/26"] = 16
 
-      ipt["1.2.3.128/26"] = 32  -- paired w/ the next entry
+      ipt["1.2.3.128/26"] = 32  -- pair w/ the next entry
       ipt["1.2.3.192/26"] = 64
       local checksum = 0 -- calculate the sum of all values
       for k,v in pairs(ipt) do checksum = checksum + v end
 
-      -- rearrange the tree 
+      -- rearrange the tree
       for p, t in ipt:merge(iptable.AF_INET) do
         local sum = 0
         for k, v in pairs(t) do

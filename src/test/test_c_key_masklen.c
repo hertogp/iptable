@@ -11,10 +11,10 @@
 #include "iptable.h"         // iptable layered on top of radix.c
 
 #include "minunit.h"         // the mu_test macros
-#include "test_c_key_tolen.h"
+#include "test_c_key_masklen.h"
 
 void
-test_key_tolen_good(void)
+test_key_masklen_good(void)
 {
     int mlen;
     uint8_t *addr = malloc(5 * sizeof(uint8_t));
@@ -29,24 +29,24 @@ test_key_tolen_good(void)
     *(addr+2) = 0x00;
     *(addr+3) = 0x00;
     *(addr+4) = 0x00;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(0, mlen, "%i");
 
     // len 1
     *(addr+1) = 0x80;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(1, mlen, "%i");
 
     // len 9
     *(addr+1) = 0xff;
     *(addr+2) = 0x80;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(9, mlen, "%i");
 
     // len 16
     *(addr+1) = 0xff;
     *(addr+2) = 0xff;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(16, mlen, "%i");
 
     // len 32
@@ -54,7 +54,7 @@ test_key_tolen_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(32, mlen, "%i");
 
     // count 1's from msb downto lsb?
@@ -63,12 +63,12 @@ test_key_tolen_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(0, mlen, "%i");
 
     // rn->mask may have LEN set to nr of non-zero bytes
     // in the array, which includes the LEN byte itself.
-    // The tests below check this behaviour for key_tolen
+    // The tests below check this behaviour for key_masklen
 
     // count only the non-zero bytes?
     // LEN = 0 bytes
@@ -77,7 +77,7 @@ test_key_tolen_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(0, mlen, "%i");
 
     // count only the non-zero bytes?
@@ -87,7 +87,7 @@ test_key_tolen_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(0, mlen, "%i");
 
     // count only the non-zero bytes?
@@ -97,7 +97,7 @@ test_key_tolen_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(8, mlen, "%i");
 
     // count only the non-zero bytes?
@@ -107,7 +107,7 @@ test_key_tolen_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(16, mlen, "%i");
 
     // count only the non-zero bytes?
@@ -117,7 +117,7 @@ test_key_tolen_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(24, mlen, "%i");
 
     // count only the non-zero bytes?
@@ -127,16 +127,16 @@ test_key_tolen_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0xff;
-    mlen = key_tolen(addr);
+    mlen = key_masklen(addr);
     mu_eq(32, mlen, "%i");
 
     free(addr);
 }
 
 void
-test_key_tolen_bad(void)
+test_key_masklen_bad(void)
 {
     // NULL key
-    int mlen = key_tolen(NULL);
+    int mlen = key_masklen(NULL);
     mu_eq(-1, mlen, "%i");
 }

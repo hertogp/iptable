@@ -6,6 +6,7 @@ tmp/
 scr/
 img/
 doc/*.md
+doc/*.pdf
 _todo.md
 _notes.c
 

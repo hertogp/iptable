@@ -177,7 +177,7 @@ describe("iptable.tostr(): ", function()
   end)
 end)
 
-describe("iptable.tolen(): ", function()
+describe("iptable.masklen(): ", function()
 
   expose("module: ", function()
     iptable = require("iptable");
@@ -186,30 +186,30 @@ describe("iptable.tolen(): ", function()
     it("calulates the minimum", function()
       local mask = "255.0.0.0";
       addr, mlen, af = iptable.tobin(mask);
-      local mlen = iptable.tolen(addr);
+      local mlen = iptable.masklen(addr);
       assert.are_equal(8, mlen);
     end)
 
     it("handles empty string arg", function()
-      local mlen = iptable.tolen("");
+      local mlen = iptable.masklen("");
       assert.are_equal(nil, mlen);
     end)
 
     it("handles no arg", function()
-      local mlen = iptable.tolen();
+      local mlen = iptable.masklen();
       assert.are_equal(nil, mlen);
     end)
 
     it("handles nil arg", function()
-      local mlen = iptable.tolen(nil);
+      local mlen = iptable.masklen(nil);
       assert.are_equal(nil, mlen);
     end)
 
     it("handles non-string arg", function()
-      local mlen = iptable.tolen(false);
+      local mlen = iptable.masklen(false);
       assert.are_equal(nil, mlen);
 
-      mlen = iptable.tolen({});
+      mlen = iptable.masklen({});
       assert.are_equal(nil, mlen);
     end)
 
@@ -220,27 +220,27 @@ describe("iptable.tolen(): ", function()
     -- LEN=2 -> only first mask byte is non-zero
     -- LEN=3 -> only first two mask bytes are non-zero, ... etc...
     it("honors mask's LEN as #non-zero bytes (not array length)", function()
-      local mlen = iptable.tolen('\x00\xff\xff\xf0\x00');
+      local mlen = iptable.masklen('\x00\xff\xff\xf0\x00');
       assert.are_equal(0, mlen);  -- honor LEN=0
     end)
     it("honors mask's LEN as #non-zero bytes (not array length)", function()
-      local mlen = iptable.tolen('\x01\xff\xff\xf0\x00');
+      local mlen = iptable.masklen('\x01\xff\xff\xf0\x00');
       assert.are_equal(0, mlen);  -- honor LEN=1
     end)
     it("honors mask's LEN as #non-zero bytes (not array length)", function()
-      local mlen = iptable.tolen('\x02\xff\xff\xf0\x00');
+      local mlen = iptable.masklen('\x02\xff\xff\xf0\x00');
       assert.are_equal(8, mlen);  -- honor LEN=2
     end)
     it("honors mask's LEN as #non-zero bytes (not array length)", function()
-      local mlen = iptable.tolen('\x03\xff\xff\xf0\x00');
+      local mlen = iptable.masklen('\x03\xff\xff\xf0\x00');
       assert.are_equal(16, mlen);  -- honor LEN=3
     end)
     it("honors mask's LEN as #non-zero bytes (not array length)", function()
-      local mlen = iptable.tolen('\x04\xff\xff\xf0\x00');
+      local mlen = iptable.masklen('\x04\xff\xff\xf0\x00');
       assert.are_equal(20, mlen);  -- honor LEN=4
     end)
     it("honors mask's LEN as #non-zero bytes (not array length)", function()
-      local mlen = iptable.tolen('\x05\xff\xff\xf0\x00');
+      local mlen = iptable.masklen('\x05\xff\xff\xf0\x00');
       assert.are_equal(20, mlen);  -- honor LEN=5
     end)
 

@@ -170,29 +170,17 @@ key_bystr(uint8_t *dst, int *mlen, int *af, const char *s)
  * ```c
  *   uint_8t *key_byfit(uint8_t *m, uint8_t *a, uint8_t *b)
  * ```
- * Set `m` to the largest possible mask such that:
+ * Set `m` to the largest possible mask for key `a` such that:
  * - `a`'s network address is still `a` itself, and
  * - `a`'s broadcast address is less than, or equal to, `b` address
- *   Note: the function assumes a <= b.
+ *
+ * _Note: the function assumes a <= b._
  */
-
-uint8_t _bmask(uint8_t n, uint8_t b);
-uint8_t _bmask(uint8_t n, uint8_t b)
-{
-    /* Return the minimal mask possible bounded by [n,b] inclusive.
-     * Minimal meaning the least amount of network bits
-     */
-    uint8_t m = (n & -n)-1, max = b - n;
-
-    while (m > max)
-        m = m >> 1;
-    return ~m;
-}
 
 uint8_t *
 key_byfit(uint8_t *m, uint8_t *a, uint8_t *b)
 {
-  uint8_t *x, *xmax, *xmark, *y, *z;
+  uint8_t *x, *xmax, off=0;
   int af, trail = 0xFF;
 
   if ( m == NULL || a == NULL || b == NULL)
@@ -205,31 +193,32 @@ key_byfit(uint8_t *m, uint8_t *a, uint8_t *b)
   *m = IPT_KEYLEN(a);  /* set mask's LEN byte */
 
   /* set mask bytes that honor 'a's lowest 1-bit and 'b' as a maximum */
-  xmark = NULL;  /* points to the first byte where y,z differ, if any */
-  xmax = m + *m; x = m+1; y=a+1; z=b+1;
-  for (; x < xmax; x++, y++, z++) {
-    if (xmark) {
+  xmax = m + *m; x = m+1; a++; b++;
+  for (; x < xmax; x++, a++, b++) {
+    if (off) {
       *x = 0x00;
-      trail &= *z;
-    } else if (*y == *z) {
+      trail &= *b;
+    } else if (*a == *b) {
       *x = 0xFF;
     } else {
-      *x = _bmask(*y, *z);
-      xmark = x;
+      /* runs once for 1st byte where a,b keys differ */
+      off = xmax - x;
+      *x = (*a & -*a)-1;
+      while (*x > (*b - *a))
+          *x = *x >> 1;
+      *x = ~*x;
     }
   }
 
+  /* need to ensure the broadcast address: (y|~m) <= z, since there are
+   * trailing bytes < 0xFF.  So if the broadcast address, at the xmark spot
+   * equals *z's byte, the mask needs to be expanded by 1 bit.
+   */
+
   if (trail != 0xFF) {
-    /* need to ensure the broadcast address: (y|~m) <= z, since there
-     * are trailing bytes < 0xFF.  So if the broadcast address, at the xmark
-     * spot equals *z's byte, the mask needs to be expanded by 1 bit.
-     */
-    y = a + (xmark - m);
-    z = b + (xmark - m);
-    if ((0xFF & (*y | ~*xmark)) == *z) {
-      /* note: *xmark = ~((~*xmark)>>1) does NOT work (!?) */
-      *xmark = 0x80 | (*xmark >> 1);
-    }
+    x = x - off; a = a - off; b = b -off;
+    if ((0xFF & (*a | ~*x)) == *b)
+      *x = 0x80 | (*x >> 1);
   }
 
   return m;
@@ -239,6 +228,7 @@ key_byfit(uint8_t *m, uint8_t *a, uint8_t *b)
  * ```c
  *   uint8_t *key_bylen(uint8_t *binkey, int mlen, int af);
  * ```
+ * Create a mask for given `af` family and mask length `mlen`.
  */
 
 uint8_t *
@@ -306,14 +296,14 @@ key_bypair(uint8_t *a, const void *b, const void *m)
     return a;
 }
 
-/* ### `key_tolen`
+/* ### `key_masklen`
  * ```c
- *   int key_tolen(void *key);
+ *   int key_masklen(void *key);
  * ```
  * Count the number of consequtive 1-bits, starting with the msb first.
  */
 
-int key_tolen(void *key)
+int key_masklen(void *key)
 {
     // counts the nr of consequtive 1-bits starting with the MSB first.
     // - a radix mask key's KEYLEN indicates the num of non-zero bytes in the
@@ -366,49 +356,110 @@ key_tostr(char *dst, void *src)
     return inet_ntop(AF_INET, IPT_KEYPTR(key), dst, INET_ADDRSTRLEN);
 }
 
-/* ### `key_incr`
+
+/*
+ * ### `key_bynum`
  * ```c
- *   int key_incr(void *key);
+ *   int key_bynum(void *key, size_t number);
  * ```
+ * Create key from number. Returns NULL on failure, key otherwise.
  */
 
-int
-key_incr(void *key)
+uint8_t *
+key_bynum(uint8_t *key, size_t num, int af)
 {
-    /* 1 on success, 0 on failure: increments key, wraps from max to 0 */
+  uint8_t *x = key, tmp, *l, *r, max;
 
-  uint8_t *x = key, *k = key;
-  if (key == NULL) return 0;
+  if (key == NULL)
+      return NULL;
+  if ((max = KEY_LEN_FAM(af)) == 0)
+      return NULL;
 
-  for(x = x + *x - 1; x > k; x--) {
-    if ((*x = *x + 1))
-      break;
+  *x++ = max;
+  while (max-- > 1) {
+    *x++ = num & 0xff;
+    num >>= 8;
+  }
+  /* reverse the byte array */
+  for (l=key+1, r=key+*key-1; l < r; l++, r--) {
+    tmp = *l;
+    *l = *r;
+    *r = tmp;
   }
 
-  return 1;
+  return key;
 }
 
-/* ### `key_decr`
+/*
+ * ### `key_incr`
  * ```c
- *   int key_decr(void *key);
+ *   uint8_t *key_incr(uint8_t *key, size_t num);
  * ```
+ * Increment `key` with `num`.  Returns key on success, NULL on failure (e.g.
+ * when wrapping around the available address space) which usually means the
+ * resulting `key` value is meaningless.
  */
 
-int
-key_decr(void *key)
+uint8_t *
+key_incr(uint8_t *key, size_t num)
 {
-    /* 1 on success, 0 on failure; decrements key, wraps from 0 to max */
-    uint8_t *k = key;
-    if (k == NULL) return 0;
+  uint8_t *x = key, n, prev;
 
-    int off = IPT_KEYLEN(k);
-    while(--off > 0 && ((*(k+off)-=1)==255))
-        ;
+  if (key == NULL)
+      return NULL;
+  if (KEY_AF_FAM(key) == AF_UNSPEC)
+      return NULL;
 
-    return 1;
+  for (x = x + *x -1; num && (x > key); x--) {
+    n = num & 0xff;
+    num >>= 8;
+    prev = *x;
+    *x += n;
+    if (*x < prev)
+        num++;
+  }
+  if (num > 0)
+      return NULL;  /* wrapped around */
+
+  return key;
 }
 
-/* ###`key_invert`
+/*
+ * ### `key_decr`
+ * ```c
+ *   uint8_t *key_decr(uint8_t *key, size_t num);
+ * ```
+ * Decrement `key` with `num`. Returns `key` on success, NULL on failure (e.g.
+ * when wrapping around the available address space) which usually means the
+ * resulting `key` value is meaningless.
+ */
+
+uint8_t *
+key_decr(uint8_t *key, size_t num)
+{
+  uint8_t *x = key, n, prev;
+
+  if (key == NULL)
+      return NULL;
+  if (KEY_AF_FAM(key) == AF_UNSPEC)
+      return NULL;
+
+  for (x = x + *x -1; num && (x > key); x--) {
+    n = num & 0xff;
+    num >>= 8;
+    prev = *x;
+    *x -= n;
+    if (*x > prev)
+        num++;
+  }
+  if (num > 0)
+      return NULL;  /* wrapped around */
+
+  return key;
+}
+
+/*
+ * ###`key_invert`
  * ```c
  *   int key_invert(void *key);
  * ```
@@ -568,7 +619,7 @@ void _dumprn(const char *s, struct radix_node *rn)
     if(rn!=NULL) {
         if(RDX_ISLEAF(rn)) {
             fprintf(stderr, " %s", key_tostr(dbuf, rn->rn_key));
-            fprintf(stderr, "/%d", key_tolen(rn->rn_mask));
+            fprintf(stderr, "/%d", key_masklen(rn->rn_mask));
             fprintf(stderr, ", keylen %d", IPT_KEYLEN(rn->rn_key));
         }
         fprintf(stderr, ", isroot %d", rn->rn_flags & RNF_ROOT);
@@ -753,7 +804,7 @@ rdx_pairleaf(struct radix_node *oth) {
     if(! key_bypair(pair, oth->rn_key, oth->rn_mask)) return NULL;
 
     /* goto up the tree to the governing internal node */
-    maxb = IPT_KEYOFFSET + key_tolen(oth->rn_mask);
+    maxb = IPT_KEYOFFSET + key_masklen(oth->rn_mask);
     for(rn = oth; RDX_ISLEAF(rn) || rn->rn_bit >= maxb; rn = rn->rn_parent)
         ;
 

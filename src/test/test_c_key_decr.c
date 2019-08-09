@@ -16,16 +16,16 @@
 void
 test_key_decr_ipv4_good(void)
 {
-    uint8_t *addr = malloc(5 * sizeof(uint8_t));
+    uint8_t addr[5] = {IP4_KEYLEN, 0,0,0,0};
 
-    *addr = IP4_KEYLEN;  // set LEN byte to length of byte array
-
-    // decr 0.0.0.0 should wrap around
+    // decr 0.0.0.0 -> 255.255.255.255
     *(addr+1) = 0x00;
     *(addr+2) = 0x00;
     *(addr+3) = 0x00;
     *(addr+4) = 0x00;
-    mu_true(key_decr(addr));
+    mu_false(key_decr(addr, 1));  /* wrap around detection */
+    /* even though wrap around occurred, key is a known value */
+    mu_eq(IP4_KEYLEN, *(addr+0), "keylength %i");
     mu_eq(0xff, *(addr+1), "%i");
     mu_eq(0xff, *(addr+2), "%i");
     mu_eq(0xff, *(addr+3), "%i");
@@ -36,7 +36,8 @@ test_key_decr_ipv4_good(void)
     *(addr+2) = 0x00;
     *(addr+3) = 0x00;
     *(addr+4) = 0x00;
-    mu_true(key_decr(addr));
+    mu_true(key_decr(addr, 1));
+    mu_eq(IP4_KEYLEN, *(addr+0), "keylength %i");
     mu_eq(0xfe, *(addr+1), "%i");
     mu_eq(0xff, *(addr+2), "%i");
     mu_eq(0xff, *(addr+3), "%i");
@@ -47,7 +48,8 @@ test_key_decr_ipv4_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0x00;
     *(addr+4) = 0x00;
-    mu_true(key_decr(addr));
+    mu_true(key_decr(addr, 1));
+    mu_eq(IP4_KEYLEN, *(addr+0), "keylength %i");
     mu_eq(0xff, *(addr+1), "%i");
     mu_eq(0xfe, *(addr+2), "%i");
     mu_eq(0xff, *(addr+3), "%i");
@@ -58,11 +60,11 @@ test_key_decr_ipv4_good(void)
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
     *(addr+4) = 0x00;
-    mu_true(key_decr(addr));
+    mu_true(key_decr(addr, 1));
+    mu_eq(IP4_KEYLEN, *(addr+0), "keylength %i");
     mu_eq(0xff, *(addr+1), "%i");
     mu_eq(0xff, *(addr+2), "%i");
     mu_eq(0xfe, *(addr+3), "%i");
     mu_eq(0xff, *(addr+4), "%i");
 
-    free(addr);
 }

@@ -315,20 +315,21 @@ void _dumprn(const char *, struct radix_node *);
 
 // -- key funcs
 
-uint8_t *key_bystr(uint8_t *, int *, int *, const char *);
-uint8_t *key_bylen(uint8_t *, int, int);
-uint8_t * key_byfit(uint8_t *m, uint8_t *a, uint8_t *b);
-uint8_t *key_bypair(uint8_t *, const void *, const void *);
 const char *key_tostr(char *, void *);
-int key_tolen(void *);
-int key_incr(void *);
-int key_cmp(void *, void *);
-int key_isin(void *, void *, void *);
-int key_network(void *, void *);
 int key_broadcast(void *, void *);
+int key_cmp(void *, void *);
 int key_invert(void *);
+int key_isin(void *, void *, void *);
+int key_masklen(void *);
+int key_network(void *, void *);
+uint8_t *key_byfit(uint8_t *m, uint8_t *a, uint8_t *b);
+uint8_t *key_bylen(uint8_t *, int, int);
+uint8_t *key_bynum(uint8_t *, size_t, int);
+uint8_t *key_bypair(uint8_t *, const void *, const void *);
+uint8_t *key_bystr(uint8_t *, int *, int *, const char *);
+uint8_t *key_decr(uint8_t *, size_t);
+uint8_t *key_incr(uint8_t *, size_t);
 
-int key_decr(void *);
 uint8_t *key_alloc(int);
 uint8_t *key_copy(uint8_t *);
 

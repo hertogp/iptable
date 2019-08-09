@@ -50,7 +50,7 @@ typedef enum {
 // the list *ends* with NULL, LIPTE_ZZZ *must* be last in enum above.
 static const char *const lipt_errors[] = {
     [LIPTE_NONE]    = "nil",  // iptable.strerror will return a real nil
-    [LIPTE_AF]      = "unknown address family",
+    [LIPTE_AF]      = "wrong or unknown address family",
     [LIPTE_ARG]     = "wrong type of argument",
     [LIPTE_BINOP]   = "binary operation failed",
     [LIPTE_BIN]     = "illegal binary key/mask",
