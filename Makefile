@@ -158,6 +158,9 @@ $(DOCS): $(DOCDIR)/%.md: $(SRCDIR)/%.c $(SRCDIR)/%.h
 	grep -E "^(/\*| \*)" $(SRCDIR)/$*.c| cut --bytes=4- >> $(DOCDIR)/$*.md
 	pandoc -f markdown$(POPTS) $(DOCDIR)/$*.md -o $(DOCDIR)/$*.pdf
 
+readme:
+	pandoc --filter pandoc-imagine -f markdown -t gfm -o README.md _readme.md
+
 doc: $(DOCSRC:$(SRCDIR)%.c=$(DOCDIR)%.md)
 
 # run a single unit test

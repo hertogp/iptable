@@ -25,8 +25,6 @@
 /* ### ipt ERROR numbers
  */
 
-// LIPTE_SUCCESS *must* be first in the enumeration.
-// LIPTE_ZZZ *must* be last in the enumeration.
 typedef enum {
     LIPTE_NONE,
     LIPTE_AF,
@@ -43,13 +41,13 @@ typedef enum {
     LIPTE_TOBIN,
     LIPTE_TOSTR,
     LIPTE_UNKNOWN,
-    LIPTE_ZMAX,
+    LIPTE_ZMAX,  /* *must*be last entry */
 } lipt_errno_t;
 
 
-// the list *ends* with NULL, LIPTE_ZZZ *must* be last in enum above.
-static const char *const lipt_errors[] = {
-    [LIPTE_NONE]    = "nil",  // iptable.strerror will return a real nil
+// the list *ends* with NULL, LIPTE_ZMAX *must* be last in enum above.
+static const char *const LIPT_ERROR[] = {
+    [LIPTE_NONE]    = "none",
     [LIPTE_AF]      = "wrong or unknown address family",
     [LIPTE_ARG]     = "wrong type of argument",
     [LIPTE_BINOP]   = "binary operation failed",

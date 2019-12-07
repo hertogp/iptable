@@ -41,7 +41,8 @@ int luaopen_iptable(lua_State *);
 
 // helper funtions
 
-static int lipt_errbail(lua_State *L, int);
+static int lipt_error(lua_State *L, int, const char *, ...);
+static int lipt_vferror(lua_State *L, int errno, const char *fmt, va_list ap);
 static table_t *iptL_gettable(lua_State *, int);
 static int iptL_getpfxstr(lua_State *, int, const char **, size_t *);
 static int *iptL_refpcreate(lua_State *);
@@ -49,7 +50,7 @@ static void iptL_refpdelete(void *, void **);
 static int iptL_getaf(lua_State *L, int, int *);
 static int iptL_getbinkey(lua_State *, int, uint8_t *, size_t *);
 static int ipt_itr_gc(lua_State *);
-static int iter_bail(lua_State *, int);
+static int iter_error(lua_State *, int, const char *, ...);
 static int iter_fail_f(lua_State *);
 
 // iter_xxx() helpers
@@ -98,7 +99,6 @@ static int ipt_neighbor(lua_State *L);
 static int ipt_network(lua_State *);
 static int ipt_new(lua_State *);
 static int ipt_size(lua_State *);
-static int ipt_strerror(lua_State *);
 static int ipt_tobin(lua_State *);
 static int ipt_masklen(lua_State *);
 static int ipt_tostr(lua_State *);
@@ -126,7 +126,6 @@ static const struct luaL_Reg funcs [] = {
     {"network", ipt_network},
     {"new", ipt_new},
     {"size", ipt_size},
-    {"strerror", ipt_strerror},
     {"tobin", ipt_tobin},
     {"masklen", ipt_masklen},
     {"tostr", ipt_tostr},
@@ -177,15 +176,10 @@ _str2idx(const char *s, const char *const t[]) {
  * methods go into its metatable.
  */
 
-
-
 int
 luaopen_iptable (lua_State *L)
 {
     dbg_stack("inc(.) <--"); // <-- ['iptable', '<path>/iptable.so']`
-
-    // set L's ipt error to none
-    // lipt_errbail(L, LIPTE_NONE);
 
     lua_settop(L, 0);                       // []
 
@@ -227,58 +221,67 @@ luaopen_iptable (lua_State *L)
  */
 
 /*
- * ### `lipt_errbail`
+ * ### `lipt_error`
  * ```c
- * static int lipt_errbail(lua_State *L, int errno);
+ * static int lipt_error(lua_State *L, int errno);
  * ```
  * A helper function to set L's global error numer, clear the stack, push nil,
  * and return 1.  May be used by functions to bail out while setting an error
  * indicator.
  */
-
 static int
-lipt_errbail(lua_State *L, int errno)
+lipt_vferror(lua_State *L, int errno, const char *fmt, va_list ap)
 {
     int err = LIPTE_UNKNOWN;
-
     lua_Debug ar;
-    if (lua_getstack(L, 1, &ar)) {
-      lua_getinfo(L, "nSlL", &ar);
-
-      /* n */
-      fprintf(stderr, "ar.name %s\n", ar.name);
-      fprintf(stderr, "ar.namewhat %s\n", ar.namewhat);
-
-      /* S */
-      fprintf(stderr, "ar.source %s\n", ar.source);
-      fprintf(stderr, "ar.short_src %s\n", ar.short_src);
-      fprintf(stderr, "ar.what   %s\n", ar.what);
-      fprintf(stderr, "ar.lastlinedefined %d\n", ar.lastlinedefined);
-
-      /* l */
-      fprintf(stderr, "ar.currentline %d\n", ar.currentline);
-
-      /* L */
-      for (int i = 1; i<9; i++) {
-        lua_pushinteger(L, i);
-        lua_gettable(L, -2);
-        fprintf(stderr, "tbl[%d] %s\n", i, lua_tostring(L, -1));
-      }
-    }
-
+    const char *fname = "(nofile)";
+    int lineno = 0;
 
     dbg_stack("inc(.) <--");
+
+    /* additional info from activation record */
+    if (lua_getstack(L, 1, &ar)) {
+      if (lua_getinfo(L, "Sl", &ar)) {
+        fname = ar.short_src;
+        lineno = ar.currentline;
+      }
+    }
 
     if ((0 <= errno) && (errno < LIPTE_ZMAX))
         err = errno;
 
-    /* set iptable.error */
+    /* get module table & set error field (iptable.error) */
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void *)L);
+
     if (err == LIPTE_NONE)
         lua_pushnil(L);
     else
-        lua_pushinteger(L, err);
+        lua_pushfstring(L, "%s:%d: %s", fname, lineno, LIPT_ERROR[err]);
+
+    if (fmt && *fmt != '\0') {
+        lua_pushstring(L, " (");
+        lua_pushvfstring(L, fmt, ap);
+        lua_pushstring(L, ")");
+        lua_concat(L, 4);
+    }
     lua_setfield(L, -2, "error");
+    lua_pop(L, 1);  /* pop the module table */
+
+    dbg_stack("out(1) ==>");
+
+    return 1;
+}
+
+static int
+lipt_error(lua_State *L, int errno, const char *fmt, ...)
+{
+    va_list args;
+
+    dbg_stack("inc(.) <--");
+
+    va_start(args, fmt);
+    lipt_vferror(L, errno, fmt, args);  /* sets iptable.error module var */
+    va_end(args);
 
     /* signal error by nil on top of stack */
     lua_settop(L, 0);                        // []
@@ -372,8 +375,11 @@ iptL_getbinkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
     dbg_stack("inc(.) <--");   // [.. k ..]
     const char *key = NULL;
 
-    if (!lua_isstring(L, idx))
+    if (lua_type(L, idx) != LUA_TSTRING)
         return 0;
+
+    /* if (!lua_isstring(L, idx)) */
+    /*     return 0; */
 
     key = lua_tolstring(L, idx, len);
 
@@ -453,25 +459,31 @@ iptL_refpdelete(void *L, void **r)
 }
 
 /*
-* ### `iter_bail`
+* ### `iter_error`
 * ```c
-*   static int iter_bail(lua_State *L, int errno);
+*   static int iter_error(lua_State *L, int errno, const char *fmt, ...);
 * ```
 * Helper function to bail out of an iteration factory function.  An iteration
-* factory function MUST return a valid `iter_f` and optionally an `invariant`
-* and `ctl_var`. By returning `iter_fail_f` as `iter_f` we ensure the iteration
-* in question will yield no results in Lua.
-*
+* factory function MUST return a valid iterator function (`iter_f`) and
+* optionally an `invariant` and `ctl_var`. By returning `iter_fail_f` as
+* `iter_f` we ensure the iteration in question will yield no results in Lua.
 */
 
 static int
-iter_bail(lua_State *L, int errno) {
+iter_error(lua_State *L, int errno, const char *fmt, ...) {
 
-    dbg_stack("inc(.) ->");
+    dbg_stack("inc(.) <--");
 
-    lipt_errbail(L, errno);                    /* just set iptable.error */
-    lua_settop(L, 0);                          /* clear the stack */
-    lua_pushcclosure(L, iter_fail_f, 0);       /* return iteration blocker */
+    va_list args;
+
+    va_start(args, fmt);
+    lipt_vferror(L, errno, fmt, args);
+    va_end(args);
+    lua_settop(L, 0);
+    lua_pushcclosure(L, iter_fail_f, 0);  /* stops any iteration */
+
+    dbg_stack("out(1) ==>");
+
     return 1;
 }
 
@@ -551,9 +563,9 @@ ipt_tobin(lua_State *L)
     const char *pfx = NULL;
 
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
     if (! key_bystr(addr, &mlen, &af, pfx))
-        return lipt_errbail(L, LIPTE_PFX);
+        return lipt_error(L, LIPTE_PFX, "");
 
     lua_pushlstring(L, (const char *)addr, IPT_KEYLEN(addr));
     lua_pushinteger(L, mlen);
@@ -580,11 +592,11 @@ ipt_tostr(lua_State *L)
     size_t len = 0;
 
     if (! iptL_getbinkey(L, 1, key, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
     if (len != (size_t)IPT_KEYLEN(key))
-        return lipt_errbail(L, LIPTE_BIN); // illegal binary
+        return lipt_error(L, LIPTE_BIN, ""); // illegal binary
     if (! key_tostr(str, key))
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
 
     lua_pushstring(L, str);
 
@@ -609,7 +621,7 @@ ipt_masklen(lua_State *L)
     int mlen = -1;
 
     if (!iptL_getbinkey(L, 1, buf, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
 
     mlen = key_masklen(buf);
     lua_pushinteger(L, mlen);
@@ -636,11 +648,11 @@ ipt_size(lua_State *L)
     const char *pfx = NULL;
 
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
     if (! key_bystr(addr, &mlen, &af, pfx))
-        return lipt_errbail(L, LIPTE_PFX);
+        return lipt_error(L, LIPTE_PFX, "");
     if (AF_UNKNOWN(af))
-        return lipt_errbail(L, LIPTE_AF);
+        return lipt_error(L, LIPTE_AF, "");
 
     hlen = af == AF_INET ? IP4_MAXMASK : IP6_MAXMASK;
     hlen = mlen < 0 ? 0 : hlen - mlen;              // mlen<0 means host addr
@@ -672,13 +684,13 @@ ipt_address(lua_State *L)
     const char *pfx = NULL;
 
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
     if (! key_bystr(addr, &mlen, &af, pfx))
-        return lipt_errbail(L, LIPTE_PFX);
+        return lipt_error(L, LIPTE_PFX, "");
     if (! key_bylen(mask, mlen, af))
-        return lipt_errbail(L, LIPTE_MLEN);
+        return lipt_error(L, LIPTE_MLEN, "");
     if (! key_tostr(buf, addr))
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
 
     lua_pushstring(L, buf);
     lua_pushinteger(L, mlen);
@@ -687,56 +699,6 @@ ipt_address(lua_State *L)
     dbg_stack("out(3) ==>");
 
     return 3;
-}
-
-/*
- * ### `iptable.strerror`
- * ```c
- *   static int ipt_strerror(lua_State *L);
- * ```
- * Returns nil if there is no error, otherwise returns the description and
- * number of the last error seen by module functions; also clears the error.
- */
-
-static int
-ipt_strerror(lua_State *L)
-{
-    dbg_stack("inc(.) <--");
-
-    int errno, type;
-
-    /* get last error number seen for L */
-    lua_rawgetp(L, LUA_REGISTRYINDEX, (void *)L);
-    type = lua_getfield(L, -1, "error");
-
-    /* Since Lua code may (re)set ipt.error, here are the rules:
-     * - nil means no error
-     * - a boolean that is false means no error (true is not an error number)
-     * - an integer, might be a known error number (or not)
-     * - any other value means it's not a known error number
-     */
-
-    if (lua_isinteger(L, -1))
-        errno = lua_tointeger(L, -1);
-    else if (type == LUA_TNIL)
-        errno = LIPTE_NONE;
-    else if (type == LUA_TBOOLEAN) {
-        errno = lua_toboolean(L, -1);
-        errno = errno ? LIPTE_UNKNOWN : LIPTE_NONE;
-    } else
-        errno = LIPTE_UNKNOWN;
-
-    if ((errno < 0) || (errno > LIPTE_ZMAX - 1))
-        errno = LIPTE_UNKNOWN;
-
-    if (errno == LIPTE_NONE)
-        lua_pushnil(L);  // no error yields a nil for stringified error
-    else
-        lua_pushstring(L, lipt_errors[errno]);
-
-    dbg_stack("out(1) ==>");
-
-    return 1;
 }
 
 /*
@@ -756,17 +718,17 @@ ipt_network(lua_State *L)
     const char *pfx = NULL;
 
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
 
     if (! key_bystr(addr, &mlen, &af, pfx))
-        return lipt_errbail(L, LIPTE_PFX);
+        return lipt_error(L, LIPTE_PFX, "");
     if (! key_bylen(mask, mlen, af))
-        return lipt_errbail(L, LIPTE_MLEN);
+        return lipt_error(L, LIPTE_MLEN, "");
 
     if (! key_network(addr, mask))
-        return lipt_errbail(L, LIPTE_BINOP);
+        return lipt_error(L, LIPTE_BINOP, "");
     if (! key_tostr(buf, addr))
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
 
     lua_pushstring(L, buf);
     lua_pushinteger(L, mlen);
@@ -796,18 +758,18 @@ ipt_neighbor(lua_State *L)
     const char *pfx = NULL;
 
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
     if (! key_bystr(addr, &mlen, &af, pfx))
-        return lipt_errbail(L, LIPTE_PFX);
+        return lipt_error(L, LIPTE_PFX, "");
     if (mlen == 0)
-       return lipt_errbail(L, LIPTE_NONE);  /* Only a /0 has no neighbor*/
+       return lipt_error(L, LIPTE_NONE, "");  /* Only a /0 has no neighbor*/
     if (! key_bylen(mask, mlen, af))
-        return lipt_errbail(L, LIPTE_MLEN);
+        return lipt_error(L, LIPTE_MLEN, "");
     if (! key_bypair(nbor, addr, mask))
-        return lipt_errbail(L, LIPTE_BINOP);
+        return lipt_error(L, LIPTE_BINOP, "");
 
     if (! key_tostr(buf, nbor))
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
 
     lua_pushstring(L, buf);
     lua_pushinteger(L, mlen);
@@ -840,16 +802,16 @@ ipt_incr(lua_State *L)
     if (lua_isnumber(L, 2))
         offset = lua_tonumber(L, 2);
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
 
     if (! key_bystr(addr, &mlen, &af, pfx))
-        return lipt_errbail(L, LIPTE_PFX);
+        return lipt_error(L, LIPTE_PFX, "");
 
     if (! key_incr(addr, offset))
-        return lipt_errbail(L, LIPTE_BINOP);
+        return lipt_error(L, LIPTE_BINOP, "");
 
     if (! key_tostr(buf, addr))
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
 
     lua_pushstring(L, buf);
     lua_pushinteger(L, mlen);
@@ -882,16 +844,16 @@ ipt_decr(lua_State *L)
     if (lua_isnumber(L, 2))
         offset = lua_tonumber(L, 2);
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
 
     if (! key_bystr(addr, &mlen, &af, pfx))
-        return lipt_errbail(L, LIPTE_PFX);
+        return lipt_error(L, LIPTE_PFX, "");
 
     if (! key_decr(addr, offset))
-        return lipt_errbail(L, LIPTE_BINOP);
+        return lipt_error(L, LIPTE_BINOP, "");
 
     if (! key_tostr(buf, addr))
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
 
     lua_pushstring(L, buf);
     lua_pushinteger(L, mlen);
@@ -919,15 +881,15 @@ ipt_broadcast(lua_State *L)
     const char *pfx = NULL;
 
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
     if (! key_bystr(addr, &mlen, &af, pfx))
-        return lipt_errbail(L, LIPTE_PFX);
+        return lipt_error(L, LIPTE_PFX, "");
     if (! key_bylen(mask, mlen, af))
-        return lipt_errbail(L, LIPTE_MLEN);
+        return lipt_error(L, LIPTE_MLEN, "");
     if (! key_broadcast(addr, mask))
-        return lipt_errbail(L, LIPTE_BINOP);
+        return lipt_error(L, LIPTE_BINOP, "");
     if (! key_tostr(buf, addr))
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
 
     lua_pushstring(L, buf);
     lua_pushinteger(L, mlen);
@@ -949,11 +911,6 @@ ipt_broadcast(lua_State *L)
  * Returns the mask, as a string, for the given address family `af` and mask
  * length `mlen`. Inverts the mask if the optional argument `invert` evaluates
  * to true.
- *
- * TODO:
- * - [x] update doc string
- * - [x] add invert parm instead of using -mlen to convey desire for inversion
- * - [x] restore mlen<0 to mean IPx_MAXMASK
  */
 
 static int
@@ -966,20 +923,20 @@ ipt_mask(lua_State *L)
     uint8_t mask[MAX_BINKEY];
 
     if (! iptL_getaf(L, 1, &af))
-            return lipt_errbail(L, LIPTE_ARG);
+            return lipt_error(L, LIPTE_ARG, "");
     if (AF_UNKNOWN(af))
-        return lipt_errbail(L, LIPTE_AF);
+        return lipt_error(L, LIPTE_AF, "");
     mlen = lua_tointegerx(L, 2, &isnum);
     if (! isnum)
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
     invert = lua_toboolean(L, 3);
 
     if (! key_bylen(mask, mlen, af))
-        return lipt_errbail(L, LIPTE_MLEN);
+        return lipt_error(L, LIPTE_MLEN, "");
     if (invert && ! key_invert(mask))
-        return lipt_errbail(L, LIPTE_BINOP);
+        return lipt_error(L, LIPTE_BINOP, "");
     if (! key_tostr(buf, mask))
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
 
     lua_pushstring(L, buf);
 
@@ -1003,7 +960,6 @@ iter_hosts(lua_State *L)
 
     size_t len = 0;
     int af = AF_UNSPEC, mlen = -1, inclusive = 0;
-    int fail = 0;  // even on failure, gotta push iterfunc with 2 upvalues
     uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY], stop[MAX_BINKEY];
     const char *pfx = NULL;
 
@@ -1011,27 +967,26 @@ iter_hosts(lua_State *L)
         inclusive = lua_toboolean(L, 2);  // include netw/bcast (or not)
 
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return iter_bail(L, LIPTE_ARG);
-    if (! key_bystr(addr, &mlen, &af, pfx)) fail = 1;
-    if (! key_bystr(stop, &mlen, &af, pfx)) fail = 1;
-    if (! key_bylen(mask, mlen, af)) fail = 1;
-    if (! key_network(addr, mask)) fail = 1;           // start = network
-    if (! key_broadcast(stop, mask)) fail = 1;         // stop = bcast
+        return iter_error(L, LIPTE_ARG, "?");
+    if (! key_bystr(addr, &mlen, &af, pfx))
+        return iter_error(L, LIPTE_TOBIN, "'%s' ?", pfx);
+    if (! key_bystr(stop, &mlen, &af, pfx))
+        return iter_error(L, LIPTE_TOBIN, "'%s' ?", pfx);
+    if (! key_bylen(mask, mlen, af))
+        return iter_error(L, LIPTE_BINOP, "");
+    if (! key_network(addr, mask))
+        return iter_error(L, LIPTE_BINOP, "");
+    if (! key_broadcast(stop, mask))
+        return iter_error(L, LIPTE_BINOP, "");
 
     if (inclusive)                                     // incl network/bcast?
         key_incr(stop, 1);
     else if (key_cmp(addr, stop) < 0)
         key_incr(addr, 1); // not inclusive, so donot 'iterate' a host ip addr.
 
-    if (fail) {
-        lua_pushnil(L);
-        lua_pushnil(L);
-        dbg_stack("fail! 2+");
-    } else {
-        lua_pushlstring(L, (const char *)addr, IPT_KEYLEN(addr));
-        lua_pushlstring(L, (const char *)stop, IPT_KEYLEN(stop));
-        dbg_stack("suc6! 2+");
-    }
+    lua_pushlstring(L, (const char *)addr, IPT_KEYLEN(addr));
+    lua_pushlstring(L, (const char *)stop, IPT_KEYLEN(stop));
+    dbg_stack("suc6! 2+");
     lua_pushcclosure(L, iter_hosts_f, 2);  // [.., func]
 
     dbg_stack("out(1) ==>");
@@ -1058,15 +1013,15 @@ iter_hosts_f(lua_State *L)
 
     lua_settop(L, 0);  /* clear stack */
     if (!iptL_getbinkey(L, lua_upvalueindex(1), next, &nlen))
-        return lipt_errbail(L, LIPTE_LVAL);
+        return lipt_error(L, LIPTE_LVAL, "");
     if (!iptL_getbinkey(L, lua_upvalueindex(2), stop, &slen))
-        return lipt_errbail(L, LIPTE_LVAL);
+        return lipt_error(L, LIPTE_LVAL, "");
 
     if (key_cmp(next, stop) == 0)
         return 0;  /* all done */
 
     if (! key_tostr(buf, next))
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
     lua_pushstring(L, buf);
 
     /* setup the next val */
@@ -1112,19 +1067,19 @@ iter_interval(lua_State *L)
 
     /* pickup start */
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return iter_bail(L, LIPTE_ARG);
+        return iter_error(L, LIPTE_ARG, "");
     if (! key_bystr(start, &mlen, &af, pfx))
-        return iter_bail(L, LIPTE_PFX);
+        return iter_error(L, LIPTE_PFX, "");
     if (AF_UNKNOWN(af))
-        return iter_bail(L, LIPTE_AF);
+        return iter_error(L, LIPTE_AF, "");
 
     /* pickup stop */
     if (! iptL_getpfxstr(L, 2, &pfx, &len))
-        return iter_bail(L, LIPTE_ARG);
+        return iter_error(L, LIPTE_ARG, "");
     if (! key_bystr(stop, &mlen, &af2, pfx))
-        return iter_bail(L, LIPTE_PFX);
+        return iter_error(L, LIPTE_PFX, "");
     if (af != af2)
-        return iter_bail(L, LIPTE_AF);
+        return iter_error(L, LIPTE_AF, "");
 
     lua_pushlstring(L, (const char *)start, IPT_KEYLEN(start));
     lua_pushlstring(L, (const char *)stop, IPT_KEYLEN(stop));
@@ -1148,15 +1103,15 @@ iter_interval_f(lua_State *L)
     if (lua_tointeger(L, lua_upvalueindex(3)))
         return 0;  /* all done */
     if (! iptL_getbinkey(L, lua_upvalueindex(1), start, &klen))
-        return lipt_errbail(L, LIPTE_LVAL);
+        return lipt_error(L, LIPTE_LVAL, "");
     if (! iptL_getbinkey(L, lua_upvalueindex(2), stop, &klen))
-        return lipt_errbail(L, LIPTE_LVAL);
+        return lipt_error(L, LIPTE_LVAL, "");
 
     if (key_cmp(start, stop) > 0)
         return 0;  /* all done */
 
     if (! key_byfit(mask, start, stop))
-        return lipt_errbail(L, LIPTE_BINOP);
+        return lipt_error(L, LIPTE_BINOP, "");
 
     /* push the result; [pfx] */
     lua_settop(L, 0);
@@ -1164,7 +1119,7 @@ iter_interval_f(lua_State *L)
 
     /* setup next start address */
     if (! key_broadcast(start, mask))
-        return lipt_errbail(L, LIPTE_BINOP);
+        return lipt_error(L, LIPTE_BINOP, "");
 
     /* wrap around protection, current pfx is the last one */
     if (key_cmp(start, stop) == 0) {
@@ -1172,7 +1127,7 @@ iter_interval_f(lua_State *L)
         lua_replace(L, lua_upvalueindex(3));
     } else {
         if (! key_incr(start, 1))
-            return lipt_errbail(L, LIPTE_BINOP);
+            return lipt_error(L, LIPTE_BINOP, "");
         lua_pushlstring(L, (const char *)start, (size_t)IPT_KEYLEN(start));
         lua_replace(L, lua_upvalueindex(1));
     }
@@ -1226,7 +1181,7 @@ iptm_newindex(lua_State *L)
     int *refp = NULL;
 
     if (! iptL_getpfxstr(L, 2, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
 
     if (lua_isnil(L, -1))
         tbl_del(t, pfx, L);   // assigning nil deletes the entry
@@ -1259,7 +1214,7 @@ iptm_index(lua_State *L)
     table_t *t = iptL_gettable(L, 1);
 
     if (! iptL_getpfxstr(L, 2, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
 
     if(pfx)
         entry = strchr(pfx, '/') ? tbl_get(t, pfx) : tbl_lpm(t, pfx);
@@ -1360,7 +1315,7 @@ iter_kv(lua_State *L)
     while(rn && (rn->rn_flags & IPTF_DELETE))
         rn = rdx_nextleaf(rn);
 
-    if (rn == NULL) return iter_bail(L, LIPTE_NONE);
+    if (rn == NULL) return iter_error(L, LIPTE_NONE, "");
 
     lua_pushlightuserdata(L, rn);        // [t rn], rn is 1st node
     iptL_pushitrgc(L, t);                // [t rn gc], itr garbage collector
@@ -1377,6 +1332,25 @@ iter_kv(lua_State *L)
  * ### `iter_kv_f`
  * The iter_f for __iter_kv(), yields all k,v pairs in the tree(s).
  * - upvalue(1) is the leaf to process.
+ *
+ * FIXME:
+ * - iterate by:
+ *   0. get stored leaf
+ *   1. find next leaf
+ *   2. process that leaf
+ *   3. store processed leaf
+ *  Why: at the moment, iteration processes a previously found & stored leaf as
+ *  which leads to returning a result which may just have been deleted.
+ *
+ *     for k,v in pairs(t) do
+ *         t[10.10.10.10] = nil
+ *         print(k)
+ *     end
+ *     if 10.10.10.10 is the second entry in the tree, it will still be
+ *     printed even though it is deleted before the next loop runs.
+ *
+ *  See tmp/errnums/tryerr.lua
+ *
  */
 
 static int
@@ -1394,7 +1368,7 @@ iter_kv_f(lua_State *L)
 
     /* push the next key, value onto stack */
     if (! key_tostr(saddr, rn->rn_key))
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
     lua_pushfstring(L, "%s/%d", saddr, key_masklen(rn->rn_mask)); // [t k k']
     lua_rawgeti(L, LUA_REGISTRYINDEX, *(int *)e->value);        // [t k k' v']
 
@@ -1436,10 +1410,10 @@ iter_more(lua_State *L)
     table_t *t = iptL_gettable(L, 1);
     const char *pfx = NULL;
     if (! iptL_getpfxstr(L, 2, &pfx, &len))
-        return lipt_errbail(L, LIPTE_ARG);
+        return lipt_error(L, LIPTE_ARG, "");
 
     if (! key_bystr(addr, &mlen, &af, pfx))
-        return iter_bail(L, LIPTE_PFX);
+        return iter_error(L, LIPTE_PFX, "");
 
     if (lua_gettop(L) == 3 && lua_isboolean(L, 3))
       inclusive = lua_toboolean(L, 3);
@@ -1450,12 +1424,12 @@ iter_more(lua_State *L)
       head = t->head6;
       mlen = mlen < 0 ? IP6_MAXMASK : mlen;
     } else
-      return iter_bail(L, LIPTE_AF);
+      return iter_error(L, LIPTE_AF, "");
 
     if (! key_bylen(mask, mlen, af))
-        return iter_bail(L, LIPTE_MLEN);
+        return iter_error(L, LIPTE_MLEN, "");
     if (! key_network(addr, mask))
-        return iter_bail(L, LIPTE_BINOP);
+        return iter_error(L, LIPTE_BINOP, "");
     lua_pop(L, lua_gettop(L) - 1);                // [t]
 
     maxb = (mlen > 0) ? -1 - IPT_KEYOFFSET - mlen : -2;
@@ -1507,9 +1481,9 @@ iter_more_f(lua_State *L)
 
     if (rn == NULL) return 0;  /* we're done */
     if(!iptL_getbinkey(L, lua_upvalueindex(4), addr, &dummy))
-        return lipt_errbail(L, LIPTE_LVAL);
+        return lipt_error(L, LIPTE_LVAL, "");
     if(!iptL_getbinkey(L, lua_upvalueindex(5), mask, &dummy))
-        return lipt_errbail(L, LIPTE_LVAL);
+        return lipt_error(L, LIPTE_LVAL, "");
     mlen = key_masklen(mask);
     mlen = inclusive ? mlen : mlen + 1;
 
@@ -1564,7 +1538,7 @@ iter_less(lua_State *L)
 
     iptL_getpfxstr(L, 2, &pfx, &len);
     if (pfx == NULL || len < 1)
-        return iter_bail(L, LIPTE_ARG);
+        return iter_error(L, LIPTE_ARG, "");
 
     if (lua_gettop(L) > 2 && lua_isboolean(L, 3))
       inclusive = lua_toboolean(L, 3);
@@ -1572,21 +1546,21 @@ iter_less(lua_State *L)
     lua_pop(L, lua_gettop(L) - 1);                        // [t]
 
     if (! key_bystr(addr, &mlen, &af, pfx))
-        return iter_bail(L, LIPTE_PFX);
+        return iter_error(L, LIPTE_PFX, "");
     if (! key_tostr(buf, addr))
-        return iter_bail(L, LIPTE_PFX);
+        return iter_error(L, LIPTE_PFX, "");
 
     if (af == AF_INET)
       mlen = mlen < 0 ? IP4_MAXMASK : mlen;
     else if (af == AF_INET6)
       mlen = mlen < 0 ? IP6_MAXMASK : mlen;
     else
-      return iter_bail(L, LIPTE_AF);
+      return iter_error(L, LIPTE_AF, "");
 
     mlen = inclusive ? mlen : mlen -1;
     if (mlen < 0)
         // less specific than /0 is a no-op if not allowed to include self
-        return iter_bail(L, LIPTE_NONE);
+        return iter_error(L, LIPTE_NONE, "");
 
     lua_pushstring(L, buf);                              // [t pfx]
     lua_pushinteger(L, mlen);                            // [t pfx mlen]
@@ -1618,7 +1592,7 @@ iter_less_f(lua_State *L)
     if (mlen < 0)
         return 0;     /* all done */
     if (pfx == NULL)
-        return lipt_errbail(L, LIPTE_LVAL);
+        return lipt_error(L, LIPTE_LVAL, "");
 
     for(; mlen >= 0; mlen--) {
         snprintf(buf, sizeof(buf), "%s/%d", pfx, mlen);
@@ -1668,11 +1642,11 @@ int iter_masks(lua_State *L) {
     table_t *t = iptL_gettable(L, 1);
 
     if (lua_gettop(L) != 2)
-        return iter_bail(L, LIPTE_AF);            // no AF_family
+        return iter_error(L, LIPTE_AF, "");            // no AF_family
 
     af = lua_tointegerx(L, 2, &isnum);
     if (!isnum || AF_UNKNOWN(af))
-        return iter_bail(L, LIPTE_AF);            // bad AF_family
+        return iter_error(L, LIPTE_AF, "");            // bad AF_family
     lua_pop(L, 1);                                   // [t]
 
     rnh = (af == AF_INET) ? t->head4 : t->head6;
@@ -1692,9 +1666,9 @@ int iter_masks(lua_State *L) {
         rn = rn->rn_dupedkey;
     if (!RDX_ISROOT(rn) && rn->rn_bit == -1) {
         if (! key_bylen(binmask, 0, af))
-            return iter_bail(L, LIPTE_TOBIN);
+            return iter_error(L, LIPTE_TOBIN, "");
         if (! key_tostr(strmask, binmask))
-            return iter_bail(L, LIPTE_TOSTR);
+            return iter_error(L, LIPTE_TOSTR, "");
     } else {
         strmask[0] = '\0';
     }
@@ -1755,9 +1729,9 @@ iter_masks_f(lua_State *L)
     /* process current mask leaf node */
     mlen = key_masklen(rn->rn_key);              // contiguous masks only
     if (! key_bylen(binmask, mlen, af))        // fresh mask due to deviating
-        return lipt_errbail(L, LIPTE_TOBIN);
+        return lipt_error(L, LIPTE_TOBIN, "");
     if (! key_tostr(strmask, binmask))         // keylen's of masks
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
 
     lua_pushstring(L, strmask);                // [t m]
     lua_pushinteger(L, mlen);                  // [t m l]
@@ -1794,7 +1768,7 @@ iter_merge(lua_State *L)
     else if (af == AF_INET6)
       rn = rdx_firstleaf(&t->head6->rh);
     else
-      return iter_bail(L, LIPTE_AF);
+      return iter_error(L, LIPTE_AF, "");
 
     lua_pushlightuserdata(L, rn);             // [t af rn]
     lua_pushlightuserdata(L, NULL);           // [t af rn NULL]
@@ -1834,7 +1808,7 @@ iter_merge_f(lua_State *L)
     if (rn == NULL)
         return 0;  /* all done, not an error */
     if (! RDX_ISLEAF(rn))
-        return lipt_errbail(L, LIPTE_ITER);  /* error: not a leaf */
+        return lipt_error(L, LIPTE_ITER, "");  /* error: not a leaf */
 
     /* skip leafs without a pairing key */
     while(rn && (pair = rdx_pairleaf(rn)) == NULL)
@@ -1848,7 +1822,7 @@ iter_merge_f(lua_State *L)
     /* search for supernet node on dupedkey chain of lowest key */
     super = key_cmp(rn->rn_key, pair->rn_key) > 0 ? pair : rn;
     if (! key_tostr(buf, super->rn_key))      /* supernet prefix as string */
-        return lipt_errbail(L, LIPTE_TOSTR);
+        return lipt_error(L, LIPTE_TOSTR, "");
     while(super && super->rn_bit != rn->rn_bit + 1)
         super = super->rn_dupedkey;
 
@@ -1978,11 +1952,11 @@ iter_radixes(lua_State *L)
 
     iptL_getaf(L, 2, &af);
     if (AF_UNKNOWN(af))
-        return iter_bail(L, LIPTE_AF);
+        return iter_error(L, LIPTE_AF, "");
 
     /* pushes af_fam's radix_node_head onto t's stack */
     if (! rdx_firstnode(t, af))
-        return iter_bail(L, LIPTE_NONE);
+        return iter_error(L, LIPTE_NONE, "");
 
     /* maskp & itr_gc as upvalues for iterator */
     lua_settop(L, 1);                                // [t]
@@ -2030,7 +2004,7 @@ iter_radix(lua_State *L)
         case TRDX_MASK:
             return iptL_pushrm(L, node);
         default:
-            return lipt_errbail(L, LIPTE_RDX);  /* unhandled node type */
+            return lipt_error(L, LIPTE_RDX, "");  /* unhandled node type */
     }
 
     return 0;
@@ -2076,9 +2050,9 @@ iptT_setint(lua_State *L, const char *k, int v)
 
 /*
  * ### `iptT_setkv`
- * TODO: move
  * set (rn->rn_key, v) on Table on top of L, based on pfx provided and its
  * value stored (indirectly) in the corresponding radix tree.
+ * TODO: doc, move
  */
 
 static void
@@ -2154,9 +2128,7 @@ iptL_pushrnh(lua_State *L, struct radix_node_head *rnh)
 
 /*
  * ### `iptL_pushrn`
- * TODO:
- * - [ ] doc
- * - [ ] move
+ * TODO: doc, move
  */
 
 static int
@@ -2224,9 +2196,7 @@ iptL_pushrn(lua_State *L, struct radix_node *rn)
 
 /*
  * ### `iptL_pushrh`
- * TODO:
- * - [ ] doc
- * - [ ] move
+ * TODO: doc, move
  *
  * push a radix head onto L (as a table)
  */
@@ -2251,9 +2221,7 @@ iptL_pushrh(lua_State *L, struct radix_head *rh)
 
 /*
  * ### `iptL_pushrmh`
- * TODO:
- * - [ ] doc
- * - [ ] move
+ * TODO: doc, move
  * push a radix mask head onto L (as a table)
  */
 
@@ -2296,9 +2264,7 @@ iptL_pushrmh(lua_State *L, struct radix_mask_head *rmh)
 
 /*
  * ### `iptL_pushrm`
- * TODO:
- * - [ ] doc
- * - [ ] move
+ * TODO: doc, move
  */
 
 static int
