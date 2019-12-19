@@ -155,8 +155,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET6    10
 iptable.AF_INET     2
+iptable.AF_INET6    10
 ```
 
 ## module functions
@@ -347,11 +347,11 @@ by supplying a true value.
 #!/usr/bin/env lua
 iptable = require"iptable"
 
-print(iptable.mask(iptable.AF_INET, 19))
-print(iptable.mask(iptable.AF_INET, 19, true))
+print("--", iptable.mask(iptable.AF_INET, 19))
+print("--", iptable.mask(iptable.AF_INET, 19, true))
 
-print(iptable.mask(iptable.AF_INET6, 91))
-print(iptable.mask(iptable.AF_INET6, 91, true))
+print("--", iptable.mask(iptable.AF_INET6, 91))
+print("--", iptable.mask(iptable.AF_INET6, 91, true))
 
 
 print(string.rep("-", 35))
@@ -360,29 +360,29 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
-255.255.224.0
-0.0.31.255
-ffff:ffff:ffff:ffff:ffff:ffe0::
-::1f:ffff:ffff
+--	255.255.224.0
+--	0.0.31.255
+--	ffff:ffff:ffff:ffff:ffff:ffe0::
+--	::1f:ffff:ffff
 -----------------------------------
 ```
 
 ### `iptable.neighbor(prefix)`
 
 Get the adjacent subnet that, together with `prefix`, occupies their
-supernet whose prefix length is 1 bit shorter. Returns the adjacent
-prefix, mask length and address family.
+immediate parental supernet whose prefix length is 1 bit shorter.
+Returns the adjacent prefix, mask length and address family.
 
 ``` lua
 #!/usr/bin/env lua
 iptable = require"iptable"
 pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 
-print(iptable.neighbor("10.10.0.0/19"))
-print(iptable.neighbor("10.10.32.0/19"))
-print(iptable.neighbor("10.10.10.255"))
-print(iptable.neighbor("0.0.0.0/0"))      -- nothing larger than this
-print(iptable.neighbor(pfx6))
+print("--", iptable.neighbor("10.10.0.0/19"))
+print("--", iptable.neighbor("10.10.32.0/19"))
+print("--", iptable.neighbor("10.10.10.255"))
+print("--", iptable.neighbor("0.0.0.0/0"))      -- nothing larger than this
+print("--", iptable.neighbor(pfx6))
 
 print(string.rep("-", 35))
 
@@ -390,11 +390,11 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
-10.10.32.0	19	2
-10.10.0.0	19	2
-10.10.10.254	-1	2
-nil
-2001:db8:85a3::8a2e:370:600	120	10
+--	10.10.32.0	19	2
+--	10.10.0.0	19	2
+--	10.10.10.254	-1	2
+--	nil
+--	2001:db8:85a3::8a2e:370:600	120	10
 -----------------------------------
 ```
 
@@ -409,10 +409,10 @@ to yield the number.
 iptable = require"iptable"
 pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 
-print(iptable.size("10.10.10.0/24"))
-print(iptable.size("10.10.0.0/31"))
-print(iptable.size(pfx6))
-print(iptable.size("2001::/0"))
+print("--", iptable.size("10.10.10.0/24"))
+print("--", iptable.size("10.10.0.0/31"))
+print("--", iptable.size(pfx6))
+print("--", iptable.size("2001::/0"))
 
 print(string.rep("-", 35))
 
@@ -420,10 +420,10 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
-256.0
-2.0
-256.0
-3.4028236692094e+38
+--	256.0
+--	2.0
+--	256.0
+--	3.4028236692094e+38
 -----------------------------------
 ```
 
@@ -453,8 +453,8 @@ end
 bin4, mlen, af = iptable.tobin(pfx4)
 bin6, mlen, af = iptable.tobin(pfx6)
 
-print(bin2str(bin4))
-print(bin2str(bin6))
+print("--", bin2str(bin4))
+print("--", bin2str(bin6))
 
 print(string.rep("-", 35))
 
@@ -462,8 +462,8 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
-05:0a:0a:00:00
-11:20:01:0d:b8:85:a3:00:00:00:00:8a:2e:03:70:07:00
+--	05:0a:0a:00:00
+--	11:20:01:0d:b8:85:a3:00:00:00:00:8a:2e:03:70:07:00
 -----------------------------------
 ```
 
@@ -491,8 +491,8 @@ end
 bin4, mlen4, af4 = iptable.tobin(pfx4)
 bin6, mlen6, af6 = iptable.tobin(pfx6)
 
-print(iptable.masklen(bin4), "consecutive 1's in:", bin2str(bin4))
-print(iptable.masklen(bin6), "consecutive 1's in:", bin2str(bin6))
+print("--", iptable.masklen(bin4), "consecutive 1's in:", bin2str(bin4))
+print("--", iptable.masklen(bin6), "consecutive 1's in:", bin2str(bin6))
 
 print(string.rep("-", 35))
 
@@ -500,14 +500,14 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
-22	consecutive 1's in:	05:ff:ff:fd:00
-31	consecutive 1's in:	11:ff:ff:ff:fe:00:00:00:00:00:00:00:00:00:00:00:00
+--	22	consecutive 1's in:	05:ff:ff:fd:00
+--	31	consecutive 1's in:	11:ff:ff:ff:fe:00:00:00:00:00:00:00:00:00:00:00:00
 -----------------------------------
 ```
 
 ### `iptable.tostr(binary_key)`
 
-The reciprocal for `tobin` turns a binary key back into a string key.
+The reciprocal to `tobin` turns a binary key back into a string key.
 
 ``` lua
 #!/usr/bin/env lua
@@ -527,8 +527,8 @@ end
 bin4, mlen4, af4 = iptable.tobin(pfx4)
 bin6, mlen6, af6 = iptable.tobin(pfx6)
 
-print(iptable.tostr(bin4), " == ", pfx4)
-print(iptable.tostr(bin6), " == ", pfx6)
+print("--", iptable.tostr(bin4), " == ", pfx4)
+print("--", iptable.tostr(bin6), " == ", pfx6)
 
 print(string.rep("-", 35))
 
@@ -536,8 +536,8 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
-255.255.253.0	 == 	255.255.253.0
-ffff:fffe::	 == 	ffff:fffe::
+--	255.255.253.0	 == 	255.255.253.0
+--	ffff:fffe::	 == 	ffff:fffe::
 -----------------------------------
 ```
 
@@ -726,16 +726,16 @@ print(string.rep("-", 35))
    -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/25 -> 4
    -- 10.10.10.0/24 -> 3
+   -- 10.10.10.128/25 -> 5
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.0/30 -> 6
    -- 10.10.10.4/30 -> 7
+   -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/25 -> 4
    -- 10.10.10.0/24 -> 3
+   -- 10.10.10.128/25 -> 5
 -----------------------------------
 ```
 
