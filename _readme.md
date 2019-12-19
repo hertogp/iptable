@@ -1,20 +1,157 @@
 ---
-author: git.hertogp@gmail.com
+author: hertogp <git.hertogp@gmail.com>
 title: iptable
-imagine.im_log: 7
 imagine.shebang.im_out: ocb,stdout
 ...
 
 # iptable
 
-A Lua longest prefix matching table for ipv4 and ipv6:
+A Lua binding to a `iptable.c`, which is a thin wrapper around
+[radix.c](https://raw.githubusercontent.com/freebsd/freebsd/master/sys/net/radix.c)
+[radix.h](https://raw.githubusercontent.com/freebsd/freebsd/master/sys/net/radix.h)
+from the [FreeBsd](https://www.freebsd.org/) project.
 
-- a single `table` to store both ipv4 and/or ipv6 prefixes
-- `assignment` is always based on an exact match
-- `indexing` in the table is either:
-    - *exact*, when indexing with a prefix (that is with a `addr/len`), or
-    - *longest prefix match*, when indexing with a bareaddress
+`iptable` provides some convenience functions to work with ip addresses (both
+ipv4 and ipv6) as well as a longest prefix matching (Lua) table.
 
+## Requirements and limitations
+
+`iptable` is developed on a linux machine and support for other OS's is
+non-existent.  The following is currently used to build iptable:
+
+```{.shebang im_out=stdout im_log=4}
+#!/bin/bash
+echo "- $(lua -v)"
+echo "- $(lsb_release -sirc | tr '\n' ' ')"
+echo "- $(gcc --version | head -n 1)"
+echo "- $(make -v | head -n 1)"
+```
+
+Additionally for testing and documentation:
+
+```{.shebang im_out=stdout}
+#!/bin/bash
+echo "- $(valgrind --version)"
+echo "- busted $(busted --version)"
+echo "- $(pandoc --version | head -n 1)"
+```
+
+## Installation
+
+Install using make.
+```
+cd ~/installs
+git clone https://github.com/hertogp/iptable.git
+cd iptable
+make test
+sudo -H make install
+# or
+make local_install    # copies to ~/.luarocks/lib/lua/5.3
+```
+
+Install using luarocks
+
+- todo.
+
+## Usage
+
+An iptable.new() yields a Lua table with modified indexing behaviour:
+
+- the table utilizes 2 separate radix trees for ipv4 and ipv6 respectively
+- the table handles both ipv4 or ipv6 keys transparently
+- if a key is not an ipv4 or ipv6 prefix/address it is *ignored*
+- when storing data, masks are always applied first to the key
+- when storing data, missing masks default to the AF's maximum mask
+- storing data is always based on an exact match which includes the mask
+- retrieving data for a prefix, is also based on an exact match
+- retrieving data via an ip address uses a longest prefix match
+- table entry counts or prefix size functions are accurate upto 2^52
+
+Example usage:
+
+```lua
+ipt = require"iptable".new()
+
+ipt["10.10.10.0/24"] = {c=0}          -- store anything in the table
+ipt["10.10.10.10"] = false            -- stores to ipt["10.10.10.10/32"]
+ipt["11.11.11.11/24"] = true          -- stores to ipt["11.11.11.0/24"]
+ipt["acdc:1974::/32"] = "Jailbreak"   -- goes into separate radix tree
+ipt[1] = 42                           -- ignored: ipt[1] -> nil
+#ipt                                  -- 4 entries in total
+ipt.counts()                          -- 3  1  (ipv4 and ipv6 counts)
+
+for k,v in pairs(ipt) do              -- 10.10.10.0/24    table 0x...
+    print(k,v)                        -- 10.10.10.10/32   false
+                                      -- 11.11.11.0/24    true
+end                                   -- acdc:1974::/32   Jailbreak
+```
+
+# Quick reference
+
+```lua
+
+iptable = require "iptable"
+
+-- Module constants
+
+iptable.AF_INET  --  2
+iptable.AF_INET6 -- 10
+
+-- Module functions
+
+prefix = "10.10.10.0/24"                       -- ipv4/6 address or prefix
+
+addr,  mlen, af = iptable.address(prefix)      -- 10.10.10.0   24  2
+netw,  mlen, af = iptable.network(prefix)      -- 10.10.10.0   24  2
+bcast, mlen, af = iptable.broadcast(prefix)    -- 10.10.10.255 24  2
+neigb, mlen, af = iptable.neighbor(prefix)     -- 10.10.11.0   24  2
+
+next,  mlen, af = iptable.incr(prefix)         -- 10.10.10.1   24  2
+next,  mlen, af = iptable.incr(prefix, 257)    -- 10.10.11.1   24  2
+prev,  mlen, af = iptable.decr(prefix)         -- 10.10.9.255  24  2
+prev,  mlen, af = iptable.decr(prefix, 257)    -- 10.10.8.255  24  2
+
+mask = iptable.mask(iptable.AF_INET, 24)       -- 255.255.255.0
+size = iptable.size(prefix)                    -- 256
+
+binkey = iptable.tobin("255.255.255.0")        -- byte string 05:ff:ff:ff:00
+prefix = iptable.tostr(binkey)                 -- 255.255.255.0
+msklen = iptable.masklen(binkey)               -- 24
+ipt    = iptable.new()                         -- longest prefix match table
+
+-- table functions
+
+ipt:counts()                                   -- 0 0 (ipv4_count ipv6_count)
+for k,v in pairs(ipt) do ... end               -- iterate across k,v-pairs
+for k,v in ipt:more(prefix [,true]) ... end    -- iterate across more specifics
+for k,v in ipt:less(prefix [,true]) ... end    -- iterate across less specifics
+for k,v in ipt:masks(prefix [,true]) ... end   -- iterate across masks used
+for k,g in ipt:merge(prefix [,true]) ... end   -- iterate across combinable pfx's
+for rdx in ipt:radixes(af [,true]) ... end    -- dumps all radix nodes in tree
+
+-- note: use `true` as 2nd (optional boolean) argument to:
+--> include search `prefix` itself in search results if found, or
+--> to also dump the radix nodes from the (separate) radix mask tree
+```
+
+
+# Documentation
+
+See also the `doc` directory on [github](https://github.com/hertogp/iptable).
+
+## module constants
+
+```{.shebang .lua im_out=stdout im_log=4}
+#!/usr/bin/env lua
+iptable = require"iptable"
+F = string.format
+
+for k,v in pairs(iptable) do
+    if type(v) == "number" then
+        print(F("iptable.%s  %4s", k, v))
+    end
+end
+```
 
 ## module functions
 
