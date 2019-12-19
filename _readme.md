@@ -6,20 +6,21 @@ imagine.shebang.im_out: ocb,stdout
 
 # iptable
 
-A Lua binding to a `iptable.c`, which is a thin wrapper around
-[radix.c](https://raw.githubusercontent.com/freebsd/freebsd/master/sys/net/radix.c)
-[radix.h](https://raw.githubusercontent.com/freebsd/freebsd/master/sys/net/radix.h)
-from the [FreeBsd](https://www.freebsd.org/) project.
+A Lua binding to `iptable.c`, a thin wrapper around
+[*radix.c*](https://raw.githubusercontent.com/freebsd/freebsd/master/sys/net/radix.c)
+from the [*FreeBsd*](https://www.freebsd.org/) project which implements a radix
+tree with one-way branching removed (a level collapsed trie).
 
-`iptable` provides some convenience functions to work with ip addresses (both
-ipv4 and ipv6) as well as a longest prefix matching (Lua) table.
+`iptable` provides some convenience functions to work with ip addresses and
+subnets (in CIDR notation) as well as a longest prefix matching (Lua) table.
+It handles both ipv4 and ipv6 addresses and/or subnets transparently.
 
 ## Requirements and limitations
 
 `iptable` is developed on a linux machine and support for other OS's is
-non-existent.  The following is currently used to build iptable:
+non-existent at this point.  The following is currently used to build iptable:
 
-```{.shebang im_out=stdout im_log=4}
+```{.shebang im_out=stdout}
 #!/bin/bash
 echo "- $(lua -v)"
 echo "- $(lsb_release -sirc | tr '\n' ' ')"
@@ -27,18 +28,23 @@ echo "- $(gcc --version | head -n 1)"
 echo "- $(make -v | head -n 1)"
 ```
 
-Additionally for testing and documentation:
+`lua_iptable.c` uses Lua 5.3's C-API, so Lua >= 5.3 is required.  Additionally
+for testing and documentation, the following is used:
 
-```{.shebang im_out=stdout}
+```{.shebang im_out=stdout im_log=4}
 #!/bin/bash
 echo "- $(valgrind --version)"
 echo "- busted $(busted --version)"
 echo "- $(pandoc --version | head -n 1)"
+echo -n "- pandoc-imagine "
+echo `python -c 'import pandoc_imagine as x; print(x.__version__)'`
 ```
 
 ## Installation
 
-Install using make.
+
+### Install the Lua `iptable` library using make.
+
 ```
 cd ~/installs
 git clone https://github.com/hertogp/iptable.git
@@ -46,12 +52,28 @@ cd iptable
 make test
 sudo -H make install
 # or
-make local_install    # copies to ~/.luarocks/lib/lua/5.3
+make local_install    # simply copies to ~/.luarocks/lib/lua/5.3
 ```
 
-Install using luarocks
+### Install using luarocks
 
 - todo.
+
+### Install only the C `iptable` library using make
+
+Well, sort of:
+
+```
+cd ~/installs
+git clone https://github.com/hertogp/iptable.git
+cd iptable
+make c_test
+make c_lib
+```
+
+There's no `c_install` target to install the c-library, so from here it boils
+down to manual labor.
+
 
 ## Usage
 
@@ -59,20 +81,23 @@ An iptable.new() yields a Lua table with modified indexing behaviour:
 
 - the table utilizes 2 separate radix trees for ipv4 and ipv6 respectively
 - the table handles both ipv4 or ipv6 keys transparently
-- if a key is not an ipv4 or ipv6 prefix/address it is *ignored*
-- when storing data, masks are always applied first to the key
+- if a key is not an ipv4 or ipv6 subnet/address it is *ignored*
+- ipv4 and ipv6 subnets are always in CIDR notation: address/len
+- storing data always uses a subnet-key (address/mlen)
 - when storing data, missing masks default to the AF's maximum mask
+- when storing data, masks are always applied first to the key
 - storing data is always based on an exact match which includes the mask
-- retrieving data for a prefix, is also based on an exact match
-- retrieving data via an ip address uses a longest prefix match
-- table entry counts or prefix size functions are accurate upto 2^52
+- retrieving data with a subnet-key, uses an exact match
+- retrieving data with an address-key, uses a longest prefix match
+- count/size functions use Lua arithmatic, since ipv6 space is rather large
+- `mlen == -1` means some function (like `iptable.address(pfx)`) saw no mask
 
 Example usage:
 
 ```lua
 ipt = require"iptable".new()
 
-ipt["10.10.10.0/24"] = {c=0}          -- store anything in the table
+ipt["10.10.10.0/24"] = {seen=0}       -- store anything in the table
 ipt["10.10.10.10"] = false            -- stores to ipt["10.10.10.10/32"]
 ipt["11.11.11.11/24"] = true          -- stores to ipt["11.11.11.0/24"]
 ipt["acdc:1974::/32"] = "Jailbreak"   -- goes into separate radix tree
@@ -106,10 +131,10 @@ netw,  mlen, af = iptable.network(prefix)      -- 10.10.10.0   24  2
 bcast, mlen, af = iptable.broadcast(prefix)    -- 10.10.10.255 24  2
 neigb, mlen, af = iptable.neighbor(prefix)     -- 10.10.11.0   24  2
 
-next,  mlen, af = iptable.incr(prefix)         -- 10.10.10.1   24  2
-next,  mlen, af = iptable.incr(prefix, 257)    -- 10.10.11.1   24  2
-prev,  mlen, af = iptable.decr(prefix)         -- 10.10.9.255  24  2
-prev,  mlen, af = iptable.decr(prefix, 257)    -- 10.10.8.255  24  2
+nxt,  mlen, af = iptable.incr(prefix)          -- 10.10.10.1   24  2
+nxt,  mlen, af = iptable.incr(prefix, 257)     -- 10.10.11.1   24  2
+prv,  mlen, af = iptable.decr(prefix)          -- 10.10.9.255  24  2
+prv,  mlen, af = iptable.decr(prefix, 257)     -- 10.10.8.255  24  2
 
 mask = iptable.mask(iptable.AF_INET, 24)       -- 255.255.255.0
 size = iptable.size(prefix)                    -- 256
@@ -121,13 +146,14 @@ ipt    = iptable.new()                         -- longest prefix match table
 
 -- table functions
 
+#ipt                                           -- 0 (nothing stored yet)
 ipt:counts()                                   -- 0 0 (ipv4_count ipv6_count)
 for k,v in pairs(ipt) do ... end               -- iterate across k,v-pairs
 for k,v in ipt:more(prefix [,true]) ... end    -- iterate across more specifics
 for k,v in ipt:less(prefix [,true]) ... end    -- iterate across less specifics
 for k,v in ipt:masks(prefix [,true]) ... end   -- iterate across masks used
-for k,g in ipt:merge(prefix [,true]) ... end   -- iterate across combinable pfx's
-for rdx in ipt:radixes(af [,true]) ... end    -- dumps all radix nodes in tree
+for k,g in ipt:merge(af) ... end               -- iterate across combinable pfx's
+for rdx in ipt:radixes(af [,true]) ... end     -- dumps all radix nodes in tree
 
 -- note: use `true` as 2nd (optional boolean) argument to:
 --> include search `prefix` itself in search results if found, or
@@ -226,6 +252,10 @@ print(string.rep("-", 35))
 
 ### `iptable.incr(prefix [,offset])`
 
+Increment the ip address of the prefix (no mask is applied) and return the new
+ip address, mask length and address family.  `offset` is optional and defaults
+to 1.
+
 ```{.shebang .lua}
 #!/usr/bin/env lua
 iptable = require"iptable"
@@ -248,6 +278,10 @@ print(string.rep("-", 35))
 
 ### `iptable.decr(prefix [, offset])`
 
+Decrement the ip address of the prefix (no mask is applied) and return the new
+ip address, mask length and address family.  `offset` is optional and defaults
+to 1.
+
 ```{.shebang .lua}
 #!/usr/bin/env lua
 iptable = require"iptable"
@@ -268,6 +302,9 @@ print(string.rep("-", 35))
 
 ### `iptable.interval(start, stop)`
 
+Iterate across the subnets that cover, exactly, the ip address space bounded by
+the start and stop addresses.
+
 ```{.shebang .lua}
 #!/usr/bin/env lua
 iptable = require"iptable"
@@ -284,15 +321,19 @@ print(string.rep("-", 35))
 
 ### `iptable.mask(af, mlen [, invert])`
 
+Create a mask for the given address family `af` and specified mask length
+`mlen`.  Use the optional 3rd argument to request an inverted mask by
+supplying a true value.
+
 ```{.shebang .lua}
 #!/usr/bin/env lua
 iptable = require"iptable"
 
-print(iptable.mask(2, 19))
-print(iptable.mask(2, 19, true))
+print(iptable.mask(iptable.AF_INET, 19))
+print(iptable.mask(iptable.AF_INET, 19, true))
 
-print(iptable.mask(10, 91))
-print(iptable.mask(10, 91, true))
+print(iptable.mask(iptable.AF_INET6, 91))
+print(iptable.mask(iptable.AF_INET6, 91, true))
 
 
 print(string.rep("-", 35))
@@ -302,6 +343,10 @@ print(string.rep("-", 35))
 
 
 ### `iptable.neighbor(prefix)`
+
+Get the adjacent subnet that, together with `prefix`, occupies their supernet
+whose prefix length is 1 bit shorter.  Returns the adjacent prefix, mask length
+and address family.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -319,7 +364,11 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
-### `iptable.size(...)`
+### `iptable.size(prefix)`
+
+Return the number of hosts covered by given `prefix`.  Since ipv6 subnets might
+have more than 2^52 hosts in it, this function uses Lua arithmatic to yield the
+number.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -337,6 +386,13 @@ print(string.rep("-", 35))
 ```
 
 ### `iptable.tobin(prefix)`
+
+Returns the binary key used internally by the radix tree for a string key like
+`prefix`.  It's a length encoded byte string, i.e. the first byte represents
+the length of the entire byte string and the remaining bytes are from the
+prefix itself.  Only useful if the convenience functions fall short of what
+needs to be done.
+
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -367,6 +423,10 @@ print(string.rep("-", 35))
 
 ### `iptable.masklen(binary_key)`
 
+Given a binary key, `masklen` will return the number of consecutive 1-bits
+starting from the left.  Only useful if the binary key was derived from an
+actual mask and not a subnet prefix.
+
 ```{.shebang .lua}
 #!/usr/bin/env lua
 iptable = require"iptable"
@@ -393,8 +453,9 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
-
 ### `iptable.tostr(binary_key)`
+
+The reciprocal for `tobin` turns a binary key back into a string key.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -422,7 +483,6 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
-
 ### `iptable.new()`
 
 Constructor method that returns a new ipv4,ipv6 lookup table.  Use it as a
@@ -436,10 +496,18 @@ regular table with modified indexing:
 
 ### Basic operations
 
+An iptable behaves much like a regular table, except that it ignores non-ipv4
+and non-ipv6 keys silently, when assigning to a key it is always interpreted as
+a subnet (missing masks are added as max masks for the address family in
+question), lookups are exact if the key has a mask and only use longest prefix
+match when the lookup key has no mask.  For assignments, the mask (as supplied
+of defaulted to) is always applied before storing the key, value pair in the
+intern radix tree.  Hence, iterating across an iptable always shows keys to be
+actual subnets with a mask, in CIDR notation.
+
 ```{.shebang .lua}
 #!/usr/bin/env lua
 acl = require"iptable".new()
-
 acl["10.10.10.0/24"] = true
 acl["10.10.10.8/30"] = false
 
@@ -454,12 +522,16 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
-### `ipt:more(prefix)`
+### `ipt:more(prefix [,inclusive])`
+
+Given a certain `prefix`, which need not be present in the iptable, iterate
+across more specific subnets actually present in the table.  The optional
+second argument will include the given search `prefix` if found in the results,
+if its value is true.  The default value for `inclusive` is `false`.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
 ipt = require"iptable".new()
-
 ipt["10.10.0.0/16"] = 1
 ipt["10.10.9.0/24"] = 2
 ipt["10.10.10.0/24"] = 3
@@ -486,6 +558,11 @@ print(string.rep("-", 35))
 ```
 
 ### `ipt:less(prefix)`
+
+Given a certain `prefix`, which need not be present in the iptable, iterate
+across less specific subnets actually present in the table.  The optional
+second argument will include the given search `prefix` if found in the results,
+if its value is true.  The default for `inclusive` is `false`.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -518,6 +595,12 @@ print(string.rep("-", 35))
 
 ### `ipt:merge(af)`
 
+Iterate across pairs of subnets present in the iptable that could be combined
+into their parent supernet.  The iterator returns the supernet in CIDR notation
+and a table that contains the key,value pair for both the supernet's
+constituents as well as the supernet itself, should that exist (which need not
+be the case).  Useful when trying to minify a list of prefixes.
+
 ```{.shebang .lua}
 #!/usr/bin/env lua
 iptable = require "iptable"
@@ -547,6 +630,11 @@ print(string.rep("-", 35))
 
 ### `ipt:masks(af)`
 
+An `iptable` utilizes two radix trees internally, one for ipv4 subnets and one
+for ipv6 subnets.  `ipt:masks(af)` will iterate across the actual masks used in
+the tree for the given address family `af`.  No idea when this might be useful,
+but there you have it.
+
 ```{.shebang .lua}
 #!/usr/bin/env lua
 iptable = require "iptable"
@@ -570,6 +658,8 @@ print(string.rep("-", 35))
 ```
 
 ### `ipt:counts()`
+
+Returns the number of ipv4 subnets and ipv6 subnets present in the iptable.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -598,6 +688,12 @@ print(string.rep("-", 35))
 
 ### `ipt:radixes(af[, masktree])`
 
+Iterate across the radix nodes of the radix tree for the given address family
+`af`.  Only really useful to graph the radix trees while debugging or for
+educational purposes.  The radix nodes are returned by the iterator encoded as
+Lua tables.  Look at the `ipt2dot.lua` and `ipt2smalldot.lua` scripts to see
+how to decode/interpret the radix node tables.
+
 ```{.shebang .lua}
 #!/usr/bin/env lua
 iptable = require "iptable"
@@ -623,26 +719,23 @@ print(string.rep("-", 35))
 ```
 
 
-
 # Examples:
 
-## Large tree graphs
+## Radix tree graphs
 
 ### Graph an IPv4 tree
 
 ```{.shebang .lua im_out=ocb,img}
 #!/usr/bin/env lua
-
 iptable = require "iptable"
 dotify = require "src.lua.ipt2dot"
-ipt = iptable.new()
 
+ipt = iptable.new()
 ipt["10.10.10.0/24"] = 1
 ipt["10.10.10.0/25"] = 2
 ipt["10.10.10.128/25"] = 3
 ipt["10.10.10.128/26"] = 4
 ipt["11.11.11.0/24"] = 2
-
 
 imgfile = arg[1]
 dotfile = imgfile:gsub("...$", "dot")
@@ -662,16 +755,14 @@ print(string.rep("-",35))
 
 ```{.shebang .lua im_out=ocb,img}
 #!/usr/bin/env lua
-
 iptable = require "iptable"
 dotify = require "src.lua.ipt2dot"
-ipt = iptable.new()
 
+ipt = iptable.new()
 ipt["acdc:1974::/32"] = "Can I sit next to you?"
 ipt["acdc:1976::/32"] = "Jailbreak"
 ipt["acdc:1979::/32"] = "Highway to hell"
 ipt["acdc:1980::/32"] = "Touch too much"
-
 
 imgfile = arg[1]
 dotfile = imgfile:gsub("...$", "dot")
@@ -687,23 +778,21 @@ print(string.rep("-",35))
 ---------- PRODUCES --------------
 ```
 
-## Small(er) tree graphs
+## Alternate radix tree graphs
 
 ### Graph an IPv4 tree
 
 ```{.shebang .lua im_out=ocb,img}
 #!/usr/bin/env lua
-
 iptable = require "iptable"
 dotify = require "src.lua.ipt2smalldot"
-ipt = iptable.new()
 
+ipt = iptable.new()
 ipt["10.10.10.0/24"] = 1
 ipt["10.10.10.0/25"] = 2
 ipt["10.10.10.128/25"] = 3
 ipt["10.10.10.128/26"] = 4
 ipt["11.11.11.0/24"] = 2
-
 
 imgfile = arg[1]
 dotfile = imgfile:gsub("...$", "dot")
@@ -723,16 +812,14 @@ print(string.rep("-",35))
 
 ```{.shebang .lua im_out=ocb,img}
 #!/usr/bin/env lua
-
 iptable = require "iptable"
 dotify = require "src.lua.ipt2smalldot"
-ipt = iptable.new()
 
+ipt = iptable.new()
 ipt["acdc:1974::/32"] = "Can I sit next to you?"
 ipt["acdc:1976::/32"] = "Jailbreak"
 ipt["acdc:1979::/32"] = "Highway to hell"
 ipt["acdc:1980::/32"] = "Touch too much"
-
 
 imgfile = arg[1]
 dotfile = imgfile:gsub("...$", "dot")
@@ -747,7 +834,6 @@ print(string.rep("-",35))
 
 ---------- PRODUCES --------------
 ```
-
 
 ## Minify list of prefixes
 

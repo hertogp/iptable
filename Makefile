@@ -59,7 +59,7 @@ CFLAGS=  -std=gnu99
 CFLAGS+= -O2 -g -fPIC
 CFLAGS+= -Wall -Wextra -Werror -pedantic
 
-# add warnings and treat them as errors
+# add more warnings
 CFLAGS+= -Wno-unknown-warning-option -Wold-style-definition
 CFLAGS+= -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 CFLAGS+= -Wmissing-declarations -Wredundant-decls -Wnested-externs
@@ -88,6 +88,9 @@ endif
 $(TARGET): $(OBJS) $(DEPS)
 	$(CC) $(LIBFLAG) $(LFLAGS) $(OBJS) -o $(TARGET)
 
+lua_lib: $(TARGET)
+
+c_lib: $(CTARGET)
 # https://www.gnu.org/software/make/manual/html_node/Target_002dspecific.html
 debug DEBUG: CFLAGS+=-DDEBUG
 debug DEBUG: BOPTS=--defer-print
@@ -98,6 +101,7 @@ $(CTARGET): $(COBJS)
 	$(CC) $(LIBFLAG) $(LFLAGS) $(SOFLAG) $(COBJS) -o $(CTARGET).$(VERSION)
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so
 	ln -sf lib$(LIB).so.$(VERSION) $(BLDDIR)/lib$(LIB).so.$(MAJOR)
+
 
 $(BLDDIR):
 	$(MKDIR) $(BLDDIR)
