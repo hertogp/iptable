@@ -7,9 +7,12 @@ scr/
 img/
 doc/*.md
 doc/*.pdf
+pd-images/*.shebang
+!pd-images/*.png
 _todo.md
 _notes.c
 
+*.shebang
 # Prerequisites
 *.d
 

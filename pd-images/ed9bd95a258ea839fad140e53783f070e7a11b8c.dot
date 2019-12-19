@@ -1,0 +1,45 @@
+digraph G {
+  label="";
+  splines=line;
+  ranksep="1.0 equally";
+
+  /* nodes */
+
+   n0x1d0f0d8 [label="RE (-9)"]
+   n0x1d0f3a0 [shape=plaintext,label="acdc:1980::/32
+(-41) NA"];
+   n0x1d0f2c0 [shape=plaintext,label="acdc:1976::/32
+(-41) NA"];
+   n0x1d0f0a8 [label="TT (8)"];
+   n0x1d0f2f0 [shape=plaintext,label="bit 30 (38 A)"];
+   n0x1d0f3d0 [shape=plaintext,label="bit 24 (32 A)"];
+   n0x1d0f330 [shape=plaintext,label="acdc:1979::/32
+(-41) NA"];
+   n0x1d0f1c0 [shape=plaintext,label="acdc:1974::/32
+(-41) NA"];
+   n0x1d0f1f0 [shape=plaintext,label="bit 1 (9 A)"];
+   n0x1d0f360 [shape=plaintext,label="bit 28 (36 A)"];
+   n0x1d0f078 [label="LE (-9)"];
+
+  /* edges */
+
+  n0x1d0f0a8 -> n0x1d0f078 [label=" L",style=solid];
+  n0x1d0f0a8 -> n0x1d0f1f0 [label=" R",style=solid];
+  n0x1d0f1f0 -> n0x1d0f3d0 [label=" L",style=solid];
+  n0x1d0f1f0 -> n0x1d0f0d8 [label=" R",style=solid];
+  n0x1d0f3d0 -> n0x1d0f360 [label=" L",style=solid];
+  n0x1d0f3d0 -> n0x1d0f3a0 [label=" R",style=solid];
+  n0x1d0f360 -> n0x1d0f2f0 [label=" L",style=solid];
+  n0x1d0f360 -> n0x1d0f330 [label=" R",style=solid];
+  n0x1d0f2f0 -> n0x1d0f1c0 [label=" L",style=solid];
+  n0x1d0f2f0 -> n0x1d0f2c0 [label=" R",style=solid];
+
+  /* keep left to the left of right */
+
+  { rank=same; rankdir=LR; n0x1d0f078 -> n0x1d0f1f0 [style=invis]; }
+  { rank=same; rankdir=LR; n0x1d0f3d0 -> n0x1d0f0d8 [style=invis]; }
+  { rank=same; rankdir=LR; n0x1d0f360 -> n0x1d0f3a0 [style=invis]; }
+  { rank=same; rankdir=LR; n0x1d0f2f0 -> n0x1d0f330 [style=invis]; }
+  { rank=same; rankdir=LR; n0x1d0f1c0 -> n0x1d0f2c0 [style=invis]; }
+
+}

@@ -14,7 +14,7 @@ description = {
    homepage = "https://github.com/hertogp/iptable.git",
    license = "BSD-2",
    issues_url = "https://github.com/hertogp/iptable.git/issues",
-   maintainer="git.padh@gmail.com",
+   maintainer="git.hertogp@gmail.com",
    labels={"network", "ip", "lookup", "longest prefix match"},
 }
 dependencies={"lua>=5.3"}

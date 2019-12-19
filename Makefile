@@ -8,6 +8,7 @@ VOPTS=--leak-check=full --show-leak-kinds=all
 BOPTS=
 MKDIR= mkdir
 INSTALL= cp
+IMAGINE=/home/pdh/dev/imagine/pandoc_imagine.py
 
 # project directories
 SRCDIR=src
@@ -159,7 +160,8 @@ $(DOCS): $(DOCDIR)/%.md: $(SRCDIR)/%.c $(SRCDIR)/%.h
 	pandoc -f markdown$(POPTS) $(DOCDIR)/$*.md -o $(DOCDIR)/$*.pdf
 
 readme:
-	pandoc --filter pandoc-imagine -f markdown -t gfm -o README.md _readme.md
+	pandoc --filter $(IMAGINE) -f markdown -t gfm -o README.md _readme.md
+	pandoc --filter $(IMAGINE) -f gfm README.md -o doc/readme.pdf
 
 doc: $(DOCSRC:$(SRCDIR)%.c=$(DOCDIR)%.md)
 

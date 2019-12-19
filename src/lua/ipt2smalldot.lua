@@ -1,6 +1,6 @@
 --
 ------------------------------------------------------------------------------
---     File:  ipt2small.lua
+--     File:  ipt2smalldot.lua
 --
 --     Usage:  require("ipt2smalldot")(ipt, iptable.AF_<fam>)->{lines, edges}
 --
