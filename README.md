@@ -169,7 +169,7 @@ iptable = require "iptable"
 
 ### `iptable.address(prefix)`
 
-Returns the host address, mask length and address family given prefix.
+Returns the host address, mask length and address family for `prefix`.
 
 ``` lua
 #!/usr/bin/env lua
@@ -196,14 +196,14 @@ print(string.rep("-", 35))
 
 ### `iptable.network(prefix)`
 
-Returns the network address, mask length and address family for given
-prefix.
+Applies the mask to the address and Returns the network address, mask
+length and address family for `prefix`.
 
 ``` lua
 #!/usr/bin/env lua
 iptable = require"iptable"
-pfx4 = "10.10.10.0/19"
-pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
+pfx4 = "10.10.10.10/19"
+pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:777/120"
 
 ip, mlen, af = iptable.network(pfx4)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
@@ -224,8 +224,8 @@ print(string.rep("-", 35))
 
 ### `iptable.broadcast(prefix)`
 
-Returns the broadcast address, mask length and address family for given
-prefix.
+Applies the inverse mask to the address and returns the broadcast
+address, mask length and address family for `prefix`.
 
 ``` lua
 #!/usr/bin/env lua
@@ -727,15 +727,15 @@ print(string.rep("-", 35))
    -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
    -- 10.10.10.0/25 -> 4
-   -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
+   -- 10.10.10.0/24 -> 3
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
+   -- 10.10.10.4/30 -> 7
 -- supernet 10.10.10.0/24 contains:
    -- 10.10.10.0/25 -> 4
-   -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
+   -- 10.10.10.0/24 -> 3
 -----------------------------------
 ```
 

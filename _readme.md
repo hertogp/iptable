@@ -189,7 +189,7 @@ iptable = require "iptable"
 
 ### `iptable.address(prefix)`
 
-Returns the host address, mask length and address family given prefix.
+Returns the host address, mask length and address family for `prefix`.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -210,13 +210,14 @@ print(string.rep("-", 35))
 
 ### `iptable.network(prefix)`
 
-Returns the network address, mask length and address family for given prefix.
+Applies the mask to the address and Returns the network address, mask length
+and address family for `prefix`.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
 iptable = require"iptable"
-pfx4 = "10.10.10.0/19"
-pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
+pfx4 = "10.10.10.10/19"
+pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:777/120"
 
 ip, mlen, af = iptable.network(pfx4)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
@@ -231,7 +232,8 @@ print(string.rep("-", 35))
 
 ### `iptable.broadcast(prefix)`
 
-Returns the broadcast address, mask length and address family for given prefix.
+Applies the inverse mask to the address and returns the broadcast address, mask
+length and address family for `prefix`.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
