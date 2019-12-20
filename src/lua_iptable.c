@@ -1366,6 +1366,13 @@ iter_kv_f(lua_State *L)
 
     if (rn == NULL || RDX_ISROOT(rn)) return 0; // we're done
 
+    /* rn might have been deleted in the previous iteration */
+    while(rn && (rn->rn_flags & IPTF_DELETE))
+        rn = rdx_nextleaf(rn);
+
+    if (rn == NULL || RDX_ISROOT(rn)) return 0; // we're done
+    e = (entry_t *)rn;
+
     /* push the next key, value onto stack */
     if (! key_tostr(saddr, rn->rn_key))
         return lipt_error(L, LIPTE_TOSTR, "");
@@ -1772,8 +1779,8 @@ iter_merge(lua_State *L)
 
     lua_pushlightuserdata(L, rn);             // [t af rn]
     lua_pushlightuserdata(L, NULL);           // [t af rn NULL]
-    iptL_pushitrgc(L, t);                   // [t af rn NULL gc]
-    lua_pushcclosure(L, iter_merge_f, 3);       // [t f]
+    iptL_pushitrgc(L, t);                     // [t af rn NULL gc]
+    lua_pushcclosure(L, iter_merge_f, 3);     // [t f]
     lua_rotate(L, 1, -1);                     // [f t]
 
     dbg_stack("out(2) ==>");

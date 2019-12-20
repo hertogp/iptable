@@ -2,7 +2,7 @@
 -------------------------------------------------------------------------------
 --         File:  test_instance_methods.lua
 --
---        Usage:  busted src/test/lua/test_instance_methods.lua
+--        Usage:  busted src/test/test_instance_methods.lua
 --
 --  Description:  
 --
@@ -21,6 +21,28 @@ describe("iptable instance methods: ", function()
   end)
 end)
 
+describe("ipt pairs iterates across k,v-value pairs", function()
+  expose("instance ipt", function()
+    local iptable = require"iptable"
+
+    it("handles deleting entries while traversing the tree", function()
+      local ipt = iptable.new()
+      ipt["10.10.10.0"] = 1
+      ipt["10.10.10.1"] = 2
+      local seen = 0
+
+      -- Delete the second key while in the iteration loop that offers the
+      -- first key.  That should stop the iteration since the second key is
+      -- no longer present in the tree.
+
+      for k,v in pairs(ipt) do
+        ipt["10.10.10.1"] = nil
+        seen = seen + 1
+      end
+      assert.are_equal(1, seen)
+    end)
+  end)
+end)
 
 describe("ipt obj indexing: ", function()
 
