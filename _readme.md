@@ -31,7 +31,7 @@ echo "- $(make -v | head -n 1)"
 `lua_iptable.c` uses Lua 5.3's C-API, so Lua >= 5.3 is required.  Additionally
 for testing and documentation, the following is used:
 
-```{.shebang im_out=stdout im_log=4}
+```{.shebang im_out=stdout}
 #!/bin/bash
 echo "- $(valgrind --version)"
 echo "- busted $(busted --version)"
@@ -168,7 +168,7 @@ See also the `doc` directory on [github](https://github.com/hertogp/iptable).
 
 ## module constants
 
-```{.shebang .lua im_out=stdout im_log=4}
+```{.shebang .lua im_out=stdout}
 #!/usr/bin/env lua
 iptable = require"iptable"
 F = string.format

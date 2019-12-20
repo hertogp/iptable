@@ -769,18 +769,18 @@ print(string.rep("-", 35))
 
 ``` lua
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.0/30 -> 6
    -- 10.10.10.4/30 -> 7
+   -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
    -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/25 -> 4
    -- 10.10.10.0/24 -> 3
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
+   -- 10.10.10.4/30 -> 7
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/25 -> 4
+   -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/24 -> 3
 -----------------------------------
 ```
@@ -1100,14 +1100,4 @@ print(string.rep("-",35))
 -- minified ->	11.11.11.0/30
 -- minified ->	11.11.11.4/32
 -----------------------------------
-```
-
-``` lua
-        >5 rn @ 0x19a7ae0 10.10.10.128/25, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -34
-        >5 rn @ 0x19a7c40 10.10.11.128/25, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -34
-        >5 rn @ 0x19a7e30 11.11.11.1/32, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -41
-        >5 rn @ 0x19a82b0 11.11.11.3/32, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -41
-        >5 rn @ 0x19a9a60 10.10.11.0/24, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -33
-        >5 rn @ 0x19a9e60 11.11.11.2/31, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -40
-        >5 rn @ (nil)
 ```
