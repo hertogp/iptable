@@ -210,7 +210,7 @@ print(string.rep("-", 35))
 
 ### `iptable.network(prefix)`
 
-Applies the mask to the address and Returns the network address, mask length
+Applies the mask to the address and returns the network address, mask length
 and address family for `prefix`.
 
 ```{.shebang .lua}
@@ -348,7 +348,8 @@ print(string.rep("-", 35))
 
 Get the adjacent subnet that, together with `prefix`, occupies their immediate
 parental supernet whose prefix length is 1 bit shorter.  Returns the adjacent
-prefix, mask length and address family.
+prefix, mask length and address family.  Note that a prefix with no length has
+no parental supernet.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -392,8 +393,8 @@ print(string.rep("-", 35))
 Returns the binary key used internally by the radix tree for a string key like
 `prefix`.  It's a length encoded byte string, i.e. the first byte represents
 the length of the entire byte string and the remaining bytes are from the
-prefix itself.  Only useful if the convenience functions fall short of what
-needs to be done.
+prefix itself.  Useful if the convenience functions fall short of what
+needs to be done, or to figure out the mask length of a regular mask.
 
 
 ```{.shebang .lua}
@@ -416,6 +417,7 @@ bin6, mlen, af = iptable.tobin(pfx6)
 
 print("--", bin2str(bin4))
 print("--", bin2str(bin6))
+print("--", iptable.masklen(iptable.tobin("255.255.255.252")))
 
 print(string.rep("-", 35))
 

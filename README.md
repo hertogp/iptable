@@ -155,8 +155,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET     2
 iptable.AF_INET6    10
+iptable.AF_INET     2
 ```
 
 ## module functions
@@ -196,7 +196,7 @@ print(string.rep("-", 35))
 
 ### `iptable.network(prefix)`
 
-Applies the mask to the address and Returns the network address, mask
+Applies the mask to the address and returns the network address, mask
 length and address family for `prefix`.
 
 ``` lua
@@ -371,7 +371,8 @@ print(string.rep("-", 35))
 
 Get the adjacent subnet that, together with `prefix`, occupies their
 immediate parental supernet whose prefix length is 1 bit shorter.
-Returns the adjacent prefix, mask length and address family.
+Returns the adjacent prefix, mask length and address family. Note that a
+prefix with no length has no parental supernet.
 
 ``` lua
 #!/usr/bin/env lua
@@ -432,8 +433,9 @@ print(string.rep("-", 35))
 Returns the binary key used internally by the radix tree for a string
 key like `prefix`. It’s a length encoded byte string, i.e. the first
 byte represents the length of the entire byte string and the remaining
-bytes are from the prefix itself. Only useful if the convenience
-functions fall short of what needs to be done.
+bytes are from the prefix itself. Useful if the convenience functions
+fall short of what needs to be done, or to figure out the mask length of
+a regular mask.
 
 ``` lua
 #!/usr/bin/env lua
@@ -455,6 +457,7 @@ bin6, mlen, af = iptable.tobin(pfx6)
 
 print("--", bin2str(bin4))
 print("--", bin2str(bin6))
+print("--", iptable.masklen(iptable.tobin("255.255.255.252")))
 
 print(string.rep("-", 35))
 
@@ -464,6 +467,7 @@ print(string.rep("-", 35))
 ``` lua
 --	05:0a:0a:00:00
 --	11:20:01:0d:b8:85:a3:00:00:00:00:8a:2e:03:70:07:00
+--	30
 -----------------------------------
 ```
 
@@ -723,19 +727,19 @@ print(string.rep("-", 35))
 
 ``` lua
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
+   -- 10.10.10.4/30 -> 7
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/25 -> 4
-   -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/24 -> 3
+   -- 10.10.10.128/25 -> 5
+   -- 10.10.10.0/25 -> 4
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.0/30 -> 6
    -- 10.10.10.4/30 -> 7
+   -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/25 -> 4
-   -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/24 -> 3
+   -- 10.10.10.128/25 -> 5
+   -- 10.10.10.0/25 -> 4
 -----------------------------------
 ```
 
