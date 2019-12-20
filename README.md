@@ -563,10 +563,10 @@ non-ipv4 and non-ipv6 keys silently, when assigning to a key it is
 always interpreted as a subnet (missing masks are added as max masks for
 the address family in question), lookups are exact if the key has a mask
 and only use longest prefix match when the lookup key has no mask. For
-assignments, the mask (as supplied of defaulted to) is always applied
-before storing the key, value pair in the intern radix tree. Hence,
-iterating across an iptable always shows keys to be actual subnets with
-a mask, in CIDR notation.
+assignments, the mask (as supplied of as a default value) is always
+applied before storing the key, value pair in the internal radix
+tree(s). Hence, iterating across an iptable always shows keys to be
+actual subnets with a mask, in CIDR notation.
 
 ``` lua
 #!/usr/bin/env lua
@@ -727,19 +727,19 @@ print(string.rep("-", 35))
 
 ``` lua
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.0/30 -> 6
    -- 10.10.10.4/30 -> 7
+   -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
+   -- 10.10.10.0/24 -> 3
    -- 10.10.10.0/25 -> 4
 -- supernet 10.10.10.0/29 contains:
    -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
+   -- 10.10.10.0/25 -> 4
    -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
-   -- 10.10.10.0/25 -> 4
 -----------------------------------
 ```
 
