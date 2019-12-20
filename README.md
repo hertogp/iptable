@@ -139,7 +139,7 @@ for k,v in pairs(ipt) do ... end               -- iterate across k,v-pairs
 for k,v in ipt:more(prefix [,true]) ... end    -- iterate across more specifics
 for k,v in ipt:less(prefix [,true]) ... end    -- iterate across less specifics
 for k,v in ipt:masks(prefix [,true]) ... end   -- iterate across masks used
-for k,g in ipt:merge(af) ... end               -- iterate across combinable pfx's
+for k,g in ipt:merge(af) ... end               -- iterate supernets & constituents
 for rdx in ipt:radixes(af [,true]) ... end     -- dumps all radix nodes in tree
 
 -- note: use `true` as 2nd (optional boolean) argument to:
@@ -155,8 +155,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET6    10
 iptable.AF_INET     2
+iptable.AF_INET6    10
 ```
 
 ## module functions
@@ -730,15 +730,15 @@ print(string.rep("-", 35))
    -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/24 -> 3
+   -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/25 -> 4
 -- supernet 10.10.10.0/29 contains:
    -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/25 -> 4
    -- 10.10.10.0/24 -> 3
+   -- 10.10.10.0/25 -> 4
    -- 10.10.10.128/25 -> 5
 -----------------------------------
 ```
