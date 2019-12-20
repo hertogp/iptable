@@ -1331,26 +1331,8 @@ iter_kv(lua_State *L)
 /*
  * ### `iter_kv_f`
  * The iter_f for __iter_kv(), yields all k,v pairs in the tree(s).
+ *
  * - upvalue(1) is the leaf to process.
- *
- * FIXME:
- * - iterate by:
- *   0. get stored leaf
- *   1. find next leaf
- *   2. process that leaf
- *   3. store processed leaf
- *  Why: at the moment, iteration processes a previously found & stored leaf as
- *  which leads to returning a result which may just have been deleted.
- *
- *     for k,v in pairs(t) do
- *         t[10.10.10.10] = nil
- *         print(k)
- *     end
- *     if 10.10.10.10 is the second entry in the tree, it will still be
- *     printed even though it is deleted before the next loop runs.
- *
- *  See tmp/errnums/tryerr.lua
- *
  */
 
 static int
@@ -1814,17 +1796,20 @@ iter_merge_f(lua_State *L)
 
     if (rn == NULL)
         return 0;  /* all done, not an error */
+
     if (! RDX_ISLEAF(rn))
         return lipt_error(L, LIPTE_ITER, "");  /* error: not a leaf */
+
+    /* skip deleted nodes */
+    while(rn && (rn->rn_flags & IPTF_DELETE))
+        rn = rdx_nextleaf(rn);
+    if (rn == NULL || RDX_ISROOT(rn)) return 0; /* we're done */
 
     /* skip leafs without a pairing key */
     while(rn && (pair = rdx_pairleaf(rn)) == NULL)
         rn = rdx_nextleaf(rn);
 
-    if (rn == NULL)
-        return 0;       /* we're done */
-    if(RDX_ISROOT(rn))
-        return 0;       /* dito */
+    if (rn == NULL || RDX_ISROOT(rn)) return 0;  /* we're done */
 
     /* search for supernet node on dupedkey chain of lowest key */
     super = key_cmp(rn->rn_key, pair->rn_key) > 0 ? pair : rn;
@@ -1848,7 +1833,7 @@ iter_merge_f(lua_State *L)
 
     /* clear stack, push supernet prefix string & table with k,v-pairs */
     lua_settop(L, 0);                                             // []
-    lua_pushfstring(L, "%s/%d", buf, key_masklen(rn->rn_mask)-1);   // [s]
+    lua_pushfstring(L, "%s/%d", buf, key_masklen(rn->rn_mask)-1); // [s]
 
     /* new table and add key,value pairs */
     lua_newtable(L);                                              // [s {}]

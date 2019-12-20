@@ -78,6 +78,25 @@ describe("ipt:more(pfx): ", function()
       end
     end)
 
+    it("ignores more the next more specific that was deleted", function()
+      local t = iptable.new();
+      assert.is_truthy(t);
+
+      t["10.10.10.0/24"] = 1
+      t["10.10.10.0/25"] = 2 -- first more specific
+      t["10.10.10.0/26"] = 3 -- next in line is deleted right away
+      t["10.10.10.0/27"] = 4
+
+      -- non-inclusive
+      local cnt = 0;
+      for p in t:more("10.10.10.0/24") do
+        t["10.10.10.0/26"] = nil
+        cnt = cnt + 1
+      end
+      assert.are_equal(2, cnt);
+
+    end)
+
     it("handles non-existing search prefixes", function()
       local sum = 0;
       local search_pfx = "10.10.10.0/24";

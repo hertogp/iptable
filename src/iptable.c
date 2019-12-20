@@ -799,14 +799,15 @@ rdx_pairleaf(struct radix_node *oth) {
     struct radix_node *rn;
     int maxb;
 
-    if(oth == NULL) return NULL;
+    /* oth must be a valid, non-deleted LEAF */
+    if(oth == NULL || (oth->rn_flags & IPTF_DELETE)) return NULL;
     if(! RDX_ISLEAF(oth)) return NULL;
     if(! key_bypair(pair, oth->rn_key, oth->rn_mask)) return NULL;
 
     /* goto up the tree to the governing internal node */
     maxb = IPT_KEYOFFSET + key_masklen(oth->rn_mask);
     for(rn = oth; RDX_ISLEAF(rn) || rn->rn_bit >= maxb; rn = rn->rn_parent)
-        ;
+      ;
 
     /* descend following pair-key */
     while(! RDX_ISLEAF(rn))
@@ -815,12 +816,10 @@ rdx_pairleaf(struct radix_node *oth) {
       else
         rn = rn->rn_left;
 
-    // _dumprn(">0>", rn);
     /* Never use ROOT-leafs for key comparisons (KEYLEN), take its dupedkey */
     if(RDX_ISROOT(rn)) rn = rn->rn_dupedkey;
-    // _dumprn(">1>", rn);
 
-    if (rn == NULL) return 0;
+    if (rn == NULL) return NULL;
 
     /* check key actually matches */
     if(key_cmp(pair, rn->rn_key) != 0)
@@ -830,7 +829,10 @@ rdx_pairleaf(struct radix_node *oth) {
     while( rn && rn->rn_bit != oth->rn_bit)
       rn = rn->rn_dupedkey;
 
-    /* cannot return an inactive prefix */
+    /* check there was a leaf with the same mask length */
+    if (rn == NULL) return NULL;
+
+    /* cannot return an inactive, deleted prefix */
     if (rn->rn_flags & IPTF_DELETE)
         return NULL;
 
