@@ -155,8 +155,8 @@ for k,v in ipt:masks(af) ... end               -- iterate across masks used in a
 for k,g in ipt:merge(af) ... end               -- iterate supernets & constituents
 for rdx in ipt:radixes(af [,true]) ... end     -- dumps all radix nodes in tree
 
--- note:
---  o more/less exclude `prefix` from search results, unless 2nd arg is true
+-- notes:
+--> o more/less exclude `prefix` from search results, unless 2nd arg is true
 --> o radixes exclude mask nodes from iteration, unless 2nd arg is true
 ```
 

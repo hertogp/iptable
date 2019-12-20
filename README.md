@@ -142,8 +142,8 @@ for k,v in ipt:masks(af) ... end               -- iterate across masks used in a
 for k,g in ipt:merge(af) ... end               -- iterate supernets & constituents
 for rdx in ipt:radixes(af [,true]) ... end     -- dumps all radix nodes in tree
 
--- note:
---  o more/less exclude `prefix` from search results, unless 2nd arg is true
+-- notes:
+--> o more/less exclude `prefix` from search results, unless 2nd arg is true
 --> o radixes exclude mask nodes from iteration, unless 2nd arg is true
 ```
 
@@ -155,8 +155,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET6    10
 iptable.AF_INET     2
+iptable.AF_INET6    10
 ```
 
 ## module functions
@@ -727,19 +727,19 @@ print(string.rep("-", 35))
 
 ``` lua
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
+   -- 10.10.10.4/30 -> 7
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/25 -> 4
    -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
+   -- 10.10.10.0/25 -> 4
 -- supernet 10.10.10.0/29 contains:
    -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/25 -> 4
    -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
+   -- 10.10.10.0/25 -> 4
 -----------------------------------
 ```
 
