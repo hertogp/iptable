@@ -157,8 +157,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET     2
 iptable.AF_INET6    10
+iptable.AF_INET     2
 ```
 
 ## module functions
@@ -661,7 +661,7 @@ for pfx in ipt:more("10.10.10.0/24") do
 end
 print()
 
--- search includes starting search prefix
+-- search includes starting search prefix (if present)
 
 for pfx in ipt:more("10.10.10.0/24", true) do
     print("-- inclusive search ->", pfx)
@@ -710,7 +710,7 @@ for pfx in ipt:less("10.10.10.0/25") do
 end
 print()
 
--- search includes starting search prefix
+-- search includes starting search prefix (if present)
 
 for pfx in ipt:less("10.10.10.0/25", true) do
     print("-- inclusive search ->", pfx)
@@ -769,19 +769,19 @@ print(string.rep("-", 35))
 
 ``` lua
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
+   -- 10.10.10.4/30 -> 7
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/25 -> 4
    -- 10.10.10.0/24 -> 3
+   -- 10.10.10.128/25 -> 5
 -- supernet 10.10.10.0/29 contains:
    -- 10.10.10.0/30 -> 6
    -- 10.10.10.4/30 -> 7
 -- supernet 10.10.10.0/24 contains:
    -- 10.10.10.0/25 -> 4
-   -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/24 -> 3
+   -- 10.10.10.128/25 -> 5
 -----------------------------------
 ```
 

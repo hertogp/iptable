@@ -580,7 +580,7 @@ for pfx in ipt:more("10.10.10.0/24") do
 end
 print()
 
--- search includes starting search prefix
+-- search includes starting search prefix (if present)
 
 for pfx in ipt:more("10.10.10.0/24", true) do
     print("-- inclusive search ->", pfx)
@@ -616,7 +616,7 @@ for pfx in ipt:less("10.10.10.0/25") do
 end
 print()
 
--- search includes starting search prefix
+-- search includes starting search prefix (if present)
 
 for pfx in ipt:less("10.10.10.0/25", true) do
     print("-- inclusive search ->", pfx)
