@@ -67,6 +67,42 @@ describe("ipt:merge(): ", function()
       assert.is_equal(checksum, sum)
     end)
 
+    it("will not segfault on this", function()
+      local ipt = iptable.new()
+      assert.is_truthy(ipt)
+
+      ipt = iptable.new()
+      ipt["10.10.10.0/24"] = true
+      ipt["10.10.10.0/25"] = true
+      ipt["10.10.10.128/25"] = true
+      ipt["10.10.10.192/26"] = true
+      ipt["10.10.11.0/25"] = true
+      ipt["10.10.11.128/25"] = true
+      ipt["11.11.11.0"] = true
+      ipt["11.11.11.1"] = true
+      ipt["11.11.11.2"] = true
+      ipt["11.11.11.3"] = true
+
+      for k,_ in pairs(ipt) do
+          print("-- original ->", k)
+      end
+      print()
+      changed = true
+      while (changed) do
+          changed = false
+          print("hmm", #ipt)
+          for supernet, grp in ipt:merge(iptable.AF_INET) do
+              print("super", supernet)
+              for subnet, _ in pairs(grp) do
+                  ipt[subnet] = nil
+                  changed = true
+               end
+               ipt[supernet] = true
+          end
+      end
+
+    end)
+
     it("will not merge keys with 0/0", function()
       local ipt = iptable.new()
       ipt["0.0.0.0/0"] = 0
