@@ -133,6 +133,10 @@ prefix = iptable.tostr(binkey)                 -- 255.255.255.0
 msklen = iptable.masklen(binkey)               -- 24
 ipt    = iptable.new()                         -- longest prefix match table
 
+for host in iptable.hosts(prefix[, true]) do   -- iterate across hosts in prefix
+    print(host)                                --> optionally include netw/bcast
+end
+
 -- table functions
 
 #ipt                                           -- 0 (nothing stored yet)
@@ -470,6 +474,68 @@ print(string.rep("-", 35))
 -----------------------------------
 ```
 
+### `iptable.invert(prefix)`
+
+Invert the address of given `prefix` and return reversed address, mask
+length and address family. Note: the mask is NOT applied before reversal
+is done. If that’s required, convert the prefix first using
+`iptable.network(prefix)`.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+ip, mlen, af = iptable.invert("255.255.0.0/16")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+ip, mlen, af = iptable.invert("ffff:ffff::/32")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+-- ip 0.0.255.255, mlen 16, af 2
+-- ip ::ffff:ffff:ffff:ffff:ffff:ffff, mlen 32, af 10
+-----------------------------------
+```
+
+### `iptable.reverse(prefix)`
+
+Reverse the address (byte-wise) of given `prefix` and return reversed
+address, mask length and address family. Note: any mask is NOT applied
+before reversal is done. If that’s required, convert the prefix first
+using `iptable.network(prefix)`.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+ip, mlen, af = iptable.reverse("255.255.0.0")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+ip, mlen, af = iptable.reverse("1112:1314:1516:1718:1920:2122:2324:2526")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+-- Note: ipv6 with 4 bytes -> reversal formatted as ipv4 in ipv6
+ip, mlen, af = iptable.reverse("acdc:1976::/32")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+-- ip 0.0.255.255, mlen -1, af 2
+-- ip 2625:2423:2221:2019:1817:1615:1413:1211, mlen -1, af 10
+-- ip ::118.25.220.172, mlen 32, af 10
+-----------------------------------
+```
+
 ### `iptable.tobin(prefix)`
 
 Returns the binary key used internally by the radix tree for a string
@@ -584,6 +650,43 @@ print(string.rep("-", 35))
 ``` lua
 --	255.255.253.0	 == 	255.255.253.0
 --	ffff:fffe::	 == 	ffff:fffe::
+-----------------------------------
+```
+
+### `iptable.hosts(prefix)`
+
+Iterate across the hosts in a given prefix. Optionally include the
+network and broadcast addresses as well.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+print("-- Hosts in 10.10.10.0/30:")
+for pfx in iptable.hosts("10.10.10.0/30") do
+    print(string.format("--> %s", pfx))
+end
+
+print("\n-- Including netw/bcast")
+for pfx in iptable.hosts("10.10.10.0/30", true) do
+    print(string.format("--> %s", pfx))
+end
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+-- Hosts in 10.10.10.0/30:
+--> 10.10.10.1
+--> 10.10.10.2
+
+-- Including netw/bcast
+--> 10.10.10.0
+--> 10.10.10.1
+--> 10.10.10.2
+--> 10.10.10.3
 -----------------------------------
 ```
 
@@ -772,15 +875,15 @@ print(string.rep("-", 35))
    -- 10.10.10.0/30 -> 6
    -- 10.10.10.4/30 -> 7
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/25 -> 4
    -- 10.10.10.0/24 -> 3
+   -- 10.10.10.0/25 -> 4
    -- 10.10.10.128/25 -> 5
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.0/30 -> 6
    -- 10.10.10.4/30 -> 7
+   -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/25 -> 4
    -- 10.10.10.0/24 -> 3
+   -- 10.10.10.0/25 -> 4
    -- 10.10.10.128/25 -> 5
 -----------------------------------
 ```

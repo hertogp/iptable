@@ -319,6 +319,7 @@ const char *key_tostr(char *, void *);
 int key_broadcast(void *, void *);
 int key_cmp(void *, void *);
 int key_invert(void *);
+int key_reverse(void *);
 int key_isin(void *, void *, void *);
 int key_masklen(void *);
 int key_network(void *, void *);

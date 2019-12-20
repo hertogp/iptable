@@ -94,6 +94,8 @@ static int ipt_address(lua_State *);
 static int ipt_broadcast(lua_State *);
 static int ipt_incr(lua_State *);
 static int ipt_decr(lua_State *);
+static int ipt_invert(lua_State *);
+static int ipt_reverse(lua_State *);
 static int ipt_mask(lua_State *);
 static int ipt_neighbor(lua_State *L);
 static int ipt_network(lua_State *);
@@ -120,6 +122,8 @@ static const struct luaL_Reg funcs [] = {
     {"hosts", iter_hosts},
     {"decr", ipt_decr},
     {"incr", ipt_incr},
+    {"invert", ipt_invert},
+    {"reverse", ipt_reverse},
     {"interval", iter_interval},
     {"mask", ipt_mask},
     {"neighbor", ipt_neighbor},
@@ -864,6 +868,83 @@ ipt_decr(lua_State *L)
     return 3;
 }
 
+/*
+ * ### `iptable.invert`
+ * Return inverted address, masklen and af_family.
+ * Returns nil on errors.  Note: the mask is NOT applied before invering the
+ * address.
+ */
+
+static int
+ipt_invert(lua_State *L)
+{
+    dbg_stack("inc(.) <--");  // [pfx]
+
+    char buf[MAX_STRKEY];
+    uint8_t addr[MAX_BINKEY];
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1;
+    const char *pfx = NULL;
+
+    if (! iptL_getpfxstr(L, 1, &pfx, &len))
+        return lipt_error(L, LIPTE_ARG, "");
+
+    if (! key_bystr(addr, &mlen, &af, pfx))
+        return lipt_error(L, LIPTE_PFX, "");
+
+    if (! key_invert(addr))
+        return lipt_error(L, LIPTE_BINOP, "");
+
+    if (! key_tostr(buf, addr))
+        return lipt_error(L, LIPTE_TOSTR, "");
+
+    lua_pushstring(L, buf);
+    lua_pushinteger(L, mlen);
+    lua_pushinteger(L, af);
+
+    dbg_stack("out(3) ==>");
+
+    return 3;
+}
+
+/*
+ * ### `iptable.reverse`
+ * Return a reversed address, masklen and af_family.
+ * Returns nil on errors.  Note: the mask is NOT applied before reversing  the
+ * address.
+ */
+
+static int
+ipt_reverse(lua_State *L)
+{
+    dbg_stack("inc(.) <--");  // [pfx]
+
+    char buf[MAX_STRKEY];
+    uint8_t addr[MAX_BINKEY];
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1;
+    const char *pfx = NULL;
+
+    if (! iptL_getpfxstr(L, 1, &pfx, &len))
+        return lipt_error(L, LIPTE_ARG, "");
+
+    if (! key_bystr(addr, &mlen, &af, pfx))
+        return lipt_error(L, LIPTE_PFX, "");
+
+    if (! key_reverse(addr))
+        return lipt_error(L, LIPTE_BINOP, "");
+
+    if (! key_tostr(buf, addr))
+        return lipt_error(L, LIPTE_TOSTR, "");
+
+    lua_pushstring(L, buf);
+    lua_pushinteger(L, mlen);
+    lua_pushinteger(L, af);
+
+    dbg_stack("out(3) ==>");
+
+    return 3;
+}
 /*
  * ### `iptable.broadcast`
  * Return broadcast address, masklen and af_family for pfx; nil on errors.

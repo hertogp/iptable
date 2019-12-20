@@ -34,7 +34,7 @@ describe("iptable.tobin(): ", function()
     iptable = require("iptable");
     assert.is_truthy(iptable);
 
-    it("returns mlen=-1 wen no mask is given", function()
+    it("returns mlen=-1 when no mask is given", function()
       addr, mlen, af = iptable.tobin("10.10.10.10");
       assert.are_equal(iptable.AF_INET, af);
       assert.are_equal(-1, mlen);
@@ -608,6 +608,62 @@ describe("iptable.mask(af, num)", function()
 
       assert.equal("128.0.0.0", iptable.mask(iptable.AF_INET, 1));
       assert.equal("127.255.255.255", iptable.mask(iptable.AF_INET, 1, true));
+    end)
+
+  end)
+end)
+
+describe("iptable.invert(pfx)", function()
+
+  expose("module: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+
+    it("inverts ipv4", function()
+      assert.equal("255.255.255.255", iptable.invert("0.0.0.0"));
+      assert.equal("0.0.0.0", iptable.invert("255.255.255.255"))
+    end)
+  end)
+end)
+
+describe("iptable.reverse(pfx)", function()
+
+  expose("module: ", function()
+    iptable = require("iptable");
+    assert.is_truthy(iptable);
+
+    it("reverses ipv4", function()
+      assert.equal("0.0.0.0", iptable.reverse("0.0.0.0"))
+      assert.equal("255.255.255.255", iptable.reverse("255.255.255.255"))
+      assert.equal("4.3.2.1", iptable.reverse("1.2.3.4"))
+      assert.equal("14.13.12.11", iptable.reverse("11.12.13.14"))
+      assert.equal("114.113.112.111", iptable.reverse("111.112.113.114"))
+    end)
+
+    it("reverses ipv6", function()
+      -- NOTE: reversal is at byte level, not nibble level
+      assert.equal("::", iptable.reverse("::"))
+      assert.equal("2001:aacc::", iptable.reverse("::ccaa:0120"))
+    end)
+
+    it("returns reversed address, mlen and af", function()
+      local ip,mlen,af
+      ip, mlen, af = iptable.reverse("11.12.13.14/24")
+      assert.equal("14.13.12.11", ip)
+      assert.equal(24, mlen)
+      assert.equal(iptable.AF_INET, af)
+
+      ip, mlen, af = iptable.reverse("::acdc:1976/32")
+      assert.equal("7619:dcac::", ip)
+      assert.equal(32, mlen)
+      assert.equal(iptable.AF_INET6, af)
+
+      -- ipv4 in ipv6?
+      ip, mlen, af = iptable.reverse("1112:1314:1516:1718:1920:2122:2324:2526/128")
+      assert.equal("2625:2423:2221:2019:1817:1615:1413:1211", ip)
+      assert.equal(128, mlen)
+      assert.equal(iptable.AF_INET6, af)
+
     end)
 
   end)
