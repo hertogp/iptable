@@ -91,6 +91,7 @@ An iptable.new() yields a Lua table with modified indexing behaviour:
 - retrieving data with an address-key, uses a longest prefix match
 - count/size functions use Lua arithmatic, since ipv6 space is rather large
 - `mlen == -1` means some function (like `iptable.address(pfx)`) saw no mask
+- it is generally safe to delete entries while iterating across the table
 
 Example usage:
 
@@ -190,6 +191,7 @@ iptable = require "iptable"
 ### `iptable.address(prefix)`
 
 Returns the host address, mask length and address family for `prefix`.
+If `prefix` has no masklength, `mlen` will be `-1` to indicate the absence.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -199,8 +201,12 @@ pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 
 ip, mlen, af = iptable.address(pfx4)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.address("10.10.10.10")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 ip, mlen, af = iptable.address(pfx6)
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.address("acdc:1976::")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -212,6 +218,8 @@ print(string.rep("-", 35))
 
 Applies the mask to the address and returns the network address, mask length
 and address family for `prefix`.
+If `prefix` has no masklength, `mlen` will be `-1` to indicate the absence and
+the network address is the host address itself.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -221,8 +229,12 @@ pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:777/120"
 
 ip, mlen, af = iptable.network(pfx4)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.network("10.10.10.10")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 ip, mlen, af = iptable.network(pfx6)
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.network("2001:0db8::")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -234,6 +246,8 @@ print(string.rep("-", 35))
 
 Applies the inverse mask to the address and returns the broadcast address, mask
 length and address family for `prefix`.
+If `prefix` has no masklength, `mlen` will be `-1` to indicate the absence and
+the broadcast address is the host address itself.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -243,8 +257,12 @@ pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 
 ip, mlen, af = iptable.broadcast(pfx4)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.broadcast("10.10.10.10")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 ip, mlen, af = iptable.broadcast(pfx6)
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.broadcast("2001:0db8::")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -256,7 +274,7 @@ print(string.rep("-", 35))
 
 Increment the ip address of the prefix (no mask is applied) and return the new
 ip address, mask length and address family.  `offset` is optional and defaults
-to 1.
+to 1.  Incrementing beyond valid address space yields `nil`.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -270,7 +288,13 @@ print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 ip, mlen, af = iptable.incr(pfx4, 10)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
+ip, mlen, af = iptable.incr("255.255.255.255")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
 ip, mlen, af = iptable.incr(pfx6, 5)
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+ip, mlen, af = iptable.incr("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -282,7 +306,7 @@ print(string.rep("-", 35))
 
 Decrement the ip address of the prefix (no mask is applied) and return the new
 ip address, mask length and address family.  `offset` is optional and defaults
-to 1.
+to 1.  Decrementing beyond valid address space yields `nil`.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -293,7 +317,13 @@ pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 ip, mlen, af = iptable.decr(pfx4, 1)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
+ip, mlen, af = iptable.decr("0.0.0.0")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
 ip, mlen, af = iptable.decr(pfx6, 1)
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+ip, mlen, af = iptable.decr("::")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -601,7 +631,7 @@ print(string.rep("-", 35))
 
 Iterate across pairs of subnets present in the iptable that could be combined
 into their parent supernet.  The iterator returns the supernet in CIDR notation
-and a table that contains the key,value pair for both the supernet's
+and a regular table that contains the key,value pairs for both the supernet's
 constituents as well as the supernet itself, should that exist (which need not
 be the case).  Useful when trying to minify a list of prefixes.
 
@@ -841,7 +871,12 @@ print(string.rep("-",35))
 
 ## Minify list of prefixes
 
-```{.shebang .lua im_out=ocb,stdout,stderr}
+Minifying a list of prefixes is done in two steps.  First keep merging subnets
+into their parental supernet, until no merging takes place anymore.  Second,
+remove any remaining subnets that weren't merged but lie inside another subnet
+in the table.
+
+```{.shebang .lua im_out=ocb,stdout,stderr im_log=4}
 #!/usr/bin/env lua
 iptable = require "iptable"
 
@@ -855,6 +890,7 @@ ipt["11.11.11.0"] = true
 ipt["11.11.11.1"] = true
 ipt["11.11.11.2"] = true
 ipt["11.11.11.3"] = true
+ipt["11.11.11.4"] = true
 
 for k,_ in pairs(ipt) do
     print("-- original ->", k)
@@ -866,16 +902,16 @@ while (changed) do
     changed = false
     for supernet, grp in ipt:merge(iptable.AF_INET) do
         for subnet, _ in pairs(grp) do
-            ipt[subnet] = nil
-            changed = true
-         end
-         ipt[supernet] = true
+            ipt[subnet] = nil         -- delete subnets, possibly supernet too
+        end
+        ipt[supernet] = true          -- ensure supernet's existence
+        changed = true                -- further merging might now be possible
     end
 end
 
 for prefix, _ in pairs(ipt) do
     for subnet, _ in ipt:more(prefix, false) do
-        ipt[subnet] = nil
+        ipt[subnet] = nil             -- remove all more specifics
     end
 end
 

@@ -830,6 +830,7 @@ rdx_pairleaf(struct radix_node *oth) {
       rn = rn->rn_dupedkey;
 
     /* check there was a leaf with the same mask length */
+    /* _dumprn("leaf with same mask length", rn); */
     if (rn == NULL) return NULL;
 
     /* cannot return an inactive, deleted prefix */

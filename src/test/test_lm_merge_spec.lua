@@ -91,6 +91,32 @@ describe("ipt:merge(): ", function()
 
     end)
 
+    it("minifies as much as possible", function()
+      local ipt = iptable.new()
+      assert.is_truthy(ipt)
+
+      ipt = iptable.new()
+      ipt["10.10.10.0"] = true
+      ipt["10.10.10.1"] = true
+      ipt["10.10.10.2"] = true
+      ipt["10.10.10.3"] = true
+      ipt["10.10.10.4"] = true
+
+      changed = true
+      while (changed) do
+          changed = false
+          for supernet, grp in ipt:merge(iptable.AF_INET) do
+              for subnet, _ in pairs(grp) do
+                  ipt[subnet] = nil
+                  changed = true
+               end
+               ipt[supernet] = true
+          end
+      end
+      assert.is_equal(2, #ipt)
+
+    end)
+
     it("will not merge keys with 0/0", function()
       local ipt = iptable.new()
       ipt["0.0.0.0/0"] = 0

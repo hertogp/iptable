@@ -78,6 +78,8 @@ An iptable.new() yields a Lua table with modified indexing behaviour:
     large
   - `mlen == -1` means some function (like `iptable.address(pfx)`) saw
     no mask
+  - it is generally safe to delete entries while iterating across the
+    table
 
 Example usage:
 
@@ -170,6 +172,8 @@ iptable = require "iptable"
 ### `iptable.address(prefix)`
 
 Returns the host address, mask length and address family for `prefix`.
+If `prefix` has no masklength, `mlen` will be `-1` to indicate the
+absence.
 
 ``` lua
 #!/usr/bin/env lua
@@ -179,8 +183,12 @@ pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 
 ip, mlen, af = iptable.address(pfx4)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.address("10.10.10.10")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 ip, mlen, af = iptable.address(pfx6)
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.address("acdc:1976::")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -190,14 +198,18 @@ print(string.rep("-", 35))
 
 ``` lua
 -- ip 10.10.10.0, mlen 19, af 2
+-- ip 10.10.10.10, mlen -1, af 2
 -- ip 2001:db8:85a3::8a2e:370:700, mlen 120, af 10
+-- ip acdc:1976::, mlen -1, af 10
 -----------------------------------
 ```
 
 ### `iptable.network(prefix)`
 
 Applies the mask to the address and returns the network address, mask
-length and address family for `prefix`.
+length and address family for `prefix`. If `prefix` has no masklength,
+`mlen` will be `-1` to indicate the absence and the network address is
+the host address itself.
 
 ``` lua
 #!/usr/bin/env lua
@@ -207,8 +219,12 @@ pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:777/120"
 
 ip, mlen, af = iptable.network(pfx4)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.network("10.10.10.10")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 ip, mlen, af = iptable.network(pfx6)
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.network("2001:0db8::")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -218,14 +234,18 @@ print(string.rep("-", 35))
 
 ``` lua
 -- ip 10.10.0.0, mlen 19, af 2
+-- ip 10.10.10.10, mlen -1, af 2
 -- ip 2001:db8:85a3::8a2e:370:700, mlen 120, af 10
+-- ip 2001:db8::, mlen -1, af 10
 -----------------------------------
 ```
 
 ### `iptable.broadcast(prefix)`
 
 Applies the inverse mask to the address and returns the broadcast
-address, mask length and address family for `prefix`.
+address, mask length and address family for `prefix`. If `prefix` has no
+masklength, `mlen` will be `-1` to indicate the absence and the
+broadcast address is the host address itself.
 
 ``` lua
 #!/usr/bin/env lua
@@ -235,8 +255,12 @@ pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 
 ip, mlen, af = iptable.broadcast(pfx4)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.broadcast("10.10.10.10")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 ip, mlen, af = iptable.broadcast(pfx6)
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+ip, mlen, af = iptable.broadcast("2001:0db8::")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -246,7 +270,9 @@ print(string.rep("-", 35))
 
 ``` lua
 -- ip 10.10.31.255, mlen 19, af 2
+-- ip 10.10.10.10, mlen -1, af 2
 -- ip 2001:db8:85a3::8a2e:370:7ff, mlen 120, af 10
+-- ip 2001:db8::, mlen -1, af 10
 -----------------------------------
 ```
 
@@ -254,7 +280,7 @@ print(string.rep("-", 35))
 
 Increment the ip address of the prefix (no mask is applied) and return
 the new ip address, mask length and address family. `offset` is optional
-and defaults to 1.
+and defaults to 1. Incrementing beyond valid address space yields `nil`.
 
 ``` lua
 #!/usr/bin/env lua
@@ -268,7 +294,13 @@ print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 ip, mlen, af = iptable.incr(pfx4, 10)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
+ip, mlen, af = iptable.incr("255.255.255.255")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
 ip, mlen, af = iptable.incr(pfx6, 5)
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+ip, mlen, af = iptable.incr("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -279,7 +311,9 @@ print(string.rep("-", 35))
 ``` lua
 -- ip 10.10.10.1, mlen 19, af 2
 -- ip 10.10.10.10, mlen 19, af 2
+-- ip nil, mlen nil, af nil
 -- ip 2001:db8:85a3::8a2e:370:705, mlen 120, af 10
+-- ip nil, mlen nil, af nil
 -----------------------------------
 ```
 
@@ -287,7 +321,7 @@ print(string.rep("-", 35))
 
 Decrement the ip address of the prefix (no mask is applied) and return
 the new ip address, mask length and address family. `offset` is optional
-and defaults to 1.
+and defaults to 1. Decrementing beyond valid address space yields `nil`.
 
 ``` lua
 #!/usr/bin/env lua
@@ -298,7 +332,13 @@ pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 ip, mlen, af = iptable.decr(pfx4, 1)
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
+ip, mlen, af = iptable.decr("0.0.0.0")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
 ip, mlen, af = iptable.decr(pfx6, 1)
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+ip, mlen, af = iptable.decr("::")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -308,7 +348,9 @@ print(string.rep("-", 35))
 
 ``` lua
 -- ip 10.10.9.255, mlen 19, af 2
+-- ip nil, mlen nil, af nil
 -- ip 2001:db8:85a3::8a2e:370:6ff, mlen 120, af 10
+-- ip nil, mlen nil, af nil
 -----------------------------------
 ```
 
@@ -693,10 +735,10 @@ print(string.rep("-", 35))
 
 Iterate across pairs of subnets present in the iptable that could be
 combined into their parent supernet. The iterator returns the supernet
-in CIDR notation and a table that contains the key,value pair for both
-the supernet’s constituents as well as the supernet itself, should that
-exist (which need not be the case). Useful when trying to minify a list
-of prefixes.
+in CIDR notation and a regular table that contains the key,value pairs
+for both the supernet’s constituents as well as the supernet itself,
+should that exist (which need not be the case). Useful when trying to
+minify a list of prefixes.
 
 ``` lua
 #!/usr/bin/env lua
@@ -730,16 +772,16 @@ print(string.rep("-", 35))
    -- 10.10.10.0/30 -> 6
    -- 10.10.10.4/30 -> 7
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/25 -> 4
+   -- 10.10.10.0/24 -> 3
 -- supernet 10.10.10.0/29 contains:
    -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
    -- 10.10.10.0/25 -> 4
+   -- 10.10.10.0/24 -> 3
 -----------------------------------
 ```
 
@@ -990,6 +1032,11 @@ print(string.rep("-",35))
 
 ## Minify list of prefixes
 
+Minifying a list of prefixes is done in two steps. First keep merging
+subnets into their parental supernet, until no merging takes place
+anymore. Second, remove any remaining subnets that weren’t merged but
+lie inside another subnet in the table.
+
 ``` lua
 #!/usr/bin/env lua
 iptable = require "iptable"
@@ -1004,6 +1051,7 @@ ipt["11.11.11.0"] = true
 ipt["11.11.11.1"] = true
 ipt["11.11.11.2"] = true
 ipt["11.11.11.3"] = true
+ipt["11.11.11.4"] = true
 
 for k,_ in pairs(ipt) do
     print("-- original ->", k)
@@ -1015,16 +1063,16 @@ while (changed) do
     changed = false
     for supernet, grp in ipt:merge(iptable.AF_INET) do
         for subnet, _ in pairs(grp) do
-            ipt[subnet] = nil
-            changed = true
-         end
-         ipt[supernet] = true
+            ipt[subnet] = nil         -- delete subnets, possibly supernet too
+        end
+        ipt[supernet] = true          -- ensure supernet's existence
+        changed = true                -- further merging might now be possible
     end
 end
 
 for prefix, _ in pairs(ipt) do
     for subnet, _ in ipt:more(prefix, false) do
-        ipt[subnet] = nil
+        ipt[subnet] = nil             -- remove all more specifics
     end
 end
 
@@ -1046,8 +1094,20 @@ print(string.rep("-",35))
 -- original ->	11.11.11.1/32
 -- original ->	11.11.11.2/32
 -- original ->	11.11.11.3/32
+-- original ->	11.11.11.4/32
 
 -- minified ->	10.10.10.0/23
 -- minified ->	11.11.11.0/30
+-- minified ->	11.11.11.4/32
 -----------------------------------
+```
+
+``` lua
+        >5 rn @ 0x19a7ae0 10.10.10.128/25, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -34
+        >5 rn @ 0x19a7c40 10.10.11.128/25, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -34
+        >5 rn @ 0x19a7e30 11.11.11.1/32, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -41
+        >5 rn @ 0x19a82b0 11.11.11.3/32, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -41
+        >5 rn @ 0x19a9a60 10.10.11.0/24, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -33
+        >5 rn @ 0x19a9e60 11.11.11.2/31, keylen 5, isroot 0, isleaf 1, isNORM 1, flags  5, rn_bit -40
+        >5 rn @ (nil)
 ```
