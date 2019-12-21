@@ -5,8 +5,6 @@ his/
 tmp/
 scr/
 img/
-doc/*.md
-doc/*.pdf
 rfc/
 pd-images/*.shebang
 !pd-images/*.png
