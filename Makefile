@@ -161,7 +161,7 @@ POPTS=+lists_without_preceding_blankline
 $(DOCS): $(DOCDIR)/%.md: $(SRCDIR)/%.c $(SRCDIR)/%.h
 	grep -E "^(/\*| \*)" $(SRCDIR)/$*.h| cut --bytes=4- > $(DOCDIR)/$*.md
 	grep -E "^(/\*| \*)" $(SRCDIR)/$*.c| cut --bytes=4- >> $(DOCDIR)/$*.md
-	pandoc -f markdown$(POPTS) $(DOCDIR)/$*.md -o $(DOCDIR)/$*.pdf
+	pandoc -f markdown$(POPTS) $(DOCDIR)/$*.md -o $(DOCDIR)/$*.c.pdf
 
 readme:
 	pandoc --filter $(IMAGINE) -f markdown -t gfm -o README.md _readme.md
