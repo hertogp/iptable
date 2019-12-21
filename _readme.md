@@ -125,7 +125,7 @@ iptable.AF_INET6 -- 10
 
 -- Module functions
 
-prefix = "10.10.10.0/24"                       -- ipv4/6 address or prefix
+prefix = "10.10.10.0/24"                       -- ipv4/6 address or subnet
 
 addr,  mlen, af = iptable.address(prefix)      -- 10.10.10.0   24  2
 netw,  mlen, af = iptable.network(prefix)      -- 10.10.10.0   24  2
@@ -952,7 +952,7 @@ into their parental supernet, until no merging takes place anymore.  Second,
 remove any remaining subnets that weren't merged but lie inside another subnet
 in the table.
 
-```{.shebang .lua im_out=ocb,stdout,stderr im_log=4}
+```{.shebang .lua im_out=ocb,stdout,stderr}
 #!/usr/bin/env lua
 iptable = require "iptable"
 

@@ -113,7 +113,7 @@ iptable.AF_INET6 -- 10
 
 -- Module functions
 
-prefix = "10.10.10.0/24"                       -- ipv4/6 address or prefix
+prefix = "10.10.10.0/24"                       -- ipv4/6 address or subnet
 
 addr,  mlen, af = iptable.address(prefix)      -- 10.10.10.0   24  2
 netw,  mlen, af = iptable.network(prefix)      -- 10.10.10.0   24  2
@@ -161,8 +161,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET6    10
 iptable.AF_INET     2
+iptable.AF_INET6    10
 ```
 
 ## module functions
@@ -872,18 +872,18 @@ print(string.rep("-", 35))
 
 ``` lua
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.0/30 -> 6
    -- 10.10.10.4/30 -> 7
+   -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/24 -> 3
-   -- 10.10.10.0/25 -> 4
    -- 10.10.10.128/25 -> 5
--- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.4/30 -> 7
-   -- 10.10.10.0/30 -> 6
--- supernet 10.10.10.0/24 contains:
    -- 10.10.10.0/24 -> 3
    -- 10.10.10.0/25 -> 4
+-- supernet 10.10.10.0/29 contains:
+   -- 10.10.10.0/30 -> 6
+   -- 10.10.10.4/30 -> 7
+-- supernet 10.10.10.0/24 contains:
+   -- 10.10.10.0/25 -> 4
+   -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
 -----------------------------------
 ```
