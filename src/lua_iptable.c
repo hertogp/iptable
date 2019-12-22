@@ -328,7 +328,9 @@ lipt_vferror(lua_State *L, int errno, int nargs, const char *fmt, va_list ap)
 
 /*
  * ### `lipt_error`
- * ```static int lipt_error(lua_State *L, int, int, const char *);```
+ * ```c
+ * static int lipt_error(lua_State *L, int, int, const char *);
+ * ```
  * ```lua
  * -- lua
  * iptable.error = nil -- clear any previous error
