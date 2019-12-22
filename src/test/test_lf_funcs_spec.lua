@@ -643,7 +643,7 @@ describe("iptable.reverse(pfx)", function()
     it("reverses ipv6", function()
       -- NOTE: reversal is at byte level, not nibble level
       assert.equal("::", iptable.reverse("::"))
-      assert.equal("2001:aacc::", iptable.reverse("::ccaa:0120"))
+      assert.equal("2001:aacc::", iptable.reverse("::ccaa:1002"))
     end)
 
     it("returns reversed address, mlen and af", function()
@@ -654,13 +654,13 @@ describe("iptable.reverse(pfx)", function()
       assert.equal(iptable.AF_INET, af)
 
       ip, mlen, af = iptable.reverse("::acdc:1976/32")
-      assert.equal("7619:dcac::", ip)
+      assert.equal("6791:cdca::", ip)
       assert.equal(32, mlen)
       assert.equal(iptable.AF_INET6, af)
 
       -- ipv4 in ipv6?
       ip, mlen, af = iptable.reverse("1112:1314:1516:1718:1920:2122:2324:2526/128")
-      assert.equal("2625:2423:2221:2019:1817:1615:1413:1211", ip)
+      assert.equal("6252:4232:2212:291:8171:6151:4131:2111", ip)
       assert.equal(128, mlen)
       assert.equal(iptable.AF_INET6, af)
 

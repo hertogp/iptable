@@ -487,9 +487,9 @@ key_invert(void *key)
  * ```c
  *   int key_reverse(void *key);
  * ```
- * reverse the bytes of a key, useful for creating reverse dns names.  Note
- * that the nibbles for ipv6 are NOT swapped.   Assumes the LEN-byte indicates
- * how many bytes must be (and can be safely) reversed.
+ * reverse the bytes of a key.  For ipv6, the nibbles are also swapped.
+ * Assumes the LEN-byte indicates how many bytes must be (and can be safely)
+ * reversed.
  */
 
 int
@@ -497,14 +497,28 @@ key_reverse(void *key)
 {
   uint8_t *left = key;
   uint8_t *right, x;
+  int klen;
 
   if (left == NULL) return 0;   /* no key, no reversed key */
   right = left + IPT_KEYLEN(left);
 
+  /* reverse the bytes */
   while(++left < --right) {
     x = *left;
     *left = *right;
     *right = x;
+  }
+
+  /* reverse the nibbles if ipv6 */
+  if (!KEY_IS_IP6(key))
+      return 1;
+
+  left = key;
+  klen = IPT_KEYLEN(left);
+
+  while(--klen > 0 && left++) {
+      x = *left;
+      *left = (x & 0x0F)<<4 | (x & 0xF0) >> 4;
   }
 
   return 1;
