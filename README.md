@@ -451,7 +451,7 @@ print(string.rep("-", 35))
 --	10.10.32.0	19	2
 --	10.10.0.0	19	2
 --	10.10.10.254	-1	2
---	nil	nil	nil	none
+--	nil
 --	2001:db8:85a3::8a2e:370:600	120	10
 -----------------------------------
 ```
@@ -491,7 +491,7 @@ Invert the address of given `prefix` and return reversed address, mask
 length and address family. Note: the mask is NOT applied. If that’s
 required, convert the prefix first using `iptable.network(prefix)`.
 
-``` lua
+``` shebang lua
 #!/usr/bin/env lua
 iptable = require"iptable"
 
@@ -506,12 +506,6 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
-``` lua
--- ip 0.0.255.255, mlen 16, af 2
--- ip ::ffff:ffff:ffff:ffff:ffff:ffff, mlen 32, af 10
------------------------------------
-```
-
 ### `iptable.reverse(prefix)`
 
 Reverse the address byte of given `prefix` and return reversed address,
@@ -519,7 +513,7 @@ mask length and address family. For ipv6, the nibbles are reversed as
 well. Note: any mask is NOT applied before reversal is done. If that’s
 required, convert the prefix first using `iptable.network(prefix)`.
 
-``` lua
+``` shebang lua
 #!/usr/bin/env lua
 iptable = require"iptable"
 
@@ -539,13 +533,6 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
-``` lua
--- ip 0.0.255.255, mlen -1, af 2
--- ip 6252:4232:2212:291:8171:6151:4131:2111, mlen -1, af 10
--- ip ::103.145.205.202, mlen 32, af 10
------------------------------------
-```
-
 ### `iptable.explode(prefix)`
 
 Explode a prefix, i.e. produce an full address string without any
@@ -554,7 +541,7 @@ digits as well. Any prefix length, if present, is not applied before
 exploding the address part of the prefix. Returns full address, prefix
 length and AF.
 
-``` lua
+``` shebang lua
 #!/usr/bin/env lua
 iptable = require"iptable"
 
@@ -570,13 +557,6 @@ print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 print(string.rep("-", 35))
 
 ---------- PRODUCES --------------
-```
-
-``` lua
--- ip 10.0.0.0, mlen 8, af 2
--- ip 0000:0000:0000:0000:0000:0000:0000:0000, mlen -1, af 10
--- ip 0000:0000:0000:0000:0000:ffff:0b0c:0d0e, mlen 128, af 10
------------------------------------
 ```
 
 ### `iptable.tobin(prefix)`
@@ -915,8 +895,8 @@ print(string.rep("-", 35))
 
 ``` lua
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.0/30 -> 6
    -- 10.10.10.4/30 -> 7
+   -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
    -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
@@ -926,8 +906,8 @@ print(string.rep("-", 35))
    -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
    -- 10.10.10.0/24 -> 3
-   -- 10.10.10.0/25 -> 4
    -- 10.10.10.128/25 -> 5
+   -- 10.10.10.0/25 -> 4
 -----------------------------------
 ```
 
@@ -1183,7 +1163,7 @@ subnets into their parental supernet, until no merging takes place
 anymore. Second, remove any remaining subnets that weren’t merged but
 lie inside another subnet in the table.
 
-``` lua
+``` shebang lua
 #!/usr/bin/env lua
 iptable = require "iptable"
 
@@ -1229,21 +1209,4 @@ end
 print(string.rep("-",35))
 
 ---------- PRODUCES --------------
-```
-
-``` lua
--- original ->	10.10.10.0/25
--- original ->	10.10.10.128/25
--- original ->	10.10.11.0/25
--- original ->	10.10.11.128/25
--- original ->	11.11.11.0/32
--- original ->	11.11.11.1/32
--- original ->	11.11.11.2/32
--- original ->	11.11.11.3/32
--- original ->	11.11.11.4/32
-
--- minified ->	10.10.10.0/23
--- minified ->	11.11.11.0/30
--- minified ->	11.11.11.4/32
------------------------------------
 ```

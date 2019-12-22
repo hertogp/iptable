@@ -139,7 +139,9 @@ stack.  The include:
 
 
 ### `iptL_gettable`
-```static table_t * iptL_gettable(lua_State *, int);```{.c}
+```c
+static table_t * iptL_gettable(lua_State *, int);
+```
 
 Checks whether the stack value at the given index contains a userdata of
 type [`LUA_IPTABLE_ID`](### LUA_IPTABLE_ID) and returns a `table_t` pointer.
@@ -147,7 +149,9 @@ Errors out to Lua if the stack value has the wrong type.
 
 
 ### `iptL_getaf`
-```static int iptL_getaf(lua_State *L, int idx, int *af);```{.c}
+```c
+static int iptL_getaf(lua_State *L, int idx, int *af);
+```
 
 Checks whether the stack value at the given index is a known af_family
 number or name and sets *af accordingly, otherwise it's set to `AF_UNSPEC`.
@@ -156,8 +160,10 @@ Caller decides if a missing or unknown af_family is an error or not.
 
 
 ### `iptL_getbinkey`
-```static int iptL_getbinkey(lua_State *L, int idx, uint8_t *buf, size_t * 
-len);```{.c}
+```c
+static int iptL_getbinkey(lua_State *L, int idx, uint8_t *buf, size_t *
+len);
+```
 
 Copy a binary key, either an address or a mask, at given 'idx' into given
 'buf'.  'buf' size is assumed to be MAX_BINKEY.  A binary key is a byte
@@ -168,8 +174,10 @@ instead.
 
 
 ### `iptL_getpfxstr`
-```static in iptL_getpfxstr(lua_State *L, int idx, const char **pfx, size_t
-*len)```{.c}
+```c
+static in iptL_getpfxstr(lua_State *L, int idx, const char **pfx, size_t
+*len);
+```
 
 Checks if `L[idx]` is a string and sets the const char ptr to it or NULL.
 Also sets len to the string length reported by Lua's stack manager.  Lua
@@ -178,7 +186,9 @@ Returns 1 on success, 0 on failure.
 
 
 ### `iptL_refpcreate`
-```static int iptL_refpcreate(lua_State *L);```{.c}
+```c
+static int iptL_refpcreate(lua_State *L);
+```
 
 Create a reference id for the lua_State given.  This allocates an int
 pointer, gets a new ref_id, stores it in the allocated space and returns a
@@ -186,7 +196,9 @@ pointer to it.
 
 
 ### `iptL_refpdelete`
-```static void iptL_refpdelete(void *L, void **r);```{.c}
+```c
+static void iptL_refpdelete(void *L, void **r);
+```
 
 Delete a value from `LUA_REGISTRYINDEX` indexed by **r (which is treated as
 an **int).  Function signature is as per `purge_f_t` (see iptable.h) and
@@ -194,21 +206,27 @@ acts as the table's purge function to release user data.
 
 
 ### `iptT_setfstr`
-```static void iptT_setfstr(lua_State *L, const char *k, const char *fmt,
-const void *v)```{.c}
+```c
+static void iptT_setfstr(lua_State *L, const char *k, const char *fmt,
+const void *v)
+```
 
 Needs a Lua table on top of the stack and sets key `k` to the formatted
 string using `fmt` and `v`.
 
 
 ### `iptT_setint`
-```static void iptT_setint(lua_State *L, const char *k, int v)```{.c}
+```c
+static void iptT_setint(lua_State *L, const char *k, int v);
+```
 
 Needs a Lua table on top of the stack and sets key `k` to integer value `v`.
 
 
 ### `iptT_setkv`
-```static void iptT_setkv(lua_State *L, struct radix_node *rn)```{.c}
+```c
+static void iptT_setkv(lua_State *L, struct radix_node *rn);
+```
 
 Needs a Lua table on top of the stack.  It takes the radix node's key
 `rn->rn_key` and the value pointed to by the radix_node and sets that as a
@@ -221,7 +239,9 @@ the `rn`'s index number, which is used to retrieve the prefix's (aka
 
 
 ### `iptL_pushrnh`
-```static int iptL_pushrnh(lua_State *L, struct radix_node_head *rnh)```{.c}
+```c
+static int iptL_pushrnh(lua_State *L, struct radix_node_head *rnh)
+```
 
 Encodes a `radix_node_head` structure as a Lua table and adds some
 additional members to make processing on the Lua side easier.  It will
@@ -245,7 +265,9 @@ looks like:
 
 
 ### `iptL_pushrn`
-```static int iptL_pushrn(lua_State *L, struct radix_node *rn)```{.c}
+```c
+static int iptL_pushrn(lua_State *L, struct radix_node *rn)
+```
 
 Encodes a `radix_node` structure as a Lua table and adds some additional
 members to make processing on the Lua side easier.
@@ -282,7 +304,9 @@ members to make processing on the Lua side easier.
 
 
 ### `iptL_pushrh`
-```static int iptL_pushrh(lua_State *L, struct radix_head *rh)```{.c}
+```c
+static int iptL_pushrh(lua_State *L, struct radix_head *rh)
+```
 
 Encodes a `radix_head` structure as a Lua table and adds some additional
 members to make processing on the Lua side easier.
@@ -296,7 +320,9 @@ members to make processing on the Lua side easier.
 
 
 ### `iptL_pushrmh`
-```static int iptL_pushrmh(lua_State *L, struct radix_mask_head *rmh)```{.c}
+```c
+static int iptL_pushrmh(lua_State *L, struct radix_mask_head *rmh)
+```
 
 Encodes a `radix_head` structure as a Lua table and adds some additional
 members to make processing on the Lua side easier.
@@ -316,7 +342,10 @@ members to make processing on the Lua side easier.
 
 
 ### `iptL_pushrm`
-```static int iptL_pushrm(lua_State *L, struct radix_mask *rm)```{.c}
+```c
+static int iptL_pushrm(lua_State *L, struct radix_mask *rm);
+```
+
 Encodes a `radix_mask` structure as a Lua table and adds some additional
 members to make processing on the Lua side easier.
 ```lua
@@ -343,7 +372,9 @@ members to make processing on the Lua side easier.
 
 
 ### `iptm_gc`
-```static int iptm_gc(lua_State *L)```{.c}
+```c
+static int iptm_gc(lua_State *L);
+```
 
 Garbage collector function (`__gc`) for `LUA_IPTABLE_ID` metatable, which is
 the metatable of `iptable`-table.  Once a table instance is garbage
@@ -351,7 +382,9 @@ collected this function gets called to fee up all its resources.
 
 
 ### `iptL_pushitrgc`
-```static void iptL_pushitrgc(lua_State *L, table_t *t)```{.c}
+```c
+static void iptL_pushitrgc(lua_State *L, table_t *t);
+```
 
 Each iterator factory function MUST call this function in order to push a
 new userdata (an iterator guard) as an upvalue for its actual iterator
@@ -384,7 +417,9 @@ iteration (closure) function when created by its factory.
 
 
 ### `ipt_itr_gc`
-```static int ipt_itr_gc(lua_State *L)```{.c}
+```c
+static int ipt_itr_gc(lua_State *L);
+```
 
 The garbage collector function of the LUA_IPT_ITR_GC metatable, used on the
 iterator guard userdata pushed as an upvalue to all table iterator
@@ -406,8 +441,9 @@ functions donot, they are listed here.
 
 
 ### `iter_error`
-```static int iter_error(lua_State *L, int errno, const char *fmt, ...);
-```{.c}
+```c
+static int iter_error(lua_State *L, int errno, const char *fmt, ...);
+```
 
 Helper function to bail out of an iteration factory function.  An iteration
 factory function MUST return a valid iterator function (`iter_f`) and
@@ -416,13 +452,17 @@ optionally an `invariant` and `ctl_var`. By returning `iter_fail_f` as
 
 
 ### `iter_fail_f`
-```static int iter_fail_f(lua_State *L);```{.c}
+```c
+static int iter_fail_f(lua_State *L);
+```
 
 An iteration function that immediately terminates any iteration.
 
 
 ### `iter_hosts_f`
-```static int iter_hosts_f(lua_State *L)```{.c}
+```c
+static int iter_hosts_f(lua_State *L);
+```
 
 The actual iterator function for iptable.hosts(pfx), yields the next host ip
 until its stop value is reached.  Ignores the stack: it uses upvalues for
@@ -430,7 +470,9 @@ next, stop
 
 
 ### `iter_interval_f`
-```static int iter_interval_f(lua_State *L)```{.c}
+```c
+static int iter_interval_f(lua_State *L)
+```
 
 The actual iterator function for `iter_interval`.  It calculates the
 prefixes that, together make up the address space interval, by starting out
@@ -440,7 +482,9 @@ which case `iptable.error` should provide some information.
 
 
 ### `iter_kv_f`
-```static int iter_kv_f(lua_State *L)```{.c}
+```c
+static int iter_kv_f(lua_State *L)
+```
 
 The actual iteration function for `iter_kv` yields all k,v pairs in the
 tree(s).  When an iterator is active, deletion of entries are flagged and
@@ -451,7 +495,9 @@ Note: upvalue(1) is the leaf to process.
 
 
 ### `iter_more_f`
-```static int iter_more_f(lua_State *L)```{.c}
+```c
+static int iter_more_f(lua_State *L);
+```
 
 The actual iteration function for `iter_more`.
 
@@ -460,7 +506,9 @@ The actual iteration function for `iter_more`.
 
 
 ### `iter_less_f`
-```static int iter_less_f(lua_State *L)```{.c}
+```c
+static int iter_less_f(lua_State *L);
+```
 
 The actual iteration function for `iter_less`.  It basically works by
 decreasing the prefix length which needs to match for the given search
@@ -469,14 +517,18 @@ prefix.
 
 
 ### `iter_masks_f`
-```static int iter_masks_f(lua_State *L)```{.c}
+```c
+static int iter_masks_f(lua_State *L);
+```
 
 The actual iteration function for `iter_masks`.  Masks are read-only: the
 Lua bindings donot (need to) interact directly with a radix mask tree.
 
 
 ### `iter_merge_f`
-```static int iter_merge_f(lua_State *L)```{.c}
+```c
+static int iter_merge_f(lua_State *L);
+```
 
 The actual iteration function for `iter_merge`.
 
@@ -485,7 +537,9 @@ the next group.
 
 
 ### `iter_radix`
-```static int iter_radix(lua_State *L)```{.c}
+```c
+static int iter_radix(lua_State *L);
+```
 
 The actual iterator function for `iter_radixes` which traverses a
 prefix-tree (and possible its associated mask-tree) and yields all nodes one
@@ -501,7 +555,9 @@ Notes:
 
 
 ### `iptable.new`
-```static int ipt_new(lua_State *L);```{.c}
+```c
+static int ipt_new(lua_State *L);
+```
 
 Creates a new userdata, sets its `iptable` metatable and returns it to Lua.
 It also sets the purge function for the table to
@@ -510,7 +566,9 @@ the user's data once a prefix is deleted from the radix tree.
 
 
 ### `iptable.tobin`
-```static int iptable.tobin(lua_State *L)```{.c}
+```c
+static int iptable.tobin(lua_State *L);
+```
 ```lua
 -- lua
  binkey, mlen, af, err = iptable.tobin("10.10.10.10/24")
@@ -524,7 +582,9 @@ In case of errors, returns nil's and an error description.
 
 
 ### `iptable.tostr`
-```static int ipt_tostr(lua_state *L)```{.c}
+```c
+static int ipt_tostr(lua_state *L);
+```
 ```lua
 -- lua
 pfx, err = iptable.tostr(binkey)
@@ -535,7 +595,9 @@ Returns a string representation for given binary key or nil & an error msg.
 
 
 ### `iptable.masklen`
-```static int ipt_masklen(lua_State *L)```{.c}
+```c
+static int ipt_masklen(lua_State *L);
+```
 ```lua
 -- lua
 mlen, err = iptable.masklen(binkey)
@@ -547,7 +609,9 @@ non-contiguous masks are not supported.
 
 
 ### `iptable.size`
-```static int ipt_size(lua_State *L)```{.c}
+```c
+static int ipt_size(lua_State *L);
+```
 ```lua
 -- lua
 num, err = iptable.size("10.10.10.0/24") -- 256.0
@@ -558,7 +622,9 @@ numbers show up as floating points.
 
 
 ### `iptable.address`
-```static int ipt_address(lua_State *L)```{.c}
+```c
+static int ipt_address(lua_State *L);
+```
 ```lua
 -- lua
 addr, mlen, af, err = iptable.address("10.10.10.10/24")
@@ -569,7 +635,9 @@ errors.
 
 
 ### `iptable.explode`
-```static int ipt_explode(lua_State *L)```{.c}
+```c
+static int ipt_explode(lua_State *L);
+```
 ```lua
 -- lua
 addr, mlen, af, err = iptable.explode("2001::/120")
@@ -581,7 +649,9 @@ error msg  on errors.  Only has a real effect on ipv6 prefixes.
 
 
 ### `iptable.network`
-```static int ipt_network(lua_State *L)```{.c}
+```c
+static int ipt_network(lua_State *L);
+```
 ```lua
 -- lua
 netw, mlen, af, err = iptable.network("10.10.10.10/24")
@@ -592,7 +662,9 @@ on errors.
 
 
 ### `iptable.neighbor`
-```static int ipt_neighbor(lua_State *L)```{.c}
+```c
+static int ipt_neighbor(lua_State *L);
+```
 ```lua
 -- lua
 nei, mlen, af, err = iptable.neighbor("10.10.10.10/24")
@@ -606,7 +678,9 @@ combined.  Returns nil's and an error msg on errors.
 
 
 ### `iptable.incr`
-```static int ipt_incr(lua_State *L)```{.c}
+```c
+static int ipt_incr(lua_State *L);
+```
 ```lua
 -- lua
 ip, mlen, af, err = iptable.incr("10.10.10.0/24")
@@ -620,7 +694,9 @@ mask is ignored with regards to adding the offset.
 
 
 ### `iptable.decr`
-```static int ipt_decr(lua_State *L)```{.c}
+```c
+static int ipt_decr(lua_State *L);
+```
 ```lua
 -- lua
 ip, mlen, af, err = iptable.decr("10.10.10.0/24")
@@ -634,7 +710,9 @@ Note: any mask is ignored with regards to adding the offset.
 
 
 ### `iptable.invert`
-```static int ipt_invert(lua_State *L)```{.c}
+```c
+static int ipt_invert(lua_State *L);
+```
 ```lua
 -- lua
 inv, mlen, af, err = iptable.invert("255.255.255.0")
@@ -646,7 +724,9 @@ address.
 
 
 ### `iptable.reverse`
-```static int ipt_reverse(lua_State *L)```{.c}
+```c
+static int ipt_reverse(lua_State *L);
+```
 ```lua
 -- lua
 rev, mlen, af, err = iptable.reverse("1.2.3.4/24")
@@ -659,7 +739,9 @@ address.
 
 
 ### `iptable.broadcast`
-```static int ipt_broadcast(lua_State *L)```{.c}
+```c
+static int ipt_broadcast(lua_State *L);
+```
 ```lua
 -- lua
 bcast, mlen, af, err = iptable.broadcast("10.10.10.10/24")
@@ -671,7 +753,9 @@ message on errors.
 
 
 ### `iptable.mask`
-```static int ipt_mask(lua_State *L)```{.c}
+```c
+static int ipt_mask(lua_State *L);
+```
 ```lua
 -- lua
 mask = iptable.mask(iptable.AF_INET, 30)
@@ -686,7 +770,9 @@ true, also inverts the mask.
 
 
 ### `iptable.hosts`
-```static int iter_hosts(lua_State *L)```{.c}
+```c
+static int iter_hosts(lua_State *L);
+```
 ```lua
 -- lua
 for host in iptable.hosts("10.10.10.0/30") do print(host) end
@@ -708,7 +794,9 @@ won't iterate anything.  In case of errors (it won't iterate), check out
 
 
 ### `iptable.interval`
-```static int ipt_interval(lua_State *L)```{.c}
+```c
+static int ipt_interval(lua_State *L);
+```
 ```lua
 -- lua
   for subnet in iptable.interval("10.10.10.0", "10.10.10.9") do
@@ -730,7 +818,9 @@ AF_family.  In case of errors it won't iterate anything, in that case
 
 
 ### `iptm_newindex`
-```static int iptm_newindex(lua_State *L)```{.c}
+```c
+static int iptm_newindex(lua_State *L);
+```
 ```lua
 -- lua
 ipt = require"iptable".new()
@@ -745,7 +835,9 @@ prefix, cleanup and ignore the request.
 
 
 ### `iptm_index`
-```static int iptm_index(lua_State *L)```{.c}
+```c
+static int iptm_index(lua_State *L);
+```
 ```lua
 -- lua
 ipt = require"iptable".new()
@@ -763,7 +855,9 @@ Given an index `k`:
 
 
 ### `iptm_len`
-```static int iptm_len(lua_State *L)```{.c}
+```c
+static int iptm_len(lua_State *L);
+```
 ```lua
 -- lua
 t = require"iptable".new()
@@ -777,7 +871,9 @@ the 'length' of the table.
 
 
 ### `iptm_tostring`
-```static int iptm_tostring(lua_State *L)```{.c}
+```c
+static int iptm_tostring(lua_State *L);
+```
 ```lua
 -- lua
 ipt = require"iptable".new()
@@ -788,7 +884,9 @@ and ipv6 counters.  Note that the ipv6 counter may overflow at some point...
 
 
 ### `iptm_counts`
-```static int iptm_counts(lua_State *L)```{.c}
+```c
+static int iptm_counts(lua_State *L);
+```
 ```lua
 -- lua
 ipt = require"iptable".new()
@@ -800,7 +898,9 @@ Return the number of entries in both the ipv4 and ipv6 radix tree.
 
 
 ### `iter_kv`
-```static int iter_kv(lua_State *L)```{.c}
+```c
+static int iter_kv(lua_State *L);
+```
 ```lua
 -- lua
 ipt = require"iptable".new()
@@ -820,7 +920,9 @@ ipv4 tree first.  If an errors occurs, it won't iterate anything and
 
 
 ### `iter_more`
-```static int iter_more(lua_State *L)```{.c}
+```c
+static int iter_more(lua_State *L);
+```
 ``` lua
 -- lua
 ipt = require"iptable".new()
@@ -836,7 +938,9 @@ search results should it exist in tree.
 
 
 ### `iter_less`
-```static int iter_less(lua_State *L)```{.c}
+```c
+static int iter_less(lua_State *L);
+```
 ```lua
 -- lua
 ipt = require"iptable".new()
@@ -850,7 +954,9 @@ in the search results should it be present in the table itself.
 
 
 ### `iter_masks`
-```static int iter_masks(lua_State *L)```{.c}
+```c
+static int iter_masks(lua_State *L);
+```
 ```lua
 -- lua
 iptable = require"iptable"
@@ -875,7 +981,9 @@ present.
 
 
 ### `iter_merge`
-```static int iter_merge(lua_State *L)```{.c}
+```c
+static int iter_merge(lua_State *L);
+```
 ```lua
 -- lua
 iptable = require"iptable"
@@ -892,7 +1000,9 @@ also present in the table, it's included the group table as well.
 
 
 ### `iter_radixes`
-```static int iter_radixes(lua_State *L)```{.c}
+```c
+static int iter_radixes(lua_State *L);
+```
 ```lua
 -- lua
 iptable = require"iptable"
