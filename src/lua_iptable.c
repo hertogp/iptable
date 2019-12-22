@@ -164,7 +164,7 @@ static const struct luaL_Reg meths [] = {
  *
  * ### `_stridx`
  * ```c
- * static int _str2idx(const char *, const char * const [])
+ * static int _str2idx(const char *, const char * const []);
  * ```
  *
  * Find the index of a string in a NULL-terminated list of strings.  Used by
@@ -262,7 +262,7 @@ luaopen_iptable (lua_State *L)
 /*
  * ### `lipt_vferror`
  * ```c
- * static int lipt_vferror(lua_State *L, int, int, const char *, va_list)
+ * static int lipt_vferror(lua_State *L, int, int, const char *, va_list);
  * ```
  *
  * Helper function that clears the stack, sets iptable.error module level
@@ -436,8 +436,7 @@ iptL_getaf(lua_State *L, int idx, int *af)
 /*
  * ### `iptL_getbinkey`
  * ```c
- * static int iptL_getbinkey(lua_State *L, int idx, uint8_t *buf, size_t *
- * len);
+ * static int iptL_getbinkey(lua_State *L, int idx, uint8_t *buf, size_t * len);
  * ```
  *
  * Copy a binary key, either an address or a mask, at given 'idx' into given
@@ -475,8 +474,7 @@ iptL_getbinkey(lua_State *L, int idx, uint8_t *buf, size_t *len)
 /*
  * ### `iptL_getpfxstr`
  * ```c
- * static in iptL_getpfxstr(lua_State *L, int idx, const char **pfx, size_t
- * *len);
+ * static in iptL_getpfxstr(lua_State *L, int idx, const char **pfx, size_t *len);
  * ```
  *
  * Checks if `L[idx]` is a string and sets the const char ptr to it or NULL.
