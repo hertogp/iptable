@@ -15,6 +15,7 @@ SRCDIR=src
 TSTDIR=src/test
 BLDDIR=build
 DOCDIR=doc
+BSDDIR=bsd
 
 
 # Lua/luarocks directories
@@ -78,7 +79,7 @@ endif
 
 
 # not real targets
-.PHONY: clean DEBUG
+.PHONY: clean DEBUG bsd
 
 # dependency files are auto-generated and, normally, autodeleted
 # unless defined as .SECONDARY's
@@ -190,7 +191,7 @@ $(MU_RUNNERS): $(BLDDIR)/%.out: $(BLDDIR)/%.o $(BLDDIR)/lib$(LIB).so
 	$(CC) -L$(BLDDIR) -Wl,-rpath,.:$(BLDDIR) $< -o $@ -l$(LIB)
 
 
-# show variables
+# show variables, assumes a make test was done previously
 echo:
 	@echo "RM          = $(RM)"
 	@echo "BUSTED      = $(BUSTED)"
@@ -243,8 +244,8 @@ echo:
 	@echo "$(MU_OBJECTS)"
 	@echo "$(MU_RUNNERS)"
 
-# (always) update the BSD sources
+# update the BSD sources
 bsd:
-	@wget -N -P $(DOCDIR)/$@ -i $(D_DOC)/$@.urls
-	@ls -lpah $(DOCDIR)/$@
+	@wget -N -P $(BSDDIR) -i $(BSDDIR)/$@.urls
+	@ls -lpah $(BSDDIR)
 

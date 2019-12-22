@@ -35,10 +35,13 @@ supported_platforms={
 
 source = {
    url = "git+https://github.com/hertogp/iptable.git",
-   -- tag = "1", -- version's tag
+   tag = "scm", -- version's tag
    branch="master",
 }
 
+copy_directories = {
+  "doc"
+}
 build = {
   type = "builtin",
   dependencies = {
