@@ -430,8 +430,8 @@ print(string.rep("-", 35))
 ### `iptable.invert(prefix)`
 
 Invert the address of given `prefix` and return reversed address, mask length
-and address family.  Note: the mask is NOT applied before reversal is done.  If
-that's required, convert the prefix first using ` iptable.network(prefix)`.
+and address family.  Note: the mask is NOT applied.  If that's required,
+convert the prefix first using ` iptable.network(prefix)`.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
