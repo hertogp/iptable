@@ -319,6 +319,7 @@ void _dumprn(const char *, struct radix_node *);
 // -- key funcs
 
 const char *key_tostr(char *, void *);
+const char *key_tostr_full(char *, void *);
 int key_broadcast(void *, void *);
 int key_cmp(void *, void *);
 int key_invert(void *);

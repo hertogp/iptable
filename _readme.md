@@ -130,15 +130,18 @@ iptable.AF_INET6 -- 10
 
 prefix = "10.10.10.0/24"                       -- ipv4/6 address or subnet
 
-addr,  mlen, af = iptable.address(prefix)      -- 10.10.10.0   24  2
-netw,  mlen, af = iptable.network(prefix)      -- 10.10.10.0   24  2
-bcast, mlen, af = iptable.broadcast(prefix)    -- 10.10.10.255 24  2
-neigb, mlen, af = iptable.neighbor(prefix)     -- 10.10.11.0   24  2
+addr,  mlen, af = iptable.address(prefix)      -- 10.10.10.0      24  2
+netw,  mlen, af = iptable.network(prefix)      -- 10.10.10.0      24  2
+bcast, mlen, af = iptable.broadcast(prefix)    -- 10.10.10.255    24  2
+neigb, mlen, af = iptable.neighbor(prefix)     -- 10.10.11.0      24  2
+invrt, mlen, af = iptable.invert(prefix)       -- 245.245.245.255 24 2
+rev,   mlen, af = iptable.reverse(prefix)      -- 0.10.10.10      24  2
+expl,  mlen, af = iptable.explode("2001::")    -- 2001:0000:..    -1  10
 
-nxt,  mlen, af = iptable.incr(prefix)          -- 10.10.10.1   24  2
-nxt,  mlen, af = iptable.incr(prefix, 257)     -- 10.10.11.1   24  2
-prv,  mlen, af = iptable.decr(prefix)          -- 10.10.9.255  24  2
-prv,  mlen, af = iptable.decr(prefix, 257)     -- 10.10.8.255  24  2
+nxt,  mlen, af = iptable.incr(prefix)          -- 10.10.10.1      24  2
+nxt,  mlen, af = iptable.incr(prefix, 257)     -- 10.10.11.1      24  2
+prv,  mlen, af = iptable.decr(prefix)          -- 10.10.9.255     24  2
+prv,  mlen, af = iptable.decr(prefix, 257)     -- 10.10.8.255     24  2
 
 mask = iptable.mask(iptable.AF_INET, 24)       -- 255.255.255.0
 size = iptable.size(prefix)                    -- 256
@@ -165,6 +168,7 @@ for rdx in ipt:radixes(af [,true]) ... end     -- dumps all radix nodes in tree
 ```
 
 Notes:
+
 - `more/less` exclude `prefix` from search results, unless 2nd arg is true
 - `radixes` excludes mask nodes from iteration, unless 2nd arg is true
 - module functions return nil or errors and set `iptable.error` to some string
@@ -450,10 +454,10 @@ print(string.rep("-", 35))
 
 ### `iptable.reverse(prefix)`
 
-Reverse the address (byte-wise) of given `prefix` and return reversed address,
-mask length and address family.  Note: any mask is NOT applied before reversal
-is done.  If that's required, convert the prefix first using `
-iptable.network(prefix)`.
+Reverse the address byte of given `prefix` and return reversed address,
+mask length and address family.  For ipv6, the nibbles are reversed as well.
+Note: any mask is NOT applied before reversal is done.  If that's required,
+convert the prefix first using ` iptable.network(prefix)`.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -469,6 +473,31 @@ print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 ip, mlen, af = iptable.reverse("acdc:1976::/32")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+### `iptable.explode(prefix)`
+
+Explode a prefix, i.e. produce an full address string without any shorthand.
+Only has effect on ipv6.  Embedded ipv4's are converted to hex digits as well.
+Any prefix length, if present, is not applied before exploding the address part
+of the prefix.  Returns full address, prefix length and AF.
+
+```{.shebang .lua}
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+ip, mlen, af = iptable.explode("10.0.0.0/8")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+ip, mlen, af = iptable.explode("::")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+
+ip, mlen, af = iptable.explode("::ffff:11.12.13.14/128")
+print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
 

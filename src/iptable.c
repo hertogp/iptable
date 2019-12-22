@@ -335,23 +335,61 @@ int key_masklen(void *key)
  * ```c
  *   const char *key_tostr(char *dst, void *src);
  * ```
+ * src is byte array; 1st byte is usually total length of the array.
+ *
+ * - iptable.c keys/masks are uint8_t *'s (unsigned)
+ * - radix.c keys/masks  are char *'s. (may be signed; sys dependent)
+ * - radix.c keys/masks's KEYLEN may deviate: for masks it may indicate
+ *   the total of non-zero bytes i/t array instead of its total length.
  */
 const char *
 key_tostr(char *dst, void *src)
 {
-    /*
-     * src is byte array; 1st byte is usually total length of the array.
-     *   - iptable.c keys/masks are uint8_t *'s (unsigned)
-     *   - radix.c keys/masks  are char *'s. (may be signed; sys dependent)
-     *   - radix.c keys/masks's KEYLEN may deviate: for masks it may indicate
-     *     the total of non-zero bytes i/t array instead of its total length.
-     */
     char *key = src;
 
     if (dst == NULL || src == NULL) return NULL;
 
     if(IPT_KEYLEN(key) > IP4_KEYLEN)
         return inet_ntop(AF_INET6, IPT_KEYPTR(key), dst, INET6_ADDRSTRLEN);
+
+    return inet_ntop(AF_INET, IPT_KEYPTR(key), dst, INET_ADDRSTRLEN);
+}
+
+/* ### `key_tostr_full`
+ * ```c
+ *   const char *key_tostr_full(char *dst, void *src);
+ * ```
+ * Return the full string for a key without shorthanding contiguous zero's
+ * for ipv6 keys.  If the src represents a mask, it may be shorter than than
+ * the protocol's actual key-length, so supply trailing zeros as well.
+ * See the remarks for `key_tostr`.  Only has effect for ipv6 keys.  Embedded
+ * ipv4 addresses are printed as hex digits, not as integers.
+ *
+ */
+const char *
+key_tostr_full(char *dst, void *src)
+{
+    char buf[MAX_STRKEY];
+    char *key = src, *tp=&buf[0];
+    int klen;
+
+    if (dst == NULL || src == NULL) return NULL;
+    klen = IPT_KEYLEN((uint8_t *)src);
+
+    if(IPT_KEYLEN(key) > IP4_KEYLEN) {
+        for (int i = 0; i < MAX_STRKEY; i++)
+            snprintf(buf, sizeof(buf),
+                    "0000:0000:0000:0000:0000:0000:0000:0000");
+        key++;
+        while (--klen>0) {
+            tp += sprintf(tp, "%02x", 0xFF & *key++);
+            if(klen & 0x01  && klen > 1)
+                *tp++ = ':';
+        }
+        *tp++ = '\0';  /* ensure string is terminated */
+
+        return strcpy(dst, buf);// , sizeof(buf));
+    }
 
     return inet_ntop(AF_INET, IPT_KEYPTR(key), dst, INET_ADDRSTRLEN);
 }

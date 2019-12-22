@@ -94,17 +94,18 @@ static int iter_radixes(lua_State *);
 
 static int ipt_address(lua_State *);
 static int ipt_broadcast(lua_State *);
-static int ipt_incr(lua_State *);
 static int ipt_decr(lua_State *);
+static int ipt_explode(lua_State *);
+static int ipt_incr(lua_State *);
 static int ipt_invert(lua_State *);
-static int ipt_reverse(lua_State *);
 static int ipt_mask(lua_State *);
+static int ipt_masklen(lua_State *);
 static int ipt_neighbor(lua_State *L);
 static int ipt_network(lua_State *);
 static int ipt_new(lua_State *);
+static int ipt_reverse(lua_State *);
 static int ipt_size(lua_State *);
 static int ipt_tobin(lua_State *);
-static int ipt_masklen(lua_State *);
 static int ipt_tostr(lua_State *);
 
 // iptable instance methods
@@ -121,19 +122,20 @@ static int iptm_tostring(lua_State *);
 static const struct luaL_Reg funcs [] = {
     {"address", ipt_address},
     {"broadcast", ipt_broadcast},
-    {"hosts", iter_hosts},
     {"decr", ipt_decr},
+    {"explode", ipt_explode},
+    {"hosts", iter_hosts},
     {"incr", ipt_incr},
-    {"invert", ipt_invert},
-    {"reverse", ipt_reverse},
     {"interval", iter_interval},
+    {"invert", ipt_invert},
     {"mask", ipt_mask},
+    {"masklen", ipt_masklen},
     {"neighbor", ipt_neighbor},
     {"network", ipt_network},
     {"new", ipt_new},
+    {"reverse", ipt_reverse},
     {"size", ipt_size},
     {"tobin", ipt_tobin},
-    {"masklen", ipt_masklen},
     {"tostr", ipt_tostr},
     {NULL, NULL}
 };
@@ -1759,6 +1761,48 @@ ipt_address(lua_State *L)
     if (! key_bylen(mask, mlen, af))
         return lipt_error(L, LIPTE_MLEN, 3, "");
     if (! key_tostr(buf, addr))
+        return lipt_error(L, LIPTE_TOSTR, 3, "");
+
+    lua_pushstring(L, buf);
+    lua_pushinteger(L, mlen);
+    lua_pushinteger(L, af);
+
+    dbg_stack("out(3) ==>");
+
+    return 3;
+}
+
+/*
+ * ### `iptable.explode`
+ * ```static int ipt_explode(lua_State *L)```{.c}
+ * ```lua
+ * -- lua
+ * addr, mlen, af, err = iptable.explode("2001::/120")
+ * --> 2001:0000:0000:0000:0000:0000:0000:0000  120  10
+ * ```
+ *
+ * Return unabbreviated address, masklen and af_family for pfx; nil's & an
+ * error msg  on errors.  Only has a real effect on ipv6 prefixes.
+ */
+
+static int
+ipt_explode(lua_State *L)
+{
+    dbg_stack("inc(.) <--");  // [str]
+
+    char buf[MAX_STRKEY];
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1;
+    const char *pfx = NULL;
+
+    if (! iptL_getpfxstr(L, 1, &pfx, &len))
+        return lipt_error(L, LIPTE_ARG, 3, "");
+    if (! key_bystr(addr, &mlen, &af, pfx))
+        return lipt_error(L, LIPTE_PFX, 3, "");
+    if (! key_bylen(mask, mlen, af))
+        return lipt_error(L, LIPTE_MLEN, 3, "");
+    if (! key_tostr_full(buf, addr))
         return lipt_error(L, LIPTE_TOSTR, 3, "");
 
     lua_pushstring(L, buf);
