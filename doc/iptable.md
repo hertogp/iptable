@@ -297,6 +297,23 @@ Count the number of consequtive 1-bits, starting with the msb first.
 ```c
   const char *key_tostr(char *dst, void *src);
 ```
+src is byte array; 1st byte is usually total length of the array.
+
+- iptable.c keys/masks are uint8_t *'s (unsigned)
+- radix.c keys/masks  are char *'s. (may be signed; sys dependent)
+- radix.c keys/masks's KEYLEN may deviate: for masks it may indicate
+  the total of non-zero bytes i/t array instead of its total length.
+
+### `key_tostr_full`
+```c
+  const char *key_tostr_full(char *dst, void *src);
+```
+Return the full string for a key without shorthanding contiguous zero's
+for ipv6 keys.  If the src represents a mask, it may be shorter than than
+the protocol's actual key-length, so supply trailing zeros as well.
+See the remarks for `key_tostr`.  Only has effect for ipv6 keys.  Embedded
+ipv4 addresses are printed as hex digits, not as integers.
+
 
 
 ### `key_bynum`
@@ -336,9 +353,9 @@ bytes must be (and can be safely) inverted.
 ```c
   int key_reverse(void *key);
 ```
-reverse the bytes of a key, useful for creating reverse dns names.  Note
-that the nibbles for ipv6 are NOT swapped.   Assumes the LEN-byte indicates
-how many bytes must be (and can be safely) reversed.
+reverse the bytes of a key.  For ipv6, the nibbles are also swapped.
+Assumes the LEN-byte indicates how many bytes must be (and can be safely)
+reversed.
 
 ### `key_network`
 ```c

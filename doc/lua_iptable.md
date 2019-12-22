@@ -562,6 +562,18 @@ Return host address, masklen and af_family for pfx; nil's & an error msg  on
 errors.
 
 
+### `iptable.explode`
+```static int ipt_explode(lua_State *L)```{.c}
+```lua
+-- lua
+addr, mlen, af, err = iptable.explode("2001::/120")
+--> 2001:0000:0000:0000:0000:0000:0000:0000  120  10
+```
+
+Return unabbreviated address, masklen and af_family for pfx; nil's & an
+error msg  on errors.  Only has a real effect on ipv6 prefixes.
+
+
 ### `iptable.network`
 ```static int ipt_network(lua_State *L)```{.c}
 ```lua
