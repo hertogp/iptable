@@ -1,0 +1,8 @@
+-- vim:ft=lua
+return {
+  _all = {
+    ROOT = {"src/test"},
+    cpath = "build/?.so",
+  }
+
+}
