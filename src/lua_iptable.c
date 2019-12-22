@@ -163,8 +163,9 @@ static const struct luaL_Reg meths [] = {
  * ## Helper functions
  *
  * ### `_stridx`
- *
- * ```static int _str2idx(const char *, const char * const [])```{.c}
+ * ```c
+ * static int _str2idx(const char *, const char * const [])
+ * ```
  *
  * Find the index of a string in a NULL-terminated list of strings.  Used by
  * functions like iptL_getaf, that take strings arguments that need to be
@@ -185,7 +186,9 @@ _str2idx(const char *s, const char *const t[]) {
 
 /*
  * ### `luaopen_iptable`
- * ```int luaopen_iptable(lua_State *);```{.c}
+ * ```c
+ * int luaopen_iptable(lua_State *);
+ * ```
  * ```lua
  * -- lua
  * iptable = require "iptable"
@@ -258,8 +261,9 @@ luaopen_iptable (lua_State *L)
 
 /*
  * ### `lipt_vferror`
- * ```static int lipt_vferror(lua_State *L, int, int, const char *, va_list)
- * ```{.c}
+ * ```c
+ * static int lipt_vferror(lua_State *L, int, int, const char *, va_list)
+ * ```
  *
  * Helper function that clears the stack, sets iptable.error module level
  * variable to a formatted error string `file:line:errno:description` and
@@ -324,7 +328,7 @@ lipt_vferror(lua_State *L, int errno, int nargs, const char *fmt, va_list ap)
 
 /*
  * ### `lipt_error`
- * ```static int lipt_error(lua_State *L, int, int, const char *);```{.c}
+ * ```static int lipt_error(lua_State *L, int, int, const char *);```
  * ```lua
  * -- lua
  * iptable.error = nil -- clear any previous error

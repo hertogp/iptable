@@ -160,13 +160,13 @@ c_test: $(CTARGET) $(MU_RUNNERS)
 POPTS=+lists_without_preceding_blankline
 
 $(DOCS): $(DOCDIR)/%.md: $(SRCDIR)/%.c $(SRCDIR)/%.h
-	grep -E "^(/\*| \*)" $(SRCDIR)/$*.h| cut --bytes=4- > $(DOCDIR)/$*.md
-	grep -E "^(/\*| \*)" $(SRCDIR)/$*.c| cut --bytes=4- >> $(DOCDIR)/$*.md
-	pandoc -f markdown$(POPTS) $(DOCDIR)/$*.md -o $(DOCDIR)/$*.c.pdf
+	grep -E "^(/\*| \*)" $(SRCDIR)/$*.h| cut --bytes=4- > $(DOCDIR)/$*.c.md
+	grep -E "^(/\*| \*)" $(SRCDIR)/$*.c| cut --bytes=4- >> $(DOCDIR)/$*.c.md
+	pandoc -f markdown$(POPTS) $(DOCDIR)/$*.c.md -o $(DOCDIR)/$*.c.pdf
 
 readme:
 	pandoc --filter $(IMAGINE) -f markdown -t gfm -o README.md _readme.md
-	pandoc --filter $(IMAGINE) -f gfm README.md -o doc/readme.pdf
+	pandoc --filter $(IMAGINE) -f gfm README.md -o doc/README.pdf
 
 doc: $(DOCSRC:$(SRCDIR)%.c=$(DOCDIR)%.md)
 
