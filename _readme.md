@@ -138,9 +138,7 @@ invrt, mlen, af = iptable.invert(prefix)       -- 245.245.245.255 24 2
 rev,   mlen, af = iptable.reverse(prefix)      -- 0.10.10.10      24  2
 expl,  mlen, af = iptable.explode("2001::")    -- 2001:0000:..    -1  10
 
-nxt,  mlen, af = iptable.incr(prefix)          -- 10.10.10.1      24  2
 nxt,  mlen, af = iptable.incr(prefix, 257)     -- 10.10.11.1      24  2
-prv,  mlen, af = iptable.decr(prefix)          -- 10.10.9.255     24  2
 prv,  mlen, af = iptable.decr(prefix, 257)     -- 10.10.8.255     24  2
 
 mask = iptable.mask(iptable.AF_INET, 24)       -- 255.255.255.0
@@ -171,7 +169,8 @@ Notes:
 
 - `more/less` exclude `prefix` from search results, unless 2nd arg is true
 - `radixes` excludes mask nodes from iteration, unless 2nd arg is true
-- module functions return nil or errors and set `iptable.error` to some string
+- `incr/decr`'s offset parameter is optional and defaults to 1
+- module functions return nils on errors and set `iptable.error` to some string
 - iptable never clears the iptable.error itself
 
 
