@@ -1,0 +1,1 @@
+.luarocks/iptable-scm-0.rockspec
