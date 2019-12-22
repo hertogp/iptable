@@ -15,6 +15,9 @@ tree with one-way branching removed (a level collapsed trie).
 subnets (in CIDR notation) as well as a longest prefix matching (Lua) table.
 It handles both ipv4 and ipv6 addresses and/or subnets transparently.
 
+Throughout the documentation `prefix` refers to a string that represents either
+an ipv4 or ipv6 address or network in CIDR notation.
+
 ## Requirements and limitations
 
 `iptable` is developed on a linux machine and support for other OS's is
@@ -159,11 +162,13 @@ for k,v in ipt:less(prefix [,true]) ... end    -- iterate across less specifics
 for k,v in ipt:masks(af) ... end               -- iterate across masks used in af
 for k,g in ipt:merge(af) ... end               -- iterate supernets & constituents
 for rdx in ipt:radixes(af [,true]) ... end     -- dumps all radix nodes in tree
-
--- notes:
---> o more/less exclude `prefix` from search results, unless 2nd arg is true
---> o radixes exclude mask nodes from iteration, unless 2nd arg is true
 ```
+
+Notes:
+- `more/less` exclude `prefix` from search results, unless 2nd arg is true
+- `radixes` excludes mask nodes from iteration, unless 2nd arg is true
+- module functions return nil or errors and set `iptable.error` to some string
+- iptable never clears the iptable.error itself
 
 
 # Documentation

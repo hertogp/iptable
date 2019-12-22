@@ -1,6 +1,6 @@
 /* ---
  * title: lua_iptable reference
- * author: git.pdh
+ * author: hertogp
  * tags: Lua C-api
  * ...
  */
@@ -10,7 +10,7 @@
 
 /* # `lua_iptable.h`
  *
- * ## Defines
+ * ## \#defines
  *
  * ### `LUA_IPTABLE_ID`
  * Identity for the `table_t`-userdata.
@@ -22,7 +22,23 @@
 #define LUA_IPTABLE_ID "iptable"
 #define LUA_IPT_ITR_GC "itr_gc"
 
-/* ### ipt ERROR numbers
+/* ### LIPTE errno's
+ * 0. LIPTE_NONE     none
+ * 0. LIPTE_AF       wrong or unknown address family
+ * 0. LIPTE_ARG      wrong type of argument
+ * 0. LIPTE_BINOP    binary operation failed
+ * 0. LIPTE_BIN      illegal binary key/mask
+ * 0. LIPTE_FAIL     unspecified error
+ * 0. LIPTE_ITER     internal iteration error
+ * 0. LIPTE_LIDX     invalid Lua stack index
+ * 0. LIPTE_LVAL     invalid Lua stack (up)value
+ * 0. LIPTE_MLEN     invalid mask length
+ * 0. LIPTE_PFX      invalid prefix string
+ * 0. LIPTE_RDX      unhandled radix node type
+ * 0. LIPTE_TOBIN    error converting string to binary
+ * 0. LIPTE_TOSTR    error converting binary to string
+ * 0. LIPTE_UNKNOWN  unknown error number
+ * 0. LIPTE_ZMAX     NULL (end of error string list)
  */
 
 typedef enum {
@@ -41,7 +57,7 @@ typedef enum {
     LIPTE_TOBIN,
     LIPTE_TOSTR,
     LIPTE_UNKNOWN,
-    LIPTE_ZMAX,  /* *must*be last entry */
+    LIPTE_ZMAX,     /* MUST be last entry */
 } lipt_errno_t;
 
 

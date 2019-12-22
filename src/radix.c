@@ -41,7 +41,7 @@
 #include <sys/lock.h>
 #include <sys/mutex.h>
 #include <sys/rmlock.h>
-#include <sys/systm.h>         // ipt: #define's KASSERT
+#include <sys/systm.h>          // ipt: #define's KASSERT
 #include <sys/malloc.h>
 #include <sys/syslog.h>
 #include "radix.h"

@@ -1,6 +1,6 @@
 /* ---
  * title: iptable reference
- * author: git.pdh
+ * author: hertogp
  * tags: C api
  * ...
  */
@@ -72,7 +72,7 @@
  * `KEY_IS_IP4(k)`
  * : checks for an ipv4 binary key by checking the byte array's length
  *
- * `KEY_IS_IP4(k)`
+ * `KEY_IS_IP6(k)`
  * : checks for an ipv6 binary key by checking the byte array's length
  *
  * `KEY_AF_FAM(k)`
@@ -204,6 +204,7 @@ typedef struct entry_t {
 
 /* ### `purge_t`
  * The type `purge_t` has the following members:
+ *
  * - `struct radix_node_head *head`, the head of a radix tree
  * - `purge_f_t *purge`, a callback function pointer; to free user data
  * - `void *args`, an opague pointer to be interpreted by `purge`
@@ -211,6 +212,7 @@ typedef struct entry_t {
  * This structure is used to relay contextual arguments to the user callback
  * function upon deletion time.  The different levels of memory ownership
  * include:
+ *
  * - `radix.c`, which owns:
  *      + the 'mask' tree completely, but
  *      + only the radix_node_head for the 'key'-tree, not the leafs
@@ -228,6 +230,7 @@ typedef struct entry_t {
  * When `user.c` calls `iptable.c`'s [`tbl_del`](### tbl_del), it supplies the
  * prefix string to be deleted and a contextual argument for its `purge`
  * callback function (`pargs` here).  `tbl_del` then:
+ *
  * - derives a binary from the prefix given
  * - calls `radix.c's rnh_deladdr` to remove the binary key,
  *   (if succesful, two radix nodes are returned (ie an `entry_t`))
@@ -272,14 +275,14 @@ typedef struct stackElm_t {
 
 /* ### `table_t`
  * An iptable has the following members:
- * `struct radix_node_head *head4`, the head of the ipv4 radix tree
- * `struct radix_node_head *head6`, the head of the ipv6 radix tree
- * `size_t count4`, the number of ipv4 prefixes present in the ipv4 tree
- * `size_t count6`, the number of ipv6 prefixes present in the ipv6 tree
- * `purge_f_t *purge`, user callback for freeing user data
- * `int itr_lock`, indicates the presence of active iterators
- * `stackElm_t *top`, the stack to iterate across all radix nodes in all trees
- * `size_t size`, the current size of the of the stack
+ * - `struct radix_node_head *head4`, the head of the ipv4 radix tree
+ * - `struct radix_node_head *head6`, the head of the ipv6 radix tree
+ * - `size_t count4`, the number of ipv4 prefixes present in the ipv4 tree
+ * - `size_t count6`, the number of ipv6 prefixes present in the ipv6 tree
+ * - `purge_f_t *purge`, user callback for freeing user data
+ * - `int itr_lock`, indicates the presence of active iterators
+ * - `stackElm_t *top`, the stack to iterate across all radix nodes in all trees
+ * - `size_t size`, the current size of the of the stack
  *
  * Two separate radix trees are used to store ipv4 resp. ipv6 binary keys.
  * Table operations detect the type of prefix used and access the corresponding
