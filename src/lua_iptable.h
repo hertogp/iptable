@@ -26,8 +26,8 @@
  * 0. LIPTE_NONE     none
  * 0. LIPTE_AF       wrong or unknown address family
  * 0. LIPTE_ARG      wrong type of argument
- * 0. LIPTE_BINOP    binary operation failed
  * 0. LIPTE_BIN      illegal binary key/mask
+ * 0. LIPTE_BINOP    binary operation failed
  * 0. LIPTE_FAIL     unspecified error
  * 0. LIPTE_ITER     internal iteration error
  * 0. LIPTE_LIDX     invalid Lua stack index
@@ -35,6 +35,7 @@
  * 0. LIPTE_MLEN     invalid mask length
  * 0. LIPTE_PFX      invalid prefix string
  * 0. LIPTE_RDX      unhandled radix node type
+ * 0. LIPTE_SPLIT    prefix already at max length
  * 0. LIPTE_TOBIN    error converting string to binary
  * 0. LIPTE_TOSTR    error converting binary to string
  * 0. LIPTE_UNKNOWN  unknown error number
@@ -54,6 +55,7 @@ typedef enum {
     LIPTE_MLEN,
     LIPTE_PFX,
     LIPTE_RDX,
+    LIPTE_SPLIT,
     LIPTE_TOBIN,
     LIPTE_TOSTR,
     LIPTE_UNKNOWN,
@@ -75,6 +77,7 @@ static const char *const LIPT_ERROR[] = {
     [LIPTE_MLEN]    = "invalid mask length",
     [LIPTE_PFX]     = "invalid prefix string",
     [LIPTE_RDX]     = "unhandled radix node type",
+    [LIPTE_SPLIT]   = "prefix already at max length",
     [LIPTE_TOBIN]   = "error converting string to binary",
     [LIPTE_TOSTR]   = "error converting binary to string",
     [LIPTE_UNKNOWN] = "unknown error number",

@@ -134,9 +134,10 @@ addr,  mlen, af = iptable.address(prefix)      -- 10.10.10.0      24  2
 netw,  mlen, af = iptable.network(prefix)      -- 10.10.10.0      24  2
 bcast, mlen, af = iptable.broadcast(prefix)    -- 10.10.10.255    24  2
 neigb, mlen, af = iptable.neighbor(prefix)     -- 10.10.11.0      24  2
-invrt, mlen, af = iptable.invert(prefix)       -- 245.245.245.255 24 2
+invrt, mlen, af = iptable.invert(prefix)       -- 245.245.245.255 24  2
 rev,   mlen, af = iptable.reverse(prefix)      -- 0.10.10.10      24  2
-expl,  mlen, af = iptable.explode("2001::")    -- 2001:0000:..    -1  10
+expl,  mlen, af = iptable.longhand("2001::")   -- 2001:0000:..    -1  10
+p1, p2, mlen,af = iptable.split(prefix)        -- 10.10.10.0 10.10.10.128 25 2
 
 nxt,  mlen, af = iptable.incr(prefix, 257)     -- 10.10.11.1      24  2
 prv,  mlen, af = iptable.decr(prefix, 257)     -- 10.10.8.255     24  2
@@ -152,6 +153,10 @@ ipt    = iptable.new()                         -- longest prefix match table
 for host in iptable.hosts(prefix[, true]) do   -- iterate across hosts in prefix
     print(host)                                --> optionally include netw/bcast
 end
+
+for pfx in iptable.subnets(prefix, 26) do      -- iterate prefix's subnets
+    print(pfx)                                 --> new prefix len optional is
+end                                            --> defaults to 1 bit longer
 
 -- table functions
 
@@ -478,7 +483,7 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
-### `iptable.explode(prefix)`
+### `iptable.longhand(prefix)`
 
 Explode a prefix, i.e. produce an full address string without any shorthand.
 Only has effect on ipv6.  Embedded ipv4's are converted to hex digits as well.
@@ -489,13 +494,13 @@ of the prefix.  Returns full address, prefix length and AF.
 #!/usr/bin/env lua
 iptable = require"iptable"
 
-ip, mlen, af = iptable.explode("10.0.0.0/8")
+ip, mlen, af = iptable.longhand("10.0.0.0/8")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
-ip, mlen, af = iptable.explode("::")
+ip, mlen, af = iptable.longhand("::")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
-ip, mlen, af = iptable.explode("::ffff:11.12.13.14/128")
+ip, mlen, af = iptable.longhand("::ffff:11.12.13.14/128")
 print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
 
 print(string.rep("-", 35))
@@ -503,6 +508,31 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
+### `iptable.split(prefix)`
+
+Split a prefix into its two subnets.
+Returns both network addresses of the two subnets, along with the new prefix
+length and AF.  In case of errors, such as trying to split a host address, it
+returns all nils and an error message.
+
+```{.shebang .lua}
+#!/usr/bin/env lua
+iptable = require"iptable"
+F = string.format
+
+pfx1, pfx2, mlen, af, err = iptable.split("10.0.0.0/8")
+print(F("-- pfx1 %s, pfx2 %s, mlen %s, af %s, err %s", pfx1,pfx2,mlen,af,err))
+
+pfx1, pfx2, mlen, af, err = iptable.split("10.10.10.10/32")
+print(F("-- pfx1 %s, pfx2 %s, mlen %s, af %s, err %s", pfx1,pfx2,mlen,af,err))
+
+pfx1, pfx2, mlen, af, err = iptable.split("acdc:1979::/32")
+print(F("-- pfx1 %s, pfx2 %s, mlen %s, af %s, err %s", pfx1,pfx2,mlen,af,err))
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
 ### `iptable.tobin(prefix)`
 
 Returns the binary key used internally by the radix tree for a string key like
@@ -619,6 +649,33 @@ end
 print("\n-- Including netw/bcast")
 for pfx in iptable.hosts("10.10.10.0/30", true) do
     print(string.format("--> %s", pfx))
+end
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+### `iptable.subnets(prefix [, mlen])`
+
+Iterate across the subnets in a given prefix.  The optional new mask length
+defaults to being 1 longer than the mask in given prefix.  Returns each subnet
+as a prefix.  In case of errors, iptable.error provides some information.
+
+```{.shebang .lua}
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+prefix = "10.10.10.0/28"
+print("-- /30 subnets in " .. prefix)
+for pfx in iptable.subnets(prefix, 30) do
+    print(string.format("--   %s", pfx))
+end
+
+prefix = "acdc:1976::/30"
+print("-- /32 subnets in " .. prefix)
+for pfx in iptable.subnets(prefix, 32) do
+    print(string.format("--   %s", pfx))
 end
 
 print(string.rep("-", 35))
@@ -862,11 +919,21 @@ print(string.rep("-", 35))
 ```
 
 
-# Examples:
+# Radix tree graphs
 
-## Radix tree graphs
+[*iptable*](https://github.com/hertogp/iptable/tree/master/src/lua)'s github
+repo has two additional, small lua modules that can be used to dump a radix
+tree to a dot-file for conversion by graphviz:
 
-### Graph an IPv4 tree
+- `ipt2dot`, dumps the tree with full radix node details
+- `ipt2smalldot`, dumps the tree with less node details
+
+For large trees, this gets pretty messy but for small trees the images are
+legible.  Primarily for fun with no real application other than a means to
+assist during development.
+
+
+## IPv4 tree
 
 ```{.shebang .lua im_out=ocb,img}
 #!/usr/bin/env lua
@@ -894,7 +961,7 @@ print(string.rep("-",35))
 ---------- PRODUCES --------------
 ```
 
-### Graph an IPv6 tree
+## IPv6 tree
 
 ```{.shebang .lua im_out=ocb,img}
 #!/usr/bin/env lua
@@ -921,9 +988,7 @@ print(string.rep("-",35))
 ---------- PRODUCES --------------
 ```
 
-## Alternate radix tree graphs
-
-### Graph an IPv4 tree
+## Alternate IPv4 tree
 
 ```{.shebang .lua im_out=ocb,img}
 #!/usr/bin/env lua
@@ -951,7 +1016,7 @@ print(string.rep("-",35))
 ---------- PRODUCES --------------
 ```
 
-### Graph an IPv6 tree
+## Alternate IPv6 tree
 
 ```{.shebang .lua im_out=ocb,img}
 #!/usr/bin/env lua
@@ -977,13 +1042,17 @@ print(string.rep("-",35))
 
 ---------- PRODUCES --------------
 ```
+
+\newpage
+
+
+# Example code
 
 ## Minify list of prefixes
 
-Minifying a list of prefixes is done in two steps.  First keep merging subnets
-into their parental supernet, until no merging takes place anymore.  Second,
-remove any remaining subnets that weren't merged but lie inside another subnet
-in the table.
+First keep merging subnets into their parental supernet, until no merging takes
+place anymore.  Then remove any remaining subnets that weren't merged but lie
+inside another subnet in the table.
 
 ```{.shebang .lua im_out=ocb,stdout,stderr}
 #!/usr/bin/env lua
@@ -991,43 +1060,34 @@ iptable = require "iptable"
 
 -- fill a table with list of prefixes
 ipt = iptable.new()
-ipt["10.10.10.0/25"] = true
-ipt["10.10.10.128/25"] = true
-ipt["10.10.11.0/25"] = true
-ipt["10.10.11.128/25"] = true
-ipt["11.11.11.0"] = true
-ipt["11.11.11.1"] = true
-ipt["11.11.11.2"] = true
-ipt["11.11.11.3"] = true
-ipt["11.11.11.4"] = true
+acl = {
+    "10.10.10.0/30", "10.10.10.0/25", "10.10.10.128/26", "10.10.10.192/26",
+    "10.10.11.0/25", "10.10.11.128/25",
+    "11.11.11.0", "11.11.11.1", "11.11.11.2", "11.11.11.3", "11.11.11.4"
+}
 
-for k,_ in pairs(ipt) do
-    print("-- original ->", k)
-end
+-- load up the table
+for _, pfx in ipairs(acl) do ipt[pfx] = true end
+for k,_ in pairs(ipt) do print("-- original ->", k) end
 print()
 
+-- merge adjacent subnets into their supernet
 changed = true
 while (changed) do
     changed = false
     for supernet, grp in ipt:merge(iptable.AF_INET) do
-        for subnet, _ in pairs(grp) do
-            ipt[subnet] = nil         -- delete subnets, possibly supernet too
-        end
-        ipt[supernet] = true          -- ensure supernet's existence
-        changed = true                -- further merging might now be possible
+        for subnet, _ in pairs(grp) do ipt[subnet] = nil end
+        ipt[supernet] = true
+        changed = true
     end
 end
 
+-- remove any remaining more specifics
 for prefix, _ in pairs(ipt) do
-    for subnet, _ in ipt:more(prefix, false) do
-        ipt[subnet] = nil             -- remove all more specifics
-    end
+    for subnet, _ in ipt:more(prefix) do ipt[subnet] = nil end
 end
 
-for k, _ in pairs(ipt) do
-    print("-- minified ->", k)
-end
-
+for k, _ in pairs(ipt) do print("-- minified ->", k) end
 print(string.rep("-",35))
 
 ---------- PRODUCES --------------

@@ -74,6 +74,8 @@ static int iter_hosts(lua_State *);
 static int iter_hosts_f(lua_State *);
 static int iter_interval(lua_State *);
 static int iter_interval_f(lua_State *);
+static int iter_subnets(lua_State *);
+static int iter_subnets_f(lua_State *);
 
 // instance level iterators
 
@@ -95,7 +97,7 @@ static int iter_radixes(lua_State *);
 static int ipt_address(lua_State *);
 static int ipt_broadcast(lua_State *);
 static int ipt_decr(lua_State *);
-static int ipt_explode(lua_State *);
+static int ipt_longhand(lua_State *);
 static int ipt_incr(lua_State *);
 static int ipt_invert(lua_State *);
 static int ipt_mask(lua_State *);
@@ -105,6 +107,7 @@ static int ipt_network(lua_State *);
 static int ipt_new(lua_State *);
 static int ipt_reverse(lua_State *);
 static int ipt_size(lua_State *);
+static int ipt_split(lua_State *);
 static int ipt_tobin(lua_State *);
 static int ipt_tostr(lua_State *);
 
@@ -123,11 +126,11 @@ static const struct luaL_Reg funcs [] = {
     {"address", ipt_address},
     {"broadcast", ipt_broadcast},
     {"decr", ipt_decr},
-    {"explode", ipt_explode},
     {"hosts", iter_hosts},
     {"incr", ipt_incr},
     {"interval", iter_interval},
     {"invert", ipt_invert},
+    {"longhand", ipt_longhand},
     {"mask", ipt_mask},
     {"masklen", ipt_masklen},
     {"neighbor", ipt_neighbor},
@@ -135,6 +138,8 @@ static const struct luaL_Reg funcs [] = {
     {"new", ipt_new},
     {"reverse", ipt_reverse},
     {"size", ipt_size},
+    {"split", ipt_split},
+    {"subnets", iter_subnets},
     {"tobin", ipt_tobin},
     {"tostr", ipt_tostr},
     {NULL, NULL}
@@ -1253,7 +1258,75 @@ iter_interval_f(lua_State *L)
         lua_replace(L, lua_upvalueindex(1));
     }
 
+    dbg_stack("out(1) ==>");
+
+    return 1;
+}
+
+/*
+ * ### `iter_subnets_f`
+ * ```c
+ * static int iter_subnets_f(lua_State *L)
+ * ```
+ *
+ * The actual iterator function for `iter_subnets`.  Uses upvalues: `start`,
+ * `stop`, `mask`, `mlen` and a `sentinal` which is used to signal address
+ * space wrap around.
+ *
+ * `stop` represents the broadcast address of the last prefix to return.  This
+ * might actually be the max address possible in the AF's address space and
+ * increasing beyond using `key_incr` would fail.  So if the current prefix,
+ * which will be returned in this iteration, has a broadcast address equal to
+ * `stop` the sentinal upvalue is set to 0 so iteration stops next time around
+ * and no `key_incr` is done to arrive at the next 'network'-address of the
+ * next prefix since we're done already..
+ *
+ * `mlen` is stored as a convenience and represents the prefix length of the
+ * binary `mask` and alleviates the need to calculate it on every iteration.
+ */
+
+static int
+iter_subnets_f(lua_State *L)
+{
+    dbg_stack("(inc) <--");
+
+    uint8_t start[MAX_BINKEY], stop[MAX_BINKEY], mask[MAX_BINKEY];
+    size_t klen;
+    int mlen;
+    char buf[MAX_STRKEY];
+
+    if (lua_tointeger(L, lua_upvalueindex(5)))
+        return 0; /* all done */
+    if (! iptL_getbinkey(L, lua_upvalueindex(1), start, &klen))
+        return lipt_error(L, LIPTE_LVAL, 1, "");
+    if (! iptL_getbinkey(L, lua_upvalueindex(2), stop, &klen))
+        return lipt_error(L, LIPTE_LVAL, 1, "");
+
+    /* are we done? */
+    if (key_cmp(start, stop) > 0)
+        return 0;
+
+    /* push start as the next subnet */
+    lua_settop(L, 0);
+    mlen = lua_tointeger(L, lua_upvalueindex(4));
+    lua_pushfstring(L, "%s/%d", key_tostr(buf, start), mlen);
+
+    /* setup next start address */
+    if (! iptL_getbinkey(L, lua_upvalueindex(3), mask, &klen))
+        return lipt_error(L, LIPTE_LVAL, 1, "");
+    if (! key_broadcast(start, mask))
+        return lipt_error(L, LIPTE_BINOP, 1, "");
+
     /* wrap around protection */
+    if (key_cmp(start, stop) == 0) {
+        lua_pushinteger(L, 1);
+        lua_replace(L, lua_upvalueindex(5));
+    } else {
+        if (! key_incr(start, 1))
+            return lipt_error(L, LIPTE_BINOP, 1, "");
+        lua_pushlstring(L, (const char *)start, (size_t)IPT_KEYLEN(start));
+        lua_replace(L, lua_upvalueindex(1));
+    }
 
     dbg_stack("out(1) ==>");
 
@@ -1843,13 +1916,13 @@ ipt_address(lua_State *L)
 }
 
 /*
- * ### `iptable.explode`
+ * ### `iptable.longhand`
  * ```c
- * static int ipt_explode(lua_State *L);
+ * static int ipt_longhand(lua_State *L);
  * ```
  * ```lua
  * -- lua
- * addr, mlen, af, err = iptable.explode("2001::/120")
+ * addr, mlen, af, err = iptable.longhand("2001::/120")
  * --> 2001:0000:0000:0000:0000:0000:0000:0000  120  10
  * ```
  *
@@ -1858,7 +1931,7 @@ ipt_address(lua_State *L)
  */
 
 static int
-ipt_explode(lua_State *L)
+ipt_longhand(lua_State *L)
 {
     dbg_stack("inc(.) <--");  // [str]
 
@@ -2184,6 +2257,67 @@ ipt_reverse(lua_State *L)
 }
 
 /*
+ * ### `iptable.split`
+ * ```c
+ * static int ipt_split(lua_State *L);
+ * ```
+ * ```lua
+ * -- lua
+ * addr1, addr2, mlen, af, err = iptable.split("10.10.10.10/24")
+ * --> 10.10.10.0  10.10.10.128  25  2  nil
+ * ```
+ *
+ * Split a prefix into its two constituent parts.  Returns nils on errors plus
+ * an error message.
+ */
+
+static int
+ipt_split(lua_State *L)
+{
+    dbg_stack("inc(.) <--");  // [str]
+
+    char buf[MAX_STRKEY], buf2[MAX_STRKEY];
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY];
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1;
+    const char *pfx = NULL;
+
+    if (! iptL_getpfxstr(L, 1, &pfx, &len))
+        return lipt_error(L, LIPTE_ARG, 4, "");
+    if (! key_bystr(addr, &mlen, &af, pfx))
+        return lipt_error(L, LIPTE_PFX, 4, "");
+    if (mlen == -1)
+        return lipt_error(L, LIPTE_SPLIT, 4, "%s", pfx);
+    if (af == AF_INET && mlen == IP4_MAXMASK)
+        return lipt_error(L, LIPTE_SPLIT, 4, "%s", pfx);
+    if (af == AF_INET6 && mlen == IP6_MAXMASK)
+        return lipt_error(L, LIPTE_SPLIT, 4, "%s", pfx);
+
+    mlen += 1;
+    if (! key_bylen(mask, mlen, af))
+        return lipt_error(L, LIPTE_MLEN, 4, "");
+    if (! key_network(addr, mask))
+        return lipt_error(L, LIPTE_BINOP, 4, "");
+    if (! key_tostr(buf, addr))
+        return lipt_error(L, LIPTE_TOSTR, 4, "");
+    if (! key_broadcast(addr, mask))
+        return lipt_error(L, LIPTE_BINOP, 4, "");
+    if (! key_incr(addr, 1))
+        return lipt_error(L, LIPTE_BINOP, 4, "");
+    if (! key_tostr(buf2, addr))
+        return lipt_error(L, LIPTE_TOSTR, 4, "");
+
+    lua_pushstring(L, buf);
+    lua_pushstring(L, buf2);
+    lua_pushinteger(L, mlen);
+    lua_pushinteger(L, af);
+
+    dbg_stack("out(3) ==>");
+
+    return 4;
+}
+
+/*
  * ### `iptable.broadcast`
  * ```c
  * static int ipt_broadcast(lua_State *L);
@@ -2399,6 +2533,92 @@ iter_interval(lua_State *L)
 
     return 1;
 }
+
+/*
+ * ### `iptable.subnets`
+ * ```c
+ * static int ipt_subnets(lua_State *L);
+ * ```
+ * ```lua
+ * -- lua
+ *   for subnet in iptable.subnets("10.10.10.0/24", 26) do
+ *     print(subnet)
+ *   end
+ *   --> 10.10.10.0/26
+ *   --> 10.10.10.64/26
+ *   --> 10.10.10.128/26
+ *   --> 10.10.10.192/26
+ * ```
+ *
+ * Iterate across the smaller prefixes given a start prefix and a larger
+ * network mask, which is optional and defaults to being 1 bit longer than
+ * that of the given prefix (similar to split).  In case of errors, it won't
+ * iterate anything in which case `iptable.error` might shed some light on the
+ * error encountered.
+ */
+
+static int
+iter_subnets(lua_State *L)
+{
+    dbg_stack("(inc) <--");   // <-- [pfx, mlen]
+
+    uint8_t start[MAX_BINKEY], stop[MAX_BINKEY], mask[MAX_BINKEY];
+    const char *pfx = NULL;
+    int mlen = -1, mlen2, af = AF_UNSPEC;
+    size_t len;
+
+    /* pickup start */
+    if (! iptL_getpfxstr(L, 1, &pfx, &len))
+        return iter_error(L, LIPTE_ARG, "prefix?");
+    if (! key_bystr(start, &mlen, &af, pfx))
+        return iter_error(L, LIPTE_PFX, "prefix %s ?", pfx);
+    if (AF_UNKNOWN(af))
+        return iter_error(L, LIPTE_AF, "af %d ?", af);
+
+    /* are subnets possible ? */
+    if (mlen == -1)
+        return iter_error(L, LIPTE_SPLIT, "%s", pfx);
+    if (af == AF_INET && mlen == IP4_MAXMASK)
+        return iter_error(L, LIPTE_SPLIT, "%s", pfx);
+    if (af == AF_INET6 && mlen == IP6_MAXMASK)
+        return iter_error(L, LIPTE_SPLIT, "%s", pfx);
+
+    /* pick up new masklen, check validity and calculate binary mask*/
+    mlen2 = mlen + 1;
+    if (lua_gettop(L) == 2 && lua_isinteger(L, 2))
+        mlen2 = lua_tointeger(L, 2);
+    if (mlen2 < 0 || mlen2 <= mlen)
+        return iter_error(L, LIPTE_ARG, "new mask %d ?", mlen2);
+    if (af == AF_INET && mlen2 > IP4_MAXMASK)
+        return iter_error(L, LIPTE_ARG, "invalid new mask %d", mlen2);
+    if (af == AF_INET6 && mlen2 > IP6_MAXMASK)
+        return iter_error(L, LIPTE_ARG, "invalid new mask %d", mlen2);
+
+    /* calculate stop as broadcast address using original mask*/
+    memcpy(stop, start, IPT_KEYLEN(start));
+    if (! key_bylen(mask, mlen, af))
+        return iter_error(L, LIPTE_BINOP, "binmask for /%d", mlen);
+    if (! key_network(start, mask))
+        return iter_error(L, LIPTE_BINOP, "%s", "no network");
+    if (! key_broadcast(stop, mask))
+        return iter_error(L, LIPTE_BINOP, "[%s]", "no broadcast");
+
+    /* setup iterator function */
+    if (! key_bylen(mask, mlen2, af))
+        return iter_error(L, LIPTE_BINOP, "binmask for /%d", mlen2);
+    lua_settop(L, 0);
+    lua_pushlstring(L, (const char *)start, IPT_KEYLEN(start));
+    lua_pushlstring(L, (const char *)stop, IPT_KEYLEN(stop));
+    lua_pushlstring(L, (const char *)mask, IPT_KEYLEN(stop));
+    lua_pushinteger(L, mlen2);
+    lua_pushinteger(L, 0); /* wrap around protection */
+    lua_pushcclosure(L, iter_subnets_f, 5);
+
+    dbg_stack("out(1) ==>");
+
+    return 1;
+}
+
 
 /*
  * ## instance methods
