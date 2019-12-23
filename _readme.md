@@ -130,38 +130,40 @@ iptable.AF_INET6 -- 10
 
 prefix = "10.10.10.0/24"                       -- ipv4/6 address or subnet
 
-addr,  mlen, af = iptable.address(prefix)      -- 10.10.10.0      24  2
-netw,  mlen, af = iptable.network(prefix)      -- 10.10.10.0      24  2
-bcast, mlen, af = iptable.broadcast(prefix)    -- 10.10.10.255    24  2
-neigb, mlen, af = iptable.neighbor(prefix)     -- 10.10.11.0      24  2
-invrt, mlen, af = iptable.invert(prefix)       -- 245.245.245.255 24  2
-rev,   mlen, af = iptable.reverse(prefix)      -- 0.10.10.10      24  2
-expl,  mlen, af = iptable.longhand("2001::")   -- 2001:0000:..    -1  10
-p1, p2, mlen,af = iptable.split(prefix)        -- 10.10.10.0 10.10.10.128 25 2
+addr,  mlen, af, err = iptable.address(prefix)      -- 10.10.10.0      24  2 nil
+netw,  mlen, af, err = iptable.network(prefix)      -- 10.10.10.0      24  2 nil
+bcast, mlen, af, err = iptable.broadcast(prefix)    -- 10.10.10.255    24  2 nil
+neigb, mlen, af, err = iptable.neighbor(prefix)     -- 10.10.11.0      24  2 nil
+invrt, mlen, af, err = iptable.invert(prefix)       -- 245.245.245.255 24  2 nil
+rev,   mlen, af, err = iptable.reverse(prefix)      -- 0.10.10.10      24  2 nil
+expl,  mlen, af, err = iptable.longhand("2001::")   -- 2001:0000:...   -1  10 nil
+p1, p2, mlen,af, err = iptable.split(prefix)        -- 10.10.10.0 10.10.10.128 25 2 nil
 
-nxt,  mlen, af = iptable.incr(prefix, 257)     -- 10.10.11.1      24  2
-prv,  mlen, af = iptable.decr(prefix, 257)     -- 10.10.8.255     24  2
+nxt,  mlen, af, err = iptable.incr(prefix, 257)     -- 10.10.11.1      24  2 nil
+prv,  mlen, af, err = iptable.decr(prefix, 257)     -- 10.10.8.255     24  2 nil
 
-mask = iptable.mask(iptable.AF_INET, 24)       -- 255.255.255.0
-size = iptable.size(prefix)                    -- 256
+mask, err = iptable.mask(iptable.AF_INET, 24)       -- 255.255.255.0 nil
+size, err = iptable.size(prefix)                    -- 256 nil
 
-binkey = iptable.tobin("255.255.255.0")        -- byte string 05:ff:ff:ff:00
-prefix = iptable.tostr(binkey)                 -- 255.255.255.0
-msklen = iptable.masklen(binkey)               -- 24
-ipt    = iptable.new()                         -- longest prefix match table
+binkey, err = iptable.tobin("255.255.255.0")        -- byte string 05:ff:ff:ff:00 nil
+prefix, err = iptable.tostr(binkey)                 -- 255.255.255.0 nil
+msklen, err = iptable.masklen(binkey)               -- 24 nil
+
+ipt    = iptable.new()                              -- longest prefix match table
 
 for host in iptable.hosts(prefix[, true]) do   -- iterate across hosts in prefix
     print(host)                                --> optionally include netw/bcast
 end
 
 for pfx in iptable.subnets(prefix, 26) do      -- iterate prefix's subnets
-    print(pfx)                                 --> new prefix len optional is
-end                                            --> defaults to 1 bit longer
+    print(pfx)                                 --> new prefix len is optional
+end                                            --> and defaults to 1 bit longer
 
 -- table functions
 
 #ipt                                           -- 0 (nothing stored yet)
 ipt:counts()                                   -- 0 0 (ipv4_count ipv6_count)
+iptable.error = nil                            -- last error message seen
 for k,v in pairs(ipt) do ... end               -- iterate across k,v-pairs
 for k,v in ipt:more(prefix [,true]) ... end    -- iterate across more specifics
 for k,v in ipt:less(prefix [,true]) ... end    -- iterate across less specifics
@@ -175,7 +177,8 @@ Notes:
 - `more/less` exclude `prefix` from search results, unless 2nd arg is true
 - `radixes` excludes mask nodes from iteration, unless 2nd arg is true
 - `incr/decr`'s offset parameter is optional and defaults to 1
-- module functions return nils on errors and set `iptable.error` to some string
+- functions return all nils on errors plus an error message
+- iterators won't iterate, check `iptable.error` for an error message
 - iptable never clears the iptable.error itself
 
 
