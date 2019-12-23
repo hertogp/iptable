@@ -151,25 +151,25 @@ msklen, err = iptable.masklen(binkey)               -- 24 nil
 
 ipt    = iptable.new()                              -- longest prefix match table
 
-for host in iptable.hosts(prefix[, true]) do   -- iterate across hosts in prefix
-    print(host)                                --> optionally include netw/bcast
+for host in iptable.hosts(prefix[, true]) do        -- iterate across hosts in prefix
+    print(host)                                     --> optionally include netw/bcast
 end
 
-for pfx in iptable.subnets(prefix, 26) do      -- iterate prefix's subnets
-    print(pfx)                                 --> new prefix len is optional
-end                                            --> and defaults to 1 bit longer
+for pfx in iptable.subnets(prefix, 26) do           -- iterate prefix's subnets
+    print(pfx)                                      --> new prefix len is optional
+end                                                 --> and defaults to 1 bit longer
 
 -- table functions
 
-#ipt                                           -- 0 (nothing stored yet)
-ipt:counts()                                   -- 0 0 (ipv4_count ipv6_count)
-iptable.error = nil                            -- last error message seen
-for k,v in pairs(ipt) do ... end               -- iterate across k,v-pairs
-for k,v in ipt:more(prefix [,true]) ... end    -- iterate across more specifics
-for k,v in ipt:less(prefix [,true]) ... end    -- iterate across less specifics
-for k,v in ipt:masks(af) ... end               -- iterate across masks used in af
-for k,g in ipt:merge(af) ... end               -- iterate supernets & constituents
-for rdx in ipt:radixes(af [,true]) ... end     -- dumps all radix nodes in tree
+#ipt                                                -- 0 (nothing stored yet)
+ipt:counts()                                        -- 0 0 (ipv4_count ipv6_count)
+iptable.error = nil                                 -- last error message seen
+for k,v in pairs(ipt) do ... end                    -- iterate across k,v-pairs
+for k,v in ipt:more(prefix [,true]) ... end         -- iterate across more specifics
+for k,v in ipt:less(prefix [,true]) ... end         -- iterate across less specifics
+for k,v in ipt:masks(af) ... end                    -- iterate across masks used in af
+for k,g in ipt:merge(af) ... end                    -- iterate supernets & constituents
+for rdx in ipt:radixes(af [,true]) ... end          -- dumps all radix nodes in tree
 ```
 
 Notes:
