@@ -77,12 +77,10 @@ An iptable.new() yields a Lua table with modified indexing behaviour:
     mask
   - retrieving data with a subnet-key, uses an exact match
   - retrieving data with an address-key, uses a longest prefix match
-  - count/size functions use Lua arithmatic, since ipv6 space is rather
-    large
-  - `mlen == -1` means some function (like `iptable.address(pfx)`) saw
-    no mask
-  - it is generally safe to delete entries while iterating across the
-    table
+  - the `iptable.size(pfx)` function uses Lua arithmatic, hence the
+    float
+  - `mlen == -1` signals the absence of a max
+  - it is safe to delete entries while iterating across the table
 
 Example usage:
 
@@ -92,7 +90,7 @@ ipt = require"iptable".new()
 ipt["10.10.10.0/24"] = {seen=0}       -- store anything in the table
 ipt["10.10.10.10"] = false            -- stores to ipt["10.10.10.10/32"]
 ipt["11.11.11.11/24"] = true          -- stores to ipt["11.11.11.0/24"]
-ipt["acdc:1974::/32"] = "Jailbreak"   -- goes into separate radix tree
+ipt["acdc:1976::/32"] = "Jailbreak"   -- goes into separate radix tree
 ipt[1] = 42                           -- ignored: ipt[1] -> nil
 #ipt                                  -- 4 entries in total
 ipt.counts()                          -- 3  1  (ipv4 and ipv6 counts)
@@ -140,12 +138,12 @@ msklen, err = iptable.masklen(binkey)               -- 24 nil
 ipt    = iptable.new()                              -- longest prefix match table
 
 for host in iptable.hosts(prefix[, true]) do        -- iterate across hosts in prefix
-    print(host)                                     --> optionally include netw/bcast
+    print(host)                                     -- optionally include netw/bcast
 end
 
 for pfx in iptable.subnets(prefix, 26) do           -- iterate prefix's subnets
-    print(pfx)                                      --> new prefix len is optional
-end                                                 --> and defaults to 1 bit longer
+    print(pfx)                                      -- new prefix len is optional
+end                                                 -- and defaults to 1 bit longer
 
 -- table functions
 
@@ -156,7 +154,7 @@ for k,v in pairs(ipt) do ... end                    -- iterate across k,v-pairs
 for k,v in ipt:more(prefix [,true]) ... end         -- iterate across more specifics
 for k,v in ipt:less(prefix [,true]) ... end         -- iterate across less specifics
 for k,v in ipt:masks(af) ... end                    -- iterate across masks used in af
-for k,g in ipt:merge(af) ... end                    -- iterate supernets & constituents
+for k,g in ipt:supernets(af) ... end                -- iterate supernets & constituents
 for rdx in ipt:radixes(af [,true]) ... end          -- dumps all radix nodes in tree
 ```
 
@@ -178,8 +176,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET6    10
 iptable.AF_INET     2
+iptable.AF_INET6    10
 ```
 
 ## module functions
@@ -202,15 +200,10 @@ iptable = require"iptable"
 pfx4 = "10.10.10.0/19"
 pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 
-ip, mlen, af = iptable.address(pfx4)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-ip, mlen, af = iptable.address("10.10.10.10")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.address(pfx6)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-ip, mlen, af = iptable.address("acdc:1976::")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+print("--", iptable.address(pfx4))
+print("--", iptable.address("10.10.10.10"))
+print("--", iptable.address(pfx6))
+print("--", iptable.address("acdc:1976::"))
 
 print(string.rep("-", 35))
 
@@ -218,46 +211,10 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
--- ip 10.10.10.0, mlen 19, af 2
--- ip 10.10.10.10, mlen -1, af 2
--- ip 2001:db8:85a3::8a2e:370:700, mlen 120, af 10
--- ip acdc:1976::, mlen -1, af 10
------------------------------------
-```
-
-### `iptable.network(prefix)`
-
-Applies the mask to the address and returns the network address, mask
-length and address family for `prefix`. If `prefix` has no masklength,
-`mlen` will be `-1` to indicate the absence and the network address is
-the host address itself.
-
-``` lua
-#!/usr/bin/env lua
-iptable = require"iptable"
-pfx4 = "10.10.10.10/19"
-pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:777/120"
-
-ip, mlen, af = iptable.network(pfx4)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-ip, mlen, af = iptable.network("10.10.10.10")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.network(pfx6)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-ip, mlen, af = iptable.network("2001:0db8::")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
-```
-
-``` lua
--- ip 10.10.0.0, mlen 19, af 2
--- ip 10.10.10.10, mlen -1, af 2
--- ip 2001:db8:85a3::8a2e:370:700, mlen 120, af 10
--- ip 2001:db8::, mlen -1, af 10
+--	10.10.10.0	19	2
+--	10.10.10.10	-1	2
+--	2001:db8:85a3::8a2e:370:700	120	10
+--	acdc:1976::	-1	10
 -----------------------------------
 ```
 
@@ -274,15 +231,10 @@ iptable = require"iptable"
 pfx4 = "10.10.10.0/19"
 pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 
-ip, mlen, af = iptable.broadcast(pfx4)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-ip, mlen, af = iptable.broadcast("10.10.10.10")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.broadcast(pfx6)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-ip, mlen, af = iptable.broadcast("2001:0db8::")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+print("--", iptable.broadcast(pfx4))
+print("--", iptable.broadcast("10.10.10.10"))
+print("--", iptable.broadcast(pfx6))
+print("--", iptable.broadcast("2001:0db8::"))
 
 print(string.rep("-", 35))
 
@@ -290,51 +242,10 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
--- ip 10.10.31.255, mlen 19, af 2
--- ip 10.10.10.10, mlen -1, af 2
--- ip 2001:db8:85a3::8a2e:370:7ff, mlen 120, af 10
--- ip 2001:db8::, mlen -1, af 10
------------------------------------
-```
-
-### `iptable.incr(prefix [,offset])`
-
-Increment the ip address of the prefix (no mask is applied) and return
-the new ip address, mask length and address family. `offset` is optional
-and defaults to 1. Incrementing beyond valid address space yields `nil`.
-
-``` lua
-#!/usr/bin/env lua
-iptable = require"iptable"
-pfx4 = "10.10.10.0/19"
-pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
-
-ip, mlen, af = iptable.incr(pfx4)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.incr(pfx4, 10)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.incr("255.255.255.255")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.incr(pfx6, 5)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.incr("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
-```
-
-``` lua
--- ip 10.10.10.1, mlen 19, af 2
--- ip 10.10.10.10, mlen 19, af 2
--- ip nil, mlen nil, af nil
--- ip 2001:db8:85a3::8a2e:370:705, mlen 120, af 10
--- ip nil, mlen nil, af nil
+--	10.10.31.255	19	2
+--	10.10.10.10	-1	2
+--	2001:db8:85a3::8a2e:370:7ff	120	10
+--	2001:db8::	-1	10
 -----------------------------------
 ```
 
@@ -350,17 +261,10 @@ iptable = require"iptable"
 pfx4 = "10.10.10.0/19"
 pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
 
-ip, mlen, af = iptable.decr(pfx4, 1)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.decr("0.0.0.0")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.decr(pfx6, 1)
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.decr("::")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
+print("--", iptable.decr(pfx4, 1))
+print("--", iptable.decr("0.0.0.0"))
+print("--", iptable.decr(pfx6, 1))
+print("--", iptable.decr("::"))
 
 print(string.rep("-", 35))
 
@@ -368,10 +272,109 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
--- ip 10.10.9.255, mlen 19, af 2
--- ip nil, mlen nil, af nil
--- ip 2001:db8:85a3::8a2e:370:6ff, mlen 120, af 10
--- ip nil, mlen nil, af nil
+--	10.10.9.255	19	2
+--	nil	nil	nil	binary operation failed
+--	2001:db8:85a3::8a2e:370:6ff	120	10
+--	nil	nil	nil	binary operation failed
+-----------------------------------
+```
+
+### `iptable.dnsptr(prefix)`
+
+Ignores the mask, if present, and returns a reverse dns name for the
+address part of the prefix, along with the prefix length seen and the
+address family. If there’s no mask present, prefix length is -1. On
+error, returns nil and an error message.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+pfx4 = "10.10.10.0/19"
+pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
+
+print("--", iptable.dnsptr(pfx4))
+print("--", iptable.dnsptr(pfx6))
+print("--", iptable.dnsptr("::"))
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+--	0.10.10.10.in-addr.arpa	19	2
+--	0.0.7.0.0.7.3.0.e.2.a.8.0.0.0.0.0.0.0.0.3.a.5.8.8.b.d.0.1.0.0.2.ip6.arpa	120	10
+--	0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.ip6.arpa	-1	10
+-----------------------------------
+```
+
+### `iptable.hosts(prefix)`
+
+Iterate across the hosts in a given prefix. Optionally include the
+network and broadcast addresses as well.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+print("-- Hosts in 10.10.10.0/30:")
+for pfx in iptable.hosts("10.10.10.0/30") do
+    print("--", pfx)
+end
+
+print("\n-- Including netw/bcast")
+for pfx in iptable.hosts("10.10.10.0/30", true) do
+    print("--", pfx)
+end
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+-- Hosts in 10.10.10.0/30:
+--	10.10.10.1
+--	10.10.10.2
+
+-- Including netw/bcast
+--	10.10.10.0
+--	10.10.10.1
+--	10.10.10.2
+--	10.10.10.3
+-----------------------------------
+```
+
+### `iptable.incr(prefix [,offset])`
+
+Increment the ip address of the prefix (no mask is applied) and return
+the new ip address, mask length and address family. `offset` is optional
+and defaults to 1. Incrementing beyond valid address space yields `nil`.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+pfx4 = "10.10.10.0/19"
+pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
+
+print("--", iptable.incr(pfx4))
+print("--", iptable.incr(pfx4, 10))
+print("--", iptable.incr("255.255.255.255"))
+print("--", iptable.incr(pfx6, 5))
+print("--", iptable.incr("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"))
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+--	10.10.10.1	19	2
+--	10.10.10.10	19	2
+--	nil	nil	nil	binary operation failed
+--	2001:db8:85a3::8a2e:370:705	120	10
+--	nil	nil	nil	binary operation failed
 -----------------------------------
 ```
 
@@ -385,7 +388,7 @@ bounded by the start and stop addresses.
 iptable = require"iptable"
 
 for pfx in iptable.interval("10.10.10.0", "10.10.10.12") do
-    print("-- ", pfx)
+    print("--", pfx)
 end
 
 print(string.rep("-", 35))
@@ -394,9 +397,61 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
--- 	10.10.10.0/29
--- 	10.10.10.8/30
--- 	10.10.10.12/32
+--	10.10.10.0/29
+--	10.10.10.8/30
+--	10.10.10.12/32
+-----------------------------------
+```
+
+### `iptable.invert(prefix)`
+
+Invert the address of given `prefix` and return reversed address, mask
+length and address family. Note: the mask is NOT applied. If that’s
+required, convert the prefix first using `iptable.network(prefix)`.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+print("--", iptable.invert("255.255.0.0/16"))
+print("--", iptable.invert("ffff:ffff::/32"))
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+--	0.0.255.255	16	2
+--	::ffff:ffff:ffff:ffff:ffff:ffff	32	10
+-----------------------------------
+```
+
+### `iptable.longhand(prefix)`
+
+Explode a prefix, i.e. produce an full address string without any
+shorthand. Only has effect on ipv6. Embedded ipv4’s are converted to hex
+digits as well. Any prefix length, if present, is not applied before
+exploding the address part of the prefix. Returns full address, prefix
+length and AF.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+print("--", iptable.longhand("10.0.0.0/8"))
+print("--", iptable.longhand("::"))
+print("--", iptable.longhand("::ffff:11.12.13.14/128"))
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+--	10.0.0.0	8	2
+--	0000:0000:0000:0000:0000:0000:0000:0000	-1	10
+--	0000:0000:0000:0000:0000:ffff:0b0c:0d0e	128	10
 -----------------------------------
 ```
 
@@ -412,10 +467,8 @@ iptable = require"iptable"
 
 print("--", iptable.mask(iptable.AF_INET, 19))
 print("--", iptable.mask(iptable.AF_INET, 19, true))
-
 print("--", iptable.mask(iptable.AF_INET6, 91))
 print("--", iptable.mask(iptable.AF_INET6, 91, true))
-
 
 print(string.rep("-", 35))
 
@@ -427,6 +480,45 @@ print(string.rep("-", 35))
 --	0.0.31.255
 --	ffff:ffff:ffff:ffff:ffff:ffe0::
 --	::1f:ffff:ffff
+-----------------------------------
+```
+
+### `iptable.masklen(binary_key)`
+
+Given a binary key, `masklen` will return the number of consecutive
+1-bits starting from the left. Only useful if the binary key was derived
+from an actual mask and not a subnet prefix. Note: the first byte of the
+binary is the LEN-byte of the byte array, the real key at offset 1.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+pfx4 = "255.255.253.0"
+pfx6 = "ffff:fffe::"
+
+bin2str = function(buf)
+  local s = ""
+  local len = buf:byte(1)
+  for i = 1, len, 1 do
+    s = string.format("%s:%02x", s, buf:byte(i));
+  end
+  return s:sub(2) -- skip leading ':'
+end
+
+bin4, mlen4, af4 = iptable.tobin(pfx4)
+bin6, mlen6, af6 = iptable.tobin(pfx6)
+
+print("--", iptable.masklen(bin4), "consecutive 1's in:", bin2str(bin4))
+print("--", iptable.masklen(bin6), "consecutive 1's in:", bin2str(bin6))
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+--	22	consecutive 1's in:	05:ff:ff:fd:00
+--	31	consecutive 1's in:	11:ff:ff:ff:fe:00:00:00:00:00:00:00:00:00:00:00:00
 -----------------------------------
 ```
 
@@ -462,6 +554,76 @@ print(string.rep("-", 35))
 -----------------------------------
 ```
 
+### `iptable.network(prefix)`
+
+Applies the mask to the address and returns the network address, mask
+length and address family for `prefix`. If `prefix` has no masklength,
+`mlen` will be `-1` to indicate the absence and the network address is
+the host address itself.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+pfx4 = "10.10.10.10/19"
+pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:777/120"
+
+print("--", iptable.network(pfx4))
+print("--", iptable.network("10.10.10.10"))
+print("--", iptable.network(pfx6))
+print("--", iptable.network("2001:0db8::"))
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+--	10.10.0.0	19	2
+--	10.10.10.10	-1	2
+--	2001:db8:85a3::8a2e:370:700	120	10
+--	2001:db8::	-1	10
+-----------------------------------
+```
+
+### `iptable.new()`
+
+Constructor method that returns a new ipv4,ipv6 lookup table. Use it as
+a regular table with modified indexing:
+
+  - *exact* indexing is used for assignments or when the index has a
+    masklength
+  - *longest prefix match* if indexed with a bare host address
+
+### `iptable.reverse(prefix)`
+
+Reverse the address byte of given `prefix` and return reversed address,
+mask length and address family. For ipv6, the nibbles are reversed as
+well. Note: any mask is NOT applied before reversal is done. If that’s
+required, convert the prefix first using `iptable.network(prefix)`.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+print("--", iptable.reverse("255.255.0.0"))
+print("--", iptable.reverse("1112:1314:1516:1718:1920:2122:2324:2526"))
+
+-- Note: ipv6 with 4 bytes -> reversal formatted as ipv4 in ipv6
+print("--", iptable.reverse("acdc:1976::/32"))
+
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+--	0.0.255.255	-1	2
+--	6252:4232:2212:291:8171:6151:4131:2111	-1	10
+--	::103.145.205.202	32	10
+-----------------------------------
+```
+
 ### `iptable.size(prefix)`
 
 Return the number of hosts covered by given `prefix`. Since ipv6 subnets
@@ -491,100 +653,6 @@ print(string.rep("-", 35))
 -----------------------------------
 ```
 
-### `iptable.invert(prefix)`
-
-Invert the address of given `prefix` and return reversed address, mask
-length and address family. Note: the mask is NOT applied. If that’s
-required, convert the prefix first using `iptable.network(prefix)`.
-
-``` lua
-#!/usr/bin/env lua
-iptable = require"iptable"
-
-ip, mlen, af = iptable.invert("255.255.0.0/16")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.invert("ffff:ffff::/32")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
-```
-
-``` lua
--- ip 0.0.255.255, mlen 16, af 2
--- ip ::ffff:ffff:ffff:ffff:ffff:ffff, mlen 32, af 10
------------------------------------
-```
-
-### `iptable.reverse(prefix)`
-
-Reverse the address byte of given `prefix` and return reversed address,
-mask length and address family. For ipv6, the nibbles are reversed as
-well. Note: any mask is NOT applied before reversal is done. If that’s
-required, convert the prefix first using `iptable.network(prefix)`.
-
-``` lua
-#!/usr/bin/env lua
-iptable = require"iptable"
-
-ip, mlen, af = iptable.reverse("255.255.0.0")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.reverse("1112:1314:1516:1718:1920:2122:2324:2526")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
--- Note: ipv6 with 4 bytes -> reversal formatted as ipv4 in ipv6
-ip, mlen, af = iptable.reverse("acdc:1976::/32")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
-```
-
-``` lua
--- ip 0.0.255.255, mlen -1, af 2
--- ip 6252:4232:2212:291:8171:6151:4131:2111, mlen -1, af 10
--- ip ::103.145.205.202, mlen 32, af 10
------------------------------------
-```
-
-### `iptable.longhand(prefix)`
-
-Explode a prefix, i.e. produce an full address string without any
-shorthand. Only has effect on ipv6. Embedded ipv4’s are converted to hex
-digits as well. Any prefix length, if present, is not applied before
-exploding the address part of the prefix. Returns full address, prefix
-length and AF.
-
-``` lua
-#!/usr/bin/env lua
-iptable = require"iptable"
-
-ip, mlen, af = iptable.longhand("10.0.0.0/8")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.longhand("::")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-ip, mlen, af = iptable.longhand("::ffff:11.12.13.14/128")
-print(string.format("-- ip %s, mlen %s, af %s", ip, mlen, af))
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
-```
-
-``` lua
--- ip 10.0.0.0, mlen 8, af 2
--- ip 0000:0000:0000:0000:0000:0000:0000:0000, mlen -1, af 10
--- ip 0000:0000:0000:0000:0000:ffff:0b0c:0d0e, mlen 128, af 10
------------------------------------
-```
-
 ### `iptable.split(prefix)`
 
 Split a prefix into its two subnets. Returns both network addresses of
@@ -595,16 +663,11 @@ an error message.
 ``` lua
 #!/usr/bin/env lua
 iptable = require"iptable"
-F = string.format
 
-pfx1, pfx2, mlen, af, err = iptable.split("10.0.0.0/8")
-print(F("-- pfx1 %s, pfx2 %s, mlen %s, af %s, err %s", pfx1,pfx2,mlen,af,err))
-
-pfx1, pfx2, mlen, af, err = iptable.split("10.10.10.10/32")
-print(F("-- pfx1 %s, pfx2 %s, mlen %s, af %s, err %s", pfx1,pfx2,mlen,af,err))
-
-pfx1, pfx2, mlen, af, err = iptable.split("acdc:1979::/32")
-print(F("-- pfx1 %s, pfx2 %s, mlen %s, af %s, err %s", pfx1,pfx2,mlen,af,err))
+print("--", iptable.split("10.0.0.0/8"))
+print("--", iptable.split("10.10.10.10/32"))
+print("--", iptable.split("acdc:1979::/32"))
+print("--", iptable.split("acdc:1979::"))
 
 print(string.rep("-", 35))
 
@@ -612,9 +675,10 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
--- pfx1 10.0.0.0, pfx2 10.128.0.0, mlen 9, af 2, err nil
--- pfx1 nil, pfx2 nil, mlen nil, af nil, err prefix already at max length
--- pfx1 acdc:1979::, pfx2 acdc:1979:8000::, mlen 33, af 10, err nil
+--	10.0.0.0	10.128.0.0	9	2
+--	nil	nil	nil	nil	prefix already at max length
+--	acdc:1979::	acdc:1979:8000::	33	10
+--	nil	nil	nil	nil	prefix already at max length
 -----------------------------------
 ```
 
@@ -661,47 +725,10 @@ print(string.rep("-", 35))
 -----------------------------------
 ```
 
-### `iptable.masklen(binary_key)`
-
-Given a binary key, `masklen` will return the number of consecutive
-1-bits starting from the left. Only useful if the binary key was derived
-from an actual mask and not a subnet prefix.
-
-``` lua
-#!/usr/bin/env lua
-iptable = require"iptable"
-pfx4 = "255.255.253.0"
-pfx6 = "ffff:fffe::"
-
-bin2str = function(buf)
-  local s = ""
-  local len = buf:byte(1)
-  for i = 1, len, 1 do
-    s = string.format("%s:%02x", s, buf:byte(i));
-  end
-  return s:sub(2) -- skip leading ':'
-end
-
-bin4, mlen4, af4 = iptable.tobin(pfx4)
-bin6, mlen6, af6 = iptable.tobin(pfx6)
-
-print("--", iptable.masklen(bin4), "consecutive 1's in:", bin2str(bin4))
-print("--", iptable.masklen(bin6), "consecutive 1's in:", bin2str(bin6))
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
-```
-
-``` lua
---	22	consecutive 1's in:	05:ff:ff:fd:00
---	31	consecutive 1's in:	11:ff:ff:ff:fe:00:00:00:00:00:00:00:00:00:00:00:00
------------------------------------
-```
-
 ### `iptable.tostr(binary_key)`
 
 The reciprocal to `tobin` turns a binary key back into a string key.
+Note that binary keys cannot be used to index into an iptable instance.
 
 ``` lua
 #!/usr/bin/env lua
@@ -735,43 +762,6 @@ print(string.rep("-", 35))
 -----------------------------------
 ```
 
-### `iptable.hosts(prefix)`
-
-Iterate across the hosts in a given prefix. Optionally include the
-network and broadcast addresses as well.
-
-``` lua
-#!/usr/bin/env lua
-iptable = require"iptable"
-
-print("-- Hosts in 10.10.10.0/30:")
-for pfx in iptable.hosts("10.10.10.0/30") do
-    print(string.format("--> %s", pfx))
-end
-
-print("\n-- Including netw/bcast")
-for pfx in iptable.hosts("10.10.10.0/30", true) do
-    print(string.format("--> %s", pfx))
-end
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
-```
-
-``` lua
--- Hosts in 10.10.10.0/30:
---> 10.10.10.1
---> 10.10.10.2
-
--- Including netw/bcast
---> 10.10.10.0
---> 10.10.10.1
---> 10.10.10.2
---> 10.10.10.3
------------------------------------
-```
-
 ### `iptable.subnets(prefix [, mlen])`
 
 Iterate across the subnets in a given prefix. The optional new mask
@@ -786,13 +776,13 @@ iptable = require"iptable"
 prefix = "10.10.10.0/28"
 print("-- /30 subnets in " .. prefix)
 for pfx in iptable.subnets(prefix, 30) do
-    print(string.format("--   %s", pfx))
+    print("-- +", pfx)
 end
 
 prefix = "acdc:1976::/30"
 print("-- /32 subnets in " .. prefix)
 for pfx in iptable.subnets(prefix, 32) do
-    print(string.format("--   %s", pfx))
+    print("-- +",  pfx)
 end
 
 print(string.rep("-", 35))
@@ -802,26 +792,17 @@ print(string.rep("-", 35))
 
 ``` lua
 -- /30 subnets in 10.10.10.0/28
---   10.10.10.0/30
---   10.10.10.4/30
---   10.10.10.8/30
---   10.10.10.12/30
+-- +	10.10.10.0/30
+-- +	10.10.10.4/30
+-- +	10.10.10.8/30
+-- +	10.10.10.12/30
 -- /32 subnets in acdc:1976::/30
---   acdc:1974::/32
---   acdc:1975::/32
---   acdc:1976::/32
---   acdc:1977::/32
+-- +	acdc:1974::/32
+-- +	acdc:1975::/32
+-- +	acdc:1976::/32
+-- +	acdc:1977::/32
 -----------------------------------
 ```
-
-### `iptable.new()`
-
-Constructor method that returns a new ipv4,ipv6 lookup table. Use it as
-a regular table with modified indexing:
-
-  - *exact* indexing is used for assignments or when the index has a
-    masklength
-  - *longest prefix match* if indexed with a bare host address
 
 ## table functions
 
@@ -837,30 +818,21 @@ applied before storing the key, value pair in the internal radix
 tree(s). Hence, iterating across an iptable always shows keys to be
 actual subnets with a mask, in CIDR notation.
 
-``` lua
+``` shebang lua
 #!/usr/bin/env lua
 acl = require"iptable".new()
 acl["10.10.10.0/24"] = true
 acl["10.10.10.8/30"] = false
 
-print("--> 1 exact match for prefix 10.10.10.0/24  ->", acl["10.10.10.0/24"])
-print("--> 2 longest prefix match for 10.10.10.9   ->", acl["10.10.10.9"])
-print("--> 3 longest prefix match for 10.10.10.100 ->", acl["10.10.10.100"])
-print("--> 4 exact match for prefix 10.10.10.10/30 ->", acl["10.10.10.10/30"])
-print(string.format("--> 5 acl has %s entries", #acl))
+print("-- 1 exact match for prefix 10.10.10.0/24  -", acl["10.10.10.0/24"])
+print("-- 2 longest prefix match for 10.10.10.9   -", acl["10.10.10.9"])
+print("-- 3 longest prefix match for 10.10.10.100 -", acl["10.10.10.100"])
+print("-- 4 exact match for prefix 10.10.10.10/30 -", acl["10.10.10.10/30"])
+print("-- 5 acl number of entries:", #acl))
 
 print(string.rep("-", 35))
 
 ---------- PRODUCES --------------
-```
-
-``` lua
---> 1 exact match for prefix 10.10.10.0/24  ->	true
---> 2 longest prefix match for 10.10.10.9   ->	false
---> 3 longest prefix match for 10.10.10.100 ->	true
---> 4 exact match for prefix 10.10.10.10/30 ->	false
---> 5 acl has 2 entries
------------------------------------
 ```
 
 ### `ipt:more(prefix [,inclusive])`
@@ -881,17 +853,15 @@ ipt["10.10.10.0/25"] = 4
 ipt["10.10.10.0/26"] = 5
 ipt["10.10.10.128/30"] = 6
 
--- search more specifics only
-
+-- search more specifics
 for pfx in ipt:more("10.10.10.0/24") do
-    print("-- exclusive search ->", pfx)
+    print("-- exclusive search", pfx)
 end
 print()
 
--- search includes starting search prefix (if present)
-
+-- includes search prefix (if present)
 for pfx in ipt:more("10.10.10.0/24", true) do
-    print("-- inclusive search ->", pfx)
+    print("-- inclusive search", pfx)
 end
 
 print(string.rep("-", 35))
@@ -900,14 +870,14 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
--- exclusive search ->	10.10.10.0/26
--- exclusive search ->	10.10.10.0/25
--- exclusive search ->	10.10.10.128/30
+-- exclusive search	10.10.10.0/26
+-- exclusive search	10.10.10.0/25
+-- exclusive search	10.10.10.128/30
 
--- inclusive search ->	10.10.10.0/26
--- inclusive search ->	10.10.10.0/25
--- inclusive search ->	10.10.10.0/24
--- inclusive search ->	10.10.10.128/30
+-- inclusive search	10.10.10.0/26
+-- inclusive search	10.10.10.0/25
+-- inclusive search	10.10.10.0/24
+-- inclusive search	10.10.10.128/30
 -----------------------------------
 ```
 
@@ -931,16 +901,14 @@ ipt["10.10.10.0/26"] = 5
 ipt["10.10.10.128/30"] = 6
 
 -- search less specifics only
-
 for pfx in ipt:less("10.10.10.0/25") do
-    print("-- exclusive search ->", pfx)
+    print("-- exclusive search", pfx)
 end
 print()
 
--- search includes starting search prefix (if present)
-
+-- include starting search prefix (if present)
 for pfx in ipt:less("10.10.10.0/25", true) do
-    print("-- inclusive search ->", pfx)
+    print("-- inclusive search", pfx)
 end
 
 print(string.rep("-", 35))
@@ -949,16 +917,16 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
--- exclusive search ->	10.10.10.0/24
--- exclusive search ->	10.10.0.0/16
+-- exclusive search	10.10.10.0/24
+-- exclusive search	10.10.0.0/16
 
--- inclusive search ->	10.10.10.0/25
--- inclusive search ->	10.10.10.0/24
--- inclusive search ->	10.10.0.0/16
+-- inclusive search	10.10.10.0/25
+-- inclusive search	10.10.10.0/24
+-- inclusive search	10.10.0.0/16
 -----------------------------------
 ```
 
-### `ipt:merge(af)`
+### `ipt:supernets(af)`
 
 Iterate across pairs of subnets present in the iptable that could be
 combined into their parent supernet. The iterator returns the supernet
@@ -981,11 +949,10 @@ ipt["10.10.10.0/30"] = 6
 ipt["10.10.10.4/30"] = 7
 
 -- find adjacent prefixes
-
-for supernet, grp in ipt:merge(iptable.AF_INET) do
-    print(string.format("-- supernet %s contains:", supernet))
+for supernet, grp in ipt:supernets(iptable.AF_INET) do
+    print("-- supernet", supernet)
     for subnet, val in pairs(grp) do
-        print(string.format("   -- %s -> %s", subnet, val))
+        print("   --", subnet, val)
     end
 end
 
@@ -995,20 +962,20 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
--- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.0/30 -> 6
-   -- 10.10.10.4/30 -> 7
--- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/24 -> 3
-   -- 10.10.10.128/25 -> 5
-   -- 10.10.10.0/25 -> 4
--- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.0/30 -> 6
-   -- 10.10.10.4/30 -> 7
--- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/24 -> 3
-   -- 10.10.10.0/25 -> 4
-   -- 10.10.10.128/25 -> 5
+-- supernet	10.10.10.0/29
+   --	10.10.10.0/30	6
+   --	10.10.10.4/30	7
+-- supernet	10.10.10.0/24
+   --	10.10.10.0/24	3
+   --	10.10.10.128/25	5
+   --	10.10.10.0/25	4
+-- supernet	10.10.10.0/29
+   --	10.10.10.4/30	7
+   --	10.10.10.0/30	6
+-- supernet	10.10.10.0/24
+   --	10.10.10.0/24	3
+   --	10.10.10.128/25	5
+   --	10.10.10.0/25	4
 -----------------------------------
 ```
 
@@ -1029,11 +996,11 @@ ipt["10.10.9.0/24"] = 2
 ipt["10.10.10.0/24"] = 3
 ipt["10.10.10.0/25"] = 4
 ipt["10.10.10.0/26"] = 5
-ipt["10.10.10.128/30"] = 6
+ipt["10.10.10.128"] = 6   -- same as "10.10.10.128/32"
 
 -- iterate across masks in the trie
-for pfx in ipt:masks(iptable.AF_INET) do
-    print("-- mask ->", pfx)
+for mask in ipt:masks(iptable.AF_INET) do
+    print("--", mask)
 end
 
 print(string.rep("-", 35))
@@ -1042,18 +1009,20 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
--- mask ->	255.255.0.0
--- mask ->	255.255.255.0
--- mask ->	255.255.255.128
--- mask ->	255.255.255.192
--- mask ->	255.255.255.252
+--	255.255.0.0
+--	255.255.255.0
+--	255.255.255.128
+--	255.255.255.192
+--	255.255.255.255
 -----------------------------------
 ```
 
 ### `ipt:counts()`
 
 Returns the number of ipv4 subnets and ipv6 subnets present in the
-iptable.
+iptable. Internally, the number of prefixes per tree is kept in a
+`size_t` counter which may overflow if you go crazy on the number of
+ipv6 prefixes.
 
 ``` lua
 #!/usr/bin/env lua
@@ -1072,8 +1041,8 @@ ipt["2003::dead:beef/120"] = 3
 
 af4, af6 = ipt:counts()
 
-print("-- num of ipv4 prefixes", af4)
-print("-- num of ipv6 prefixes", af6)
+print("--", af4, "ipv4 prefixes")
+print("--", af6, "ipv6 prefixes")
 
 print(string.rep("-", 35))
 
@@ -1081,8 +1050,8 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
--- num of ipv4 prefixes	6
--- num of ipv6 prefixes	3
+--	6	ipv4 prefixes
+--	3	ipv6 prefixes
 -----------------------------------
 ```
 
@@ -1091,9 +1060,10 @@ print(string.rep("-", 35))
 Iterate across the radix nodes of the radix tree for the given address
 family `af`. Only really useful to graph the radix trees while debugging
 or for educational purposes. The radix nodes are returned by the
-iterator encoded as Lua tables. Look at the `ipt2dot.lua` and
-`ipt2smalldot.lua` scripts to see how to decode/interpret the radix node
-tables.
+iterator encoded as Lua tables. More information in the *`Lua stack
+functions`* section in `lua_iptable.c.md` (or its pdf) in the
+doc-folder. For example code, check `ipt2dot.lua` on github in the
+`src/lua` folder.
 
 ``` lua
 #!/usr/bin/env lua
@@ -1103,7 +1073,7 @@ ipt = iptable.new()
 ipt["10.10.0.0/16"] = 1
 ipt["2003::dead:beef/120"] = 1
 
--- dump radix nodes in the radix trie
+-- dump radix nodes in the radix trie (key-tree only)
 for rdx in ipt:radixes(iptable.AF_INET | iptable.AF_INET6) do
     print("-- tree exclusive", rdx._NAME_)
 end
@@ -1293,46 +1263,46 @@ acl = {
 
 -- load up the table
 for _, pfx in ipairs(acl) do ipt[pfx] = true end
-for k,_ in pairs(ipt) do print("-- original ->", k) end
+for k,_ in pairs(ipt) do print("-- original", k) end
 print()
 
--- merge adjacent subnets into their supernet
+-- subnets unite!
 changed = true
 while (changed) do
     changed = false
-    for supernet, grp in ipt:merge(iptable.AF_INET) do
+    for supernet, grp in ipt:supernets(iptable.AF_INET) do
         for subnet, _ in pairs(grp) do ipt[subnet] = nil end
         ipt[supernet] = true -- it may have been included in grp
         changed = true
     end
 end
 
--- remove any remaining more specifics
+-- don't sweat the small stuff
 for prefix, _ in pairs(ipt) do
     for subnet, _ in ipt:more(prefix) do ipt[subnet] = nil end
 end
 
-for k, _ in pairs(ipt) do print("-- minified ->", k) end
+for k, _ in pairs(ipt) do print("-- minified", k) end
 print(string.rep("-",35))
 
 ---------- PRODUCES --------------
 ```
 
 ``` lua
--- original ->	10.10.10.0/30
--- original ->	10.10.10.0/25
--- original ->	10.10.10.128/26
--- original ->	10.10.10.192/26
--- original ->	10.10.11.0/25
--- original ->	10.10.11.128/25
--- original ->	11.11.11.0/32
--- original ->	11.11.11.1/32
--- original ->	11.11.11.2/32
--- original ->	11.11.11.3/32
--- original ->	11.11.11.4/32
+-- original	10.10.10.0/30
+-- original	10.10.10.0/25
+-- original	10.10.10.128/26
+-- original	10.10.10.192/26
+-- original	10.10.11.0/25
+-- original	10.10.11.128/25
+-- original	11.11.11.0/32
+-- original	11.11.11.1/32
+-- original	11.11.11.2/32
+-- original	11.11.11.3/32
+-- original	11.11.11.4/32
 
--- minified ->	10.10.10.0/23
--- minified ->	11.11.11.0/30
--- minified ->	11.11.11.4/32
+-- minified	10.10.10.0/23
+-- minified	11.11.11.0/30
+-- minified	11.11.11.4/32
 -----------------------------------
 ```

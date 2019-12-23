@@ -1,11 +1,6 @@
 #!/usr/bin/env lua
 -------------------------------------------------------------------------------
---         File:  test_instance_methods.lua
---
---        Usage:  busted src/test/lua/test_instance_methods.lua
---
---  Description:  
---
+--  Description:  unit test file for iptable
 -------------------------------------------------------------------------------
 
 package.cpath = "./build/?.so;"
@@ -13,13 +8,13 @@ package.path = "./src/lua/?.lua"
 
 F = string.format
 
-describe("ipt:merge(): ", function()
+describe("ipt:supernets(): ", function()
 
   expose("iptable", function()
     iptable = require("iptable");
     assert.is_truthy(iptable);
 
-    it("finds prefixes that are able to merge", function()
+    it("finds prefixes that are able to supernets", function()
       local cnt = 0
       local ipt = iptable.new();
       assert.is_truthy(ipt);
@@ -32,7 +27,7 @@ describe("ipt:merge(): ", function()
       ipt["1.2.3.128/26"] = 32  -- pair w/ the next entry
       ipt["1.2.3.192/26"] = 64
 
-      for p, t in ipt:merge(iptable.AF_INET) do cnt = cnt + 1 end
+      for p, t in ipt:supernets(iptable.AF_INET) do cnt = cnt + 1 end
     end)
 
     it("is safe to delete both the super and paired-keys", function()
@@ -53,7 +48,7 @@ describe("ipt:merge(): ", function()
       for k,v in pairs(ipt) do checksum = checksum + v end
 
       -- rearrange the tree
-      for p, t in ipt:merge(iptable.AF_INET) do
+      for p, t in ipt:supernets(iptable.AF_INET) do
         local sum = 0
         for k, v in pairs(t) do
           ipt[k] = nil   -- delete the subnets (and possibly supernet if any)
@@ -79,7 +74,7 @@ describe("ipt:merge(): ", function()
       changed = true
       while (changed) do
           changed = false
-          for supernet, grp in ipt:merge(iptable.AF_INET) do
+          for supernet, grp in ipt:supernets(iptable.AF_INET) do
               for subnet, _ in pairs(grp) do
                   ipt[subnet] = nil
                   changed = true
@@ -105,7 +100,7 @@ describe("ipt:merge(): ", function()
       changed = true
       while (changed) do
           changed = false
-          for supernet, grp in ipt:merge(iptable.AF_INET) do
+          for supernet, grp in ipt:supernets(iptable.AF_INET) do
               for subnet, _ in pairs(grp) do
                   ipt[subnet] = nil
                   changed = true
@@ -117,26 +112,26 @@ describe("ipt:merge(): ", function()
 
     end)
 
-    it("will not merge keys with 0/0", function()
+    it("will not supernets keys with 0/0", function()
       local ipt = iptable.new()
       ipt["0.0.0.0/0"] = 0
       local cnt = 0
-      for k, t in ipt:merge(iptable.AF_INET) do cnt = cnt + 1 end
+      for k, t in ipt:supernets(iptable.AF_INET) do cnt = cnt + 1 end
       assert.is_equal(0, cnt)
 
       ipt["0.0.0.0/1"] = 0
       local cnt = 0
-      for k, t in ipt:merge(iptable.AF_INET) do cnt = cnt + 1 end
+      for k, t in ipt:supernets(iptable.AF_INET) do cnt = cnt + 1 end
       assert.is_equal(0, cnt)
     end)
 
-    it("will propose merge to 0/0", function()
+    it("will propose supernets to 0/0", function()
       local ipt = iptable.new()
       ipt["0.0.0.0/1"] = 1
       ipt["128.0.0.0/1"] = 2
       local cnt = 0
       local cnt = 0
-      for k, t in ipt:merge(iptable.AF_INET) do
+      for k, t in ipt:supernets(iptable.AF_INET) do
         cnt = cnt + 1
         assert.is_equal("0.0.0.0/0", k)
         for k2, _ in pairs(t) do ipt[k2] = nil end
@@ -146,13 +141,13 @@ describe("ipt:merge(): ", function()
       assert.is_equal(1, #ipt)
     end)
 
-    it("will propose to merge to 0/1", function()
+    it("will propose to supernets to 0/1", function()
       local ipt = iptable.new()
       ipt["0.0.0.0/2"] = 1
       ipt["64.0.0.0/2"] = 2
 
       local cnt = 0
-      for k, t in ipt:merge(iptable.AF_INET) do
+      for k, t in ipt:supernets(iptable.AF_INET) do
         cnt = cnt + 1
         assert.is_equal("0.0.0.0/1", k)
         for k2, _ in pairs(t) do ipt[k2] = nil end
@@ -180,7 +175,7 @@ describe("ipt:merge(): ", function()
       local done = false
       while(not done) do
         done = true
-        for super, pfxs in ipt:merge(iptable.AF_INET) do
+        for super, pfxs in ipt:supernets(iptable.AF_INET) do
           for pfx, _ in pairs(pfxs) do ipt[pfx] = nil end
           ipt[super] = "consolidated"
           done = false

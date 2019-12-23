@@ -1,11 +1,6 @@
 #!/usr/bin/env lua
 -------------------------------------------------------------------------------
---         File:  test_instance_methods.lua
---
---        Usage:  busted src/test/lua/test_instance_methods.lua
---
---  Description:  
---
+--  Description:  unit test file for iptable
 -------------------------------------------------------------------------------
 
 package.cpath = "./build/?.so;"

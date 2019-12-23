@@ -20,6 +20,7 @@ Identity for the `itr_gc_t`-userdata.
 0. LIPTE_ARG      wrong type of argument
 0. LIPTE_BIN      illegal binary key/mask
 0. LIPTE_BINOP    binary operation failed
+0. LIPTE_BUF      could not allocate memory
 0. LIPTE_FAIL     unspecified error
 0. LIPTE_ITER     internal iteration error
 0. LIPTE_LIDX     invalid Lua stack index
@@ -545,12 +546,12 @@ The actual iteration function for `iter_masks`.  Masks are read-only: the
 Lua bindings donot (need to) interact directly with a radix mask tree.
 
 
-### `iter_merge_f`
+### `iter_supernets_f`
 ```c
-static int iter_merge_f(lua_State *L);
+static int iter_supernets_f(lua_State *L);
 ```
 
-The actual iteration function for `iter_merge`.
+The actual iteration function for `iter_supernets`.
 
 The next node stored as upvalue before returning, must be the first node of
 the next group.
@@ -652,6 +653,25 @@ addr, mlen, af, err = iptable.address("10.10.10.10/24")
 
 Return host address, masklen and af_family for pfx; nil's & an error msg  on
 errors.
+
+
+### `iptable.dnsptr`
+```c
+static int ipt_dnsptr(lua_State *L);
+```
+```lua
+-- lua
+ptr, mlen, af, err = iptable.dnsptr("10.10.10.10/24")
+--> 10.10.10.10.in-addr.arpa
+
+ptr, mlen, af, err = iptable.dnsptr("acdc:1979:/32")
+--> 0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.9.7.9.1.c.d.c.a.ip6.arpa
+--> 32 10 nil
+```
+
+Ignores the mask and returns a reverse dns name for the address part of the
+prefix, along with its mask length and address family.
+In case of errors, returns all nils plus an error message.
 
 
 ### `iptable.longhand`
@@ -1036,16 +1056,16 @@ an explicit flag needs to be passed to iter_f that a zeromask entry is
 present.
 
 
-### `iter_merge`
+### `iter_supernets`
 ```c
-static int iter_merge(lua_State *L);
+static int iter_supernets(lua_State *L);
 ```
 ```lua
 -- lua
 iptable = require"iptable"
 ipt = iptable.new()
-for super, group in ipt:merge(iptable.AF_INET) do ... end
-for super, group in ipt:merge(iptable.AF_INET6) do ... end
+for super, group in ipt:supernets(iptable.AF_INET) do ... end
+for super, group in ipt:supernets(iptable.AF_INET6) do ... end
 ```
 
 Iterate across pairs of pfx's that may be combined into their parental

@@ -85,8 +85,8 @@ static int iter_less(lua_State *);
 static int iter_less_f(lua_State *);
 static int iter_masks(lua_State *);
 static int iter_masks_f(lua_State *);
-static int iter_merge(lua_State *);
-static int iter_merge_f(lua_State *);
+static int iter_supernets(lua_State *);
+static int iter_supernets_f(lua_State *);
 static int iter_more(lua_State *);
 static int iter_more_f(lua_State *);
 static int iter_radix(lua_State *);
@@ -158,7 +158,7 @@ static const struct luaL_Reg meths [] = {
     {"__pairs", iter_kv},
     {"counts", iptm_counts},
     {"masks", iter_masks},
-    {"merge", iter_merge},
+    {"supernets", iter_supernets},
     {"more", iter_more},
     {"less", iter_less},
     {"radixes", iter_radixes},
@@ -544,7 +544,7 @@ iptL_refpdelete(void *L, void **r)
     *refp = NULL;
 }
 
-// k,v-setters for Table on top of L (iter_radix/iter_merge_f) helpers
+// k,v-setters for Table on top of L (iter_radix/iter_supernets_f) helpers
 
 /*
  * ### `iptT_setfstr`
@@ -1559,19 +1559,19 @@ iter_masks_f(lua_State *L)
 }
 
 /*
- * ### `iter_merge_f`
+ * ### `iter_supernets_f`
  * ```c
- * static int iter_merge_f(lua_State *L);
+ * static int iter_supernets_f(lua_State *L);
  * ```
  *
- * The actual iteration function for `iter_merge`.
+ * The actual iteration function for `iter_supernets`.
  *
  * The next node stored as upvalue before returning, must be the first node of
  * the next group.
  */
 
 static int
-iter_merge_f(lua_State *L)
+iter_supernets_f(lua_State *L)
 {
     dbg_stack("inc(.) <--");                   // [t p], upvalues(nxt, alt)
 
@@ -3169,16 +3169,16 @@ int iter_masks(lua_State *L) {
 }
 
 /*
- * ### `iter_merge`
+ * ### `iter_supernets`
  * ```c
- * static int iter_merge(lua_State *L);
+ * static int iter_supernets(lua_State *L);
  * ```
  * ```lua
  * -- lua
  * iptable = require"iptable"
  * ipt = iptable.new()
- * for super, group in ipt:merge(iptable.AF_INET) do ... end
- * for super, group in ipt:merge(iptable.AF_INET6) do ... end
+ * for super, group in ipt:supernets(iptable.AF_INET) do ... end
+ * for super, group in ipt:supernets(iptable.AF_INET6) do ... end
  * ```
  *
  * Iterate across pairs of pfx's that may be combined into their parental
@@ -3189,7 +3189,7 @@ int iter_masks(lua_State *L) {
  */
 
 static int
-iter_merge(lua_State *L)
+iter_supernets(lua_State *L)
 {
     dbg_stack("inc(.) <--");                  // [t af]
 
@@ -3209,7 +3209,7 @@ iter_merge(lua_State *L)
     lua_pushlightuserdata(L, rn);             // [t af rn]
     lua_pushlightuserdata(L, NULL);           // [t af rn NULL]
     iptL_pushitrgc(L, t);                     // [t af rn NULL gc]
-    lua_pushcclosure(L, iter_merge_f, 3);     // [t f]
+    lua_pushcclosure(L, iter_supernets_f, 3);     // [t f]
     lua_rotate(L, 1, -1);                     // [f t]
 
     dbg_stack("out(2) ==>");
