@@ -800,15 +800,7 @@ print(string.rep("-", 35))
 
 ``` lua
 -- /30 subnets in 10.10.10.0/28
---   10.10.10.0/30
---   10.10.10.4/30
---   10.10.10.8/30
---   10.10.10.12/30
 -- /32 subnets in acdc:1976::/30
---   acdc:1974::/32
---   acdc:1975::/32
---   acdc:1976::/32
---   acdc:1977::/32
 -----------------------------------
 ```
 
@@ -997,15 +989,15 @@ print(string.rep("-", 35))
    -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
+   -- 10.10.10.0/24 -> 3
    -- 10.10.10.0/25 -> 4
 -- supernet 10.10.10.0/29 contains:
-   -- 10.10.10.4/30 -> 7
    -- 10.10.10.0/30 -> 6
+   -- 10.10.10.4/30 -> 7
 -- supernet 10.10.10.0/24 contains:
-   -- 10.10.10.0/24 -> 3
    -- 10.10.10.128/25 -> 5
+   -- 10.10.10.0/24 -> 3
    -- 10.10.10.0/25 -> 4
 -----------------------------------
 ```
@@ -1133,12 +1125,16 @@ print(string.rep("-", 35))
 
 # Radix tree graphs
 
-[*iptable*](https://github.com/hertog/iptable/tree/master/src/lua)’s
-github repo has two small scripts that dump a radix tree to a dot-file
-for graphviz:
+[*iptable*](https://github.com/hertogp/iptable/tree/master/src/lua)’s
+github repo has two additional, small lua modules that can be used to
+dump a radix tree to a dot-file for conversion by graphviz:
 
-  - `ipt2dot`, full dump of the tree
-  - `ipt2smalldot`, same dump, but less node details
+  - `ipt2dot`, dumps the tree with full radix node details
+  - `ipt2smalldot`, dumps the tree with less node details
+
+For large trees, this gets pretty messy but for small trees the images
+are legible. Primarily for fun with no real application other than a
+means to assist during development.
 
 ## IPv4 tree
 

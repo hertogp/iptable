@@ -18,8 +18,8 @@ Identity for the `itr_gc_t`-userdata.
 0. LIPTE_NONE     none
 0. LIPTE_AF       wrong or unknown address family
 0. LIPTE_ARG      wrong type of argument
-0. LIPTE_BINOP    binary operation failed
 0. LIPTE_BIN      illegal binary key/mask
+0. LIPTE_BINOP    binary operation failed
 0. LIPTE_FAIL     unspecified error
 0. LIPTE_ITER     internal iteration error
 0. LIPTE_LIDX     invalid Lua stack index
@@ -27,6 +27,7 @@ Identity for the `itr_gc_t`-userdata.
 0. LIPTE_MLEN     invalid mask length
 0. LIPTE_PFX      invalid prefix string
 0. LIPTE_RDX      unhandled radix node type
+0. LIPTE_SPLIT    prefix already at max length
 0. LIPTE_TOBIN    error converting string to binary
 0. LIPTE_TOSTR    error converting binary to string
 0. LIPTE_UNKNOWN  unknown error number
@@ -479,6 +480,27 @@ Usually ends with smaller prefixes.  On errors, it won't iterate anything in
 which case `iptable.error` should provide some information.
 
 
+### `iter_subnets_f`
+```c
+static int iter_subnets_f(lua_State *L)
+```
+
+The actual iterator function for `iter_subnets`.  Uses upvalues: `start`,
+`stop`, `mask`, `mlen` and a `sentinal` which is used to signal address
+space wrap around.
+
+`stop` represents the broadcast address of the last prefix to return.  This
+might actually be the max address possible in the AF's address space and
+increasing beyond using `key_incr` would fail.  So if the current prefix,
+which will be returned in this iteration, has a broadcast address equal to
+`stop` the sentinal upvalue is set to 0 so iteration stops next time around
+and no `key_incr` is done to arrive at the next 'network'-address of the
+next prefix since we're done already..
+
+`mlen` is stored as a convenience and represents the prefix length of the
+binary `mask` and alleviates the need to calculate it on every iteration.
+
+
 ### `iter_kv_f`
 ```c
 static int iter_kv_f(lua_State *L)
@@ -632,13 +654,13 @@ Return host address, masklen and af_family for pfx; nil's & an error msg  on
 errors.
 
 
-### `iptable.explode`
+### `iptable.longhand`
 ```c
-static int ipt_explode(lua_State *L);
+static int ipt_longhand(lua_State *L);
 ```
 ```lua
 -- lua
-addr, mlen, af, err = iptable.explode("2001::/120")
+addr, mlen, af, err = iptable.longhand("2001::/120")
 --> 2001:0000:0000:0000:0000:0000:0000:0000  120  10
 ```
 
@@ -736,6 +758,20 @@ error msg on errors.  Note: the mask is NOT applied before reversing the
 address.
 
 
+### `iptable.split`
+```c
+static int ipt_split(lua_State *L);
+```
+```lua
+-- lua
+addr1, addr2, mlen, af, err = iptable.split("10.10.10.10/24")
+--> 10.10.10.0  10.10.10.128  25  2  nil
+```
+
+Split a prefix into its two constituent parts.  Returns nils on errors plus
+an error message.
+
+
 ### `iptable.broadcast`
 ```c
 static int ipt_broadcast(lua_State *L);
@@ -810,6 +846,28 @@ either `start` or `stop` are ignored and both need to belong to the same
 AF_family.  In case of errors it won't iterate anything, in that case
 `iptable.error` will show the last error seen.
 
+
+
+### `iptable.subnets`
+```c
+static int ipt_subnets(lua_State *L);
+```
+```lua
+-- lua
+  for subnet in iptable.subnets("10.10.10.0/24", 26) do
+    print(subnet)
+  end
+  --> 10.10.10.0/26
+  --> 10.10.10.64/26
+  --> 10.10.10.128/26
+  --> 10.10.10.192/26
+```
+
+Iterate across the smaller prefixes given a start prefix and a larger
+network mask, which is optional and defaults to being 1 bit longer than
+that of the given prefix (similar to split).  In case of errors, it won't
+iterate anything in which case `iptable.error` might shed some light on the
+error encountered.
 
 
 ## instance methods
