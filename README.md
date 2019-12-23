@@ -91,14 +91,15 @@ ipt = require"iptable".new()
 ipt["10.10.10.0/24"] = {seen=0}       -- store anything in the table
 ipt["10.10.10.10"] = false            -- stores to ipt["10.10.10.10/32"]
 ipt["11.11.11.11/24"] = true          -- stores to ipt["11.11.11.0/24"]
-ipt["acdc:1976::/32"] = "Jailbreak"   -- goes into separate radix tree
+ipt["acdc:1976::/32"] = "Jailbreak"   -- separate class (radix tree) of its own
 ipt[1] = 42                           -- ignored: ipt[1] -> nil
 iptable.error                         -- "wrong type of argument"
 ipt["1"] = 42                         -- ipt["1.0.0.0/32"] -> 42 (the answer)
-#ipt                                  -- 4 entries in total
-ipt.counts()                          -- 3  1  (ipv4 and ipv6 counts)
+#ipt                                  -- 5 entries in total
+ipt.counts()                          -- 4  1  (ipv4 and ipv6 counts)
 
-for k,v in pairs(ipt) do              -- 10.10.10.0/24    table 0x...
+for k,v in pairs(ipt) do              -- 1.0.0.0/32       42
+                                      -- 10.10.10.0/24    table 0x...
     print(k,v)                        -- 10.10.10.10/32   false
                                       -- 11.11.11.0/24    true
 end                                   -- acdc:1974::/32   Jailbreak
@@ -180,8 +181,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET     2
 iptable.AF_INET6    10
+iptable.AF_INET     2
 ```
 
 ## module functions
@@ -970,15 +971,15 @@ print(string.rep("-", 35))
    --	10.10.10.0/30	6
    --	10.10.10.4/30	7
 -- supernet	10.10.10.0/24
-   --	10.10.10.128/25	5
    --	10.10.10.0/25	4
+   --	10.10.10.128/25	5
    --	10.10.10.0/24	3
 -- supernet	10.10.10.0/29
-   --	10.10.10.4/30	7
    --	10.10.10.0/30	6
+   --	10.10.10.4/30	7
 -- supernet	10.10.10.0/24
-   --	10.10.10.128/25	5
    --	10.10.10.0/25	4
+   --	10.10.10.128/25	5
    --	10.10.10.0/24	3
 -----------------------------------
 ```
