@@ -97,9 +97,10 @@ static int iter_radixes(lua_State *);
 static int ipt_address(lua_State *);
 static int ipt_broadcast(lua_State *);
 static int ipt_decr(lua_State *);
-static int ipt_longhand(lua_State *);
+static int ipt_dnsptr(lua_State *);
 static int ipt_incr(lua_State *);
 static int ipt_invert(lua_State *);
+static int ipt_longhand(lua_State *);
 static int ipt_mask(lua_State *);
 static int ipt_masklen(lua_State *);
 static int ipt_neighbor(lua_State *L);
@@ -126,6 +127,7 @@ static const struct luaL_Reg funcs [] = {
     {"address", ipt_address},
     {"broadcast", ipt_broadcast},
     {"decr", ipt_decr},
+    {"dnsptr", ipt_dnsptr},
     {"hosts", iter_hosts},
     {"incr", ipt_incr},
     {"interval", iter_interval},
@@ -1907,6 +1909,74 @@ ipt_address(lua_State *L)
         return lipt_error(L, LIPTE_TOSTR, 3, "");
 
     lua_pushstring(L, buf);
+    lua_pushinteger(L, mlen);
+    lua_pushinteger(L, af);
+
+    dbg_stack("out(3) ==>");
+
+    return 3;
+}
+
+/*
+ * ### `iptable.dnsptr`
+ * ```c
+ * static int ipt_dnsptr(lua_State *L);
+ * ```
+ * ```lua
+ * -- lua
+ * ptr, mlen, af, err = iptable.dnsptr("10.10.10.10/24")
+ * --> 10.10.10.10.in-addr.arpa
+ *
+ * ptr, mlen, af, err = iptable.dnsptr("acdc:1979:/32")
+ * --> 0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.9.7.9.1.c.d.c.a.ip6.arpa
+ * --> 32 10 nil
+ * ```
+ *
+ * Ignores the mask and returns a reverse dns name for the address part of the
+ * prefix, along with its mask length and address family.
+ * In case of errors, returns all nils plus an error message.
+ */
+
+static int
+ipt_dnsptr(lua_State *L)
+{
+    dbg_stack("inc(.) <--");  // [str]
+
+    uint8_t addr[MAX_BINKEY], *kp;
+    static const char *hex = "0123456789abcdef";
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1, klen;
+    const char *pfx = NULL;
+
+    if (! iptL_getpfxstr(L, 1, &pfx, &len))
+        return lipt_error(L, LIPTE_ARG, 3, "");
+    if (! key_bystr(addr, &mlen, &af, pfx))
+        return lipt_error(L, LIPTE_PFX, 3, "");
+    if (AF_UNKNOWN(af))
+        return lipt_error(L, LIPTE_AF, 1, ": %d", af);
+    if (! key_reverse(addr))
+        return lipt_error(L, LIPTE_BINOP, 3, "to reverse %s", pfx);
+
+    /* clear the stack & push the name labels onto the stack */
+    lua_settop(L, 0);
+    klen = IPT_KEYLEN(addr);
+    kp = addr;
+    if (af == AF_INET) {
+        while (--klen > 0 && kp++)
+            lua_pushfstring(L, "%d.", (int)*kp);
+        lua_pushstring(L, "in-addr.arpa");
+
+    } else {
+        /* ipv6 address nibbles are labels, they're already reversed */
+        /* lua_pushfstring has no %x conversion specifier, so do a lookup */
+        while (--klen > 0 && kp++) {
+            lua_pushfstring(L, "%c.", hex[(*kp & 0xf0)>>4]);
+            lua_pushfstring(L, "%c.", hex[*kp & 0x0f]);
+        }
+        lua_pushstring(L, "ip6.arpa");
+    }
+
+    lua_concat(L, lua_gettop(L));
     lua_pushinteger(L, mlen);
     lua_pushinteger(L, af);
 

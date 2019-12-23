@@ -28,6 +28,7 @@
  * 0. LIPTE_ARG      wrong type of argument
  * 0. LIPTE_BIN      illegal binary key/mask
  * 0. LIPTE_BINOP    binary operation failed
+ * 0. LIPTE_BUF      could not allocate memory
  * 0. LIPTE_FAIL     unspecified error
  * 0. LIPTE_ITER     internal iteration error
  * 0. LIPTE_LIDX     invalid Lua stack index
@@ -48,6 +49,7 @@ typedef enum {
     LIPTE_ARG,
     LIPTE_BIN,
     LIPTE_BINOP,
+    LIPTE_BUF,
     LIPTE_FAIL,
     LIPTE_ITER,
     LIPTE_LIDX,
@@ -66,10 +68,11 @@ typedef enum {
 // the list *ends* with NULL, LIPTE_ZMAX *must* be last in enum above.
 static const char *const LIPT_ERROR[] = {
     [LIPTE_NONE]    = "none",
-    [LIPTE_AF]      = "wrong or unknown address family",
+    [LIPTE_AF]      = "unknown address family",
     [LIPTE_ARG]     = "wrong type of argument",
     [LIPTE_BINOP]   = "binary operation failed",
     [LIPTE_BIN]     = "illegal binary key/mask",
+    [LIPTE_BUF]     = "could not allocate memory",
     [LIPTE_FAIL]    = "unspecified error",
     [LIPTE_ITER]    = "internal iteration error",
     [LIPTE_LIDX]    = "invalid Lua stack index",
