@@ -114,7 +114,7 @@ iptable.AF_INET6 -- 10
 
 -- Module functions
 
-prefix = "10.10.10.0/24"                       -- ipv4/6 address or subnet
+prefix = "10.10.10.0/24"                            -- ipv4/6 address or subnet
 
 addr,  mlen, af, err = iptable.address(prefix)      -- 10.10.10.0      24  2 nil
 netw,  mlen, af, err = iptable.network(prefix)      -- 10.10.10.0      24  2 nil
@@ -165,7 +165,8 @@ Notes:
   - `radixes` excludes mask nodes from iteration, unless 2nd arg is true
   - `incr/decr`’s offset parameter is optional and defaults to 1
   - functions return all nils on errors plus an error message
-  - iterators won’t iterate, check `iptable.error` for an error message
+  - if iterators won’t iterate, check `iptable.error` for an error
+    message
   - iptable never clears the iptable.error itself
 
 # Documentation
@@ -176,8 +177,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET     2
 iptable.AF_INET6    10
+iptable.AF_INET     2
 ```
 
 ## module functions
@@ -966,16 +967,16 @@ print(string.rep("-", 35))
    --	10.10.10.0/30	6
    --	10.10.10.4/30	7
 -- supernet	10.10.10.0/24
-   --	10.10.10.0/24	3
-   --	10.10.10.128/25	5
    --	10.10.10.0/25	4
+   --	10.10.10.128/25	5
+   --	10.10.10.0/24	3
 -- supernet	10.10.10.0/29
-   --	10.10.10.4/30	7
    --	10.10.10.0/30	6
+   --	10.10.10.4/30	7
 -- supernet	10.10.10.0/24
-   --	10.10.10.0/24	3
-   --	10.10.10.128/25	5
    --	10.10.10.0/25	4
+   --	10.10.10.128/25	5
+   --	10.10.10.0/24	3
 -----------------------------------
 ```
 
