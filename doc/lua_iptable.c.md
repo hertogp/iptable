@@ -4,6 +4,8 @@ author: hertogp
 tags: Lua C-api
 ...
 
+*Language bindings for iptable.c, which wraps radix.c*
+
 # `lua_iptable.h`
 
 ## \#defines

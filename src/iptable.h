@@ -1,8 +1,11 @@
 /* ---
  * title: iptable reference
  * author: hertogp
- * tags: C api
+ * tags: C api lua radix trie
  * ...
+ *
+ * Wrapper for radix.c by the FreeBSD project.
+ *
  */
 
 #ifndef iptable_h
