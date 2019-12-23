@@ -1,0 +1,240 @@
+digraph G {
+  rankdir="LR";
+  ranksep="1.0 equally";
+
+N0x156cde0 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156cde0" COLSPAN="2" BGCOLOR="yellow">RADIX_NODE_HEAD - 0x156cde0</TD></TR>
+    <TR><TD PORT="N0x156cde0" COLSPAN="2" BGCOLOR="khaki">RADIX_HEAD - 0x156cde0</TD></TR>
+    <TR><TD>rnh_treetop</TD><TD PORT="N0x156cde0_2">0x156ce58</TD></TR>
+    <TR><TD>rnh_masks</TD><TD PORT="N0x156cde0_3">0x156cec0</TD></TR>
+    <TR><TD PORT="N0x156cde0" COLSPAN="2" BGCOLOR="yellow">RADIX_NODE_HEAD - 0x156cde0</TD></TR>
+    <TR><TD PORT="N0x156ce28" COLSPAN="2" BGCOLOR="gold">RADIX_NODE - 0x156ce28</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156cde0_7">0x156ce58</TD></TR>
+    <TR><TD>rn_bit</TD><TD>-9 (L)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>00</TD></TR>
+    <TR><TD>rn_flags</TD><TD>6 (RA)</TD></TR>
+    <TR><TD>rn_key</TD><TD>[0] 0.0.0.0</TD></TR>
+    <TR><TD>rn_mask</TD><TD>[] (null)</TD></TR>
+    <TR><TD>rn_dupedkey</TD><TD>(nil)</TD></TR>
+    <TR><TD PORT="N0x156ce58" COLSPAN="2" BGCOLOR="yellow">RADIX_NODE - 0x156ce58</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156cde0_16">0x156ce58</TD></TR>
+    <TR><TD>rn_bit</TD><TD>8 (I)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>80</TD></TR>
+    <TR><TD>rn_flags</TD><TD>6 (RA)</TD></TR>
+    <TR><TD>rn_offset</TD><TD>1</TD></TR>
+    <TR><TD>rn_left</TD><TD PORT="N0x156cde0_21">0x156ce28</TD></TR>
+    <TR><TD>rn_right</TD><TD PORT="N0x156cde0_22">0x156e840</TD></TR>
+    <TR><TD PORT="N0x156ce88" COLSPAN="2" BGCOLOR="gold">RADIX_NODE - 0x156ce88</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156cde0_25">0x156e840</TD></TR>
+    <TR><TD>rn_bit</TD><TD>-9 (L)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>00</TD></TR>
+    <TR><TD>rn_flags</TD><TD>6 (RA)</TD></TR>
+    <TR><TD>rn_key</TD><TD>[255] 255.255.255.255</TD></TR>
+    <TR><TD>rn_mask</TD><TD>[] (null)</TD></TR>
+    <TR><TD>rn_dupedkey</TD><TD>(nil)</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156e840 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156e840" COLSPAN="2" BGCOLOR="lightgrey">RADIX_NODE - 0x156e840</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156e840_2">0x156ce58</TD></TR>
+    <TR><TD>rn_bit</TD><TD>9 (I)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>40</TD></TR>
+    <TR><TD>rn_flags</TD><TD>4 (A)</TD></TR>
+    <TR><TD>rn_offset</TD><TD>1</TD></TR>
+    <TR><TD>rn_left</TD><TD PORT="N0x156e840_7">0x156d110</TD></TR>
+    <TR><TD>rn_right</TD><TD PORT="N0x156e840_8">0x156ce88</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156d110 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156d110" COLSPAN="2" BGCOLOR="lightgrey">RADIX_NODE - 0x156d110</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156d110_2">0x156e840</TD></TR>
+    <TR><TD>rn_bit</TD><TD>32 (I)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>80</TD></TR>
+    <TR><TD>rn_flags</TD><TD>4 (A)</TD></TR>
+    <TR><TD>rn_offset</TD><TD>4</TD></TR>
+    <TR><TD>rn_left</TD><TD PORT="N0x156d110_7">0x156d0a0</TD></TR>
+    <TR><TD>rn_right</TD><TD PORT="N0x156d110_8">0x156d0e0</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156d0a0 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156d0a0" COLSPAN="2" BGCOLOR="lightgrey">RADIX_NODE - 0x156d0a0</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156d0a0_2">0x156d110</TD></TR>
+    <TR><TD>rn_bit</TD><TD>36 (I)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>08</TD></TR>
+    <TR><TD>rn_flags</TD><TD>4 (A)</TD></TR>
+    <TR><TD>rn_offset</TD><TD>4</TD></TR>
+    <TR><TD>rn_left</TD><TD PORT="N0x156d0a0_7">0x156d030</TD></TR>
+    <TR><TD>rn_right</TD><TD PORT="N0x156d0a0_8">0x156d070</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156d030 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156d030" COLSPAN="2" BGCOLOR="lightgrey">RADIX_NODE - 0x156d030</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156d030_2">0x156d0a0</TD></TR>
+    <TR><TD>rn_bit</TD><TD>38 (I)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>02</TD></TR>
+    <TR><TD>rn_flags</TD><TD>4 (A)</TD></TR>
+    <TR><TD>rn_offset</TD><TD>4</TD></TR>
+    <TR><TD>rn_left</TD><TD PORT="N0x156d030_7">0x156e810</TD></TR>
+    <TR><TD>rn_right</TD><TD PORT="N0x156d030_8">0x156d000</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156e810 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156e810" COLSPAN="2" BGCOLOR="green">RADIX_NODE - 0x156e810</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156e810_2">0x156d030</TD></TR>
+    <TR><TD>rn_bit</TD><TD>-41 (L)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>00</TD></TR>
+    <TR><TD>rn_flags</TD><TD>5 (NA)</TD></TR>
+    <TR><TD>rn_key</TD><TD>[17] acdc:1974::</TD></TR>
+    <TR><TD>rn_mask</TD><TD>[5] 255.255.255.255</TD></TR>
+    <TR><TD>rn_dupedkey</TD><TD>(nil)</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156d000 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156d000" COLSPAN="2" BGCOLOR="green">RADIX_NODE - 0x156d000</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156d000_2">0x156d030</TD></TR>
+    <TR><TD>rn_bit</TD><TD>-41 (L)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>00</TD></TR>
+    <TR><TD>rn_flags</TD><TD>5 (NA)</TD></TR>
+    <TR><TD>rn_key</TD><TD>[17] acdc:1976::</TD></TR>
+    <TR><TD>rn_mask</TD><TD>[5] 255.255.255.255</TD></TR>
+    <TR><TD>rn_dupedkey</TD><TD>(nil)</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156d070 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156d070" COLSPAN="2" BGCOLOR="green">RADIX_NODE - 0x156d070</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156d070_2">0x156d0a0</TD></TR>
+    <TR><TD>rn_bit</TD><TD>-41 (L)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>00</TD></TR>
+    <TR><TD>rn_flags</TD><TD>5 (NA)</TD></TR>
+    <TR><TD>rn_key</TD><TD>[17] acdc:1979::</TD></TR>
+    <TR><TD>rn_mask</TD><TD>[5] 255.255.255.255</TD></TR>
+    <TR><TD>rn_dupedkey</TD><TD>(nil)</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156d0e0 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156d0e0" COLSPAN="2" BGCOLOR="green">RADIX_NODE - 0x156d0e0</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156d0e0_2">0x156d110</TD></TR>
+    <TR><TD>rn_bit</TD><TD>-41 (L)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>00</TD></TR>
+    <TR><TD>rn_flags</TD><TD>5 (NA)</TD></TR>
+    <TR><TD>rn_key</TD><TD>[17] acdc:1980::</TD></TR>
+    <TR><TD>rn_mask</TD><TD>[5] 255.255.255.255</TD></TR>
+    <TR><TD>rn_dupedkey</TD><TD>(nil)</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156cec0 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156cec0" COLSPAN="2" BGCOLOR="gold">RADIX_MASK_HEAD - 0x156cec0</TD></TR>
+    <TR><TD PORT="N0x156cec0" COLSPAN="2" BGCOLOR="khaki">RADIX_HEAD - 0x156cec0</TD></TR>
+    <TR><TD>rnh_treetop</TD><TD PORT="N0x156cec0_2">0x156cf00</TD></TR>
+    <TR><TD>rnh_masks</TD><TD>(nil)</TD></TR>
+    <TR><TD PORT="N0x156ced0" COLSPAN="2" BGCOLOR="khaki">MASK_NODES[3] - 0x156ced0</TD></TR>
+    <TR><TD PORT="N0x156ced0" COLSPAN="2" BGCOLOR="gold">RADIX_NODE - 0x156ced0</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156cec0_7">0x156cfa0</TD></TR>
+    <TR><TD>rn_bit</TD><TD>-1 (L)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>00</TD></TR>
+    <TR><TD>rn_flags</TD><TD>6 (RA)</TD></TR>
+    <TR><TD>rn_key</TD><TD>[0] 0.0.0.0</TD></TR>
+    <TR><TD>rn_mask</TD><TD>[] (null)</TD></TR>
+    <TR><TD>rn_dupedkey</TD><TD>(nil)</TD></TR>
+    <TR><TD PORT="N0x156cf00" COLSPAN="2" BGCOLOR="yellow">RADIX_NODE - 0x156cf00</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156cec0_16">0x156cf00</TD></TR>
+    <TR><TD>rn_bit</TD><TD>0 (I)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>80</TD></TR>
+    <TR><TD>rn_flags</TD><TD>6 (RA)</TD></TR>
+    <TR><TD>rn_offset</TD><TD>0</TD></TR>
+    <TR><TD>rn_left</TD><TD PORT="N0x156cec0_21">0x156cfa0</TD></TR>
+    <TR><TD>rn_right</TD><TD PORT="N0x156cec0_22">0x156cf30</TD></TR>
+    <TR><TD PORT="N0x156cf30" COLSPAN="2" BGCOLOR="gold">RADIX_NODE - 0x156cf30</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156cec0_25">0x156cf00</TD></TR>
+    <TR><TD>rn_bit</TD><TD>-1 (L)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>00</TD></TR>
+    <TR><TD>rn_flags</TD><TD>6 (RA)</TD></TR>
+    <TR><TD>rn_key</TD><TD>[255] 255.255.255.255</TD></TR>
+    <TR><TD>rn_mask</TD><TD>[] (null)</TD></TR>
+    <TR><TD>rn_dupedkey</TD><TD>(nil)</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156cfa0 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156cfa0" COLSPAN="2" BGCOLOR="lightgrey">RADIX_NODE - 0x156cfa0</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156cfa0_2">0x156cf00</TD></TR>
+    <TR><TD>rn_bit</TD><TD>5 (I)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>04</TD></TR>
+    <TR><TD>rn_flags</TD><TD>4 (A)</TD></TR>
+    <TR><TD>rn_offset</TD><TD>0</TD></TR>
+    <TR><TD>rn_left</TD><TD PORT="N0x156cfa0_7">0x156ced0</TD></TR>
+    <TR><TD>rn_right</TD><TD PORT="N0x156cfa0_8">0x156cf70</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156cf70 [label=<  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N0x156cf70" COLSPAN="2" BGCOLOR="gold">RADIX_NODE - 0x156cf70</TD></TR>
+    <TR><TD>rn_mklist</TD><TD>(nil)</TD></TR>
+    <TR><TD>rn_parent</TD><TD PORT="N0x156cf70_2">0x156cfa0</TD></TR>
+    <TR><TD>rn_bit</TD><TD>-41 (L)</TD></TR>
+    <TR><TD>rn_bmask</TD><TD>00</TD></TR>
+    <TR><TD>rn_flags</TD><TD>5 (NA)</TD></TR>
+    <TR><TD>rn_key</TD><TD>[5] 255.255.255.255</TD></TR>
+    <TR><TD>rn_mask</TD><TD>[] (null)</TD></TR>
+    <TR><TD>rn_dupedkey</TD><TD>(nil)</TD></TR>
+  </TABLE>
+>,shape="plaintext"];
+
+N0x156cde0:N0x156cde0_2 -> N0x156cde0:N0x156ce58 [style="solid", color="black"]
+N0x156cde0:N0x156cde0_3 -> N0x156cec0:N0x156cec0 [style="solid", color="black"]
+N0x156cde0:N0x156cde0_7 -> N0x156cde0:N0x156ce58 [style="dashed"]
+N0x156cde0:N0x156cde0_16 -> N0x156cde0:N0x156ce58 [style="dashed"]
+N0x156cde0:N0x156cde0_21 -> N0x156cde0:N0x156ce28 [style="solid",  color="blue"]
+N0x156cde0:N0x156cde0_22 -> N0x156e840:N0x156e840 [style="dashed",  color="blue"]
+N0x156cde0:N0x156cde0_25 -> N0x156e840:N0x156e840 [style="dashed"]
+N0x156e840:N0x156e840_2 -> N0x156cde0:N0x156ce58 [style="dashed"]
+N0x156e840:N0x156e840_7 -> N0x156d110:N0x156d110 [style="solid",  color="blue"]
+N0x156e840:N0x156e840_8 -> N0x156cde0:N0x156ce88 [style="dashed",  color="blue"]
+N0x156d110:N0x156d110_2 -> N0x156e840:N0x156e840 [style="dashed"]
+N0x156d110:N0x156d110_7 -> N0x156d0a0:N0x156d0a0 [style="solid",  color="blue"]
+N0x156d110:N0x156d110_8 -> N0x156d0e0:N0x156d0e0 [style="dashed",  color="blue"]
+N0x156d0a0:N0x156d0a0_2 -> N0x156d110:N0x156d110 [style="dashed"]
+N0x156d0a0:N0x156d0a0_7 -> N0x156d030:N0x156d030 [style="solid",  color="blue"]
+N0x156d0a0:N0x156d0a0_8 -> N0x156d070:N0x156d070 [style="dashed",  color="blue"]
+N0x156d030:N0x156d030_2 -> N0x156d0a0:N0x156d0a0 [style="dashed"]
+N0x156d030:N0x156d030_7 -> N0x156e810:N0x156e810 [style="solid",  color="blue"]
+N0x156d030:N0x156d030_8 -> N0x156d000:N0x156d000 [style="dashed",  color="blue"]
+N0x156e810:N0x156e810_2 -> N0x156d030:N0x156d030 [style="dashed"]
+N0x156d000:N0x156d000_2 -> N0x156d030:N0x156d030 [style="dashed"]
+N0x156d070:N0x156d070_2 -> N0x156d0a0:N0x156d0a0 [style="dashed"]
+N0x156d0e0:N0x156d0e0_2 -> N0x156d110:N0x156d110 [style="dashed"]
+N0x156cec0:N0x156cec0_2 -> N0x156cec0:N0x156cf00 [style="solid", color="black"]
+N0x156cec0:N0x156cec0_7 -> N0x156cfa0:N0x156cfa0 [style="dashed"]
+N0x156cec0:N0x156cec0_16 -> N0x156cec0:N0x156cf00 [style="dashed"]
+N0x156cec0:N0x156cec0_21 -> N0x156cfa0:N0x156cfa0 [style="solid",  color="blue"]
+N0x156cec0:N0x156cec0_22 -> N0x156cec0:N0x156cf30 [style="dashed",  color="blue"]
+N0x156cec0:N0x156cec0_25 -> N0x156cec0:N0x156cf00 [style="dashed"]
+N0x156cfa0:N0x156cfa0_2 -> N0x156cec0:N0x156cf00 [style="dashed"]
+N0x156cfa0:N0x156cfa0_7 -> N0x156cec0:N0x156ced0 [style="solid",  color="blue"]
+N0x156cfa0:N0x156cfa0_8 -> N0x156cf70:N0x156cf70 [style="dashed",  color="blue"]
+N0x156cf70:N0x156cf70_2 -> N0x156cfa0:N0x156cfa0 [style="dashed"]
+}

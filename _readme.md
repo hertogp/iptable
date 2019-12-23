@@ -929,12 +929,18 @@ repo has two additional, small lua modules that can be used to dump a radix
 tree to a dot-file for conversion by graphviz:
 
 - `ipt2dot`, dumps the tree with full radix node details
-- `ipt2smalldot`, dumps the tree with less node details
+- `ipt2smalldot`, dumps only the key-tree with less node details
+
+An iptable has two radix trees, one for ipv4 and one for ipv6.  Each radix tree
+actually consists of both a radix tree for the keys being stored as well as a
+radix tree for the masks being used in the tree (to save memory consumption).
+`ipt2dot` graphs, for a given AF, the key-tree by default and includes the
+mask-tree only when its optional 3rd argument is true.  `ipt2smalldot` however,
+only graphs the key-tree and shows less detail of the radix nodes in the tree.
 
 For large trees, this gets pretty messy but for small trees the images are
 legible.  Primarily for fun with no real application other than a means to
 assist during development.
-
 
 ## IPv4 tree
 
@@ -946,13 +952,12 @@ dotify = require "src.lua.ipt2dot"
 ipt = iptable.new()
 ipt["10.10.10.0/24"] = 1
 ipt["10.10.10.0/25"] = 2
-ipt["10.10.10.128/25"] = 3
-ipt["10.10.10.128/26"] = 4
-ipt["11.11.11.0/24"] = 2
+ipt["10.10.10.128/26"] = 3
+ipt["11.11.11.0/24"] = 4
 
 imgfile = arg[1]
 dotfile = imgfile:gsub("...$", "dot")
-dottext = dotify(ipt, iptable.AF_INET)
+dottext = dotify(ipt, iptable.AF_INET, true)
 
 fh = io.open(dotfile, "w")
 fh:write(table.concat(dottext, "\n"))
@@ -979,7 +984,7 @@ ipt["acdc:1980::/32"] = "Touch too much"
 
 imgfile = arg[1]
 dotfile = imgfile:gsub("...$", "dot")
-dottext = dotify(ipt, iptable.AF_INET6)
+dottext = dotify(ipt, iptable.AF_INET6, true)
 
 fh = io.open(dotfile, "w")
 fh:write(table.concat(dottext, "\n"))
@@ -1080,7 +1085,7 @@ while (changed) do
     changed = false
     for supernet, grp in ipt:merge(iptable.AF_INET) do
         for subnet, _ in pairs(grp) do ipt[subnet] = nil end
-        ipt[supernet] = true
+        ipt[supernet] = true -- it may have been included in grp
         changed = true
     end
 end
