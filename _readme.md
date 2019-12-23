@@ -84,7 +84,7 @@ An iptable.new() yields a Lua table with modified indexing behaviour:
 
 - the table utilizes 2 separate radix trees for ipv4 and ipv6 respectively
 - the table handles both ipv4 or ipv6 keys transparently
-- if a key is not an ipv4 or ipv6 subnet/address it is *ignored*
+- if a key is not an ipv4 or ipv6 subnet/address *string* it is *ignored*
 - ipv4 and ipv6 subnets are always in CIDR notation: address/len
 - storing data always uses a subnet-key (address/mlen)
 - when storing data, missing masks default to the AF's maximum mask
@@ -106,6 +106,8 @@ ipt["10.10.10.10"] = false            -- stores to ipt["10.10.10.10/32"]
 ipt["11.11.11.11/24"] = true          -- stores to ipt["11.11.11.0/24"]
 ipt["acdc:1976::/32"] = "Jailbreak"   -- goes into separate radix tree
 ipt[1] = 42                           -- ignored: ipt[1] -> nil
+iptable.error                         -- "wrong type of argument"
+ipt["1"] = 42                         -- ipt["1.0.0.0/32"] -> 42 (the answer)
 #ipt                                  -- 4 entries in total
 ipt.counts()                          -- 3  1  (ipv4 and ipv6 counts)
 
