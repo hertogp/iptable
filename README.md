@@ -181,8 +181,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET6    10
 iptable.AF_INET     2
+iptable.AF_INET6    10
 ```
 
 ## module functions
@@ -410,8 +410,8 @@ print(string.rep("-", 35))
 
 ### `iptable.invert(prefix)`
 
-Invert the address of given `prefix` and return reversed address, mask
-length and address family. Note: the mask is NOT applied. If that’s
+Invert the address of given `prefix` and return the inverted address,
+mask length and address family. Note: the mask is NOT applied. If that’s
 required, convert the prefix first using `iptable.network(prefix)`.
 
 ``` lua
@@ -532,7 +532,7 @@ print(string.rep("-", 35))
 Get the adjacent subnet that, together with `prefix`, occupies their
 immediate parental supernet whose prefix length is 1 bit shorter.
 Returns the adjacent prefix, mask length and address family. Note that a
-prefix with no length has no parental supernet.
+prefix with a length of zero has no parental supernet.
 
 ``` lua
 #!/usr/bin/env lua
@@ -562,7 +562,7 @@ print(string.rep("-", 35))
 ### `iptable.network(prefix)`
 
 Applies the mask to the address and returns the network address, mask
-length and address family for `prefix`. If `prefix` has no masklength,
+length and address family for `prefix`. If `prefix` has no mask length,
 `mlen` will be `-1` to indicate the absence and the network address is
 the host address itself.
 
@@ -823,7 +823,7 @@ applied before storing the key, value pair in the internal radix
 tree(s). Hence, iterating across an iptable always shows keys to be
 actual subnets with a mask, in CIDR notation.
 
-``` shebang lua
+``` lua
 #!/usr/bin/env lua
 acl = require"iptable".new()
 acl["10.10.10.0/24"] = true
@@ -833,11 +833,20 @@ print("-- 1 exact match for prefix 10.10.10.0/24  -", acl["10.10.10.0/24"])
 print("-- 2 longest prefix match for 10.10.10.9   -", acl["10.10.10.9"])
 print("-- 3 longest prefix match for 10.10.10.100 -", acl["10.10.10.100"])
 print("-- 4 exact match for prefix 10.10.10.10/30 -", acl["10.10.10.10/30"])
-print("-- 5 acl number of entries:", #acl))
+print("-- 5 acl number of entries:", #acl)
 
 print(string.rep("-", 35))
 
 ---------- PRODUCES --------------
+```
+
+``` lua
+-- 1 exact match for prefix 10.10.10.0/24  -	true
+-- 2 longest prefix match for 10.10.10.9   -	false
+-- 3 longest prefix match for 10.10.10.100 -	true
+-- 4 exact match for prefix 10.10.10.10/30 -	false
+-- 5 acl number of entries:	2
+-----------------------------------
 ```
 
 ### `ipt:more(prefix [,inclusive])`
@@ -975,11 +984,11 @@ print(string.rep("-", 35))
    --	10.10.10.128/25	5
    --	10.10.10.0/24	3
 -- supernet	10.10.10.0/29
-   --	10.10.10.0/30	6
    --	10.10.10.4/30	7
+   --	10.10.10.0/30	6
 -- supernet	10.10.10.0/24
-   --	10.10.10.0/25	4
    --	10.10.10.128/25	5
+   --	10.10.10.0/25	4
    --	10.10.10.0/24	3
 -----------------------------------
 ```

@@ -698,7 +698,7 @@ print("-- 1 exact match for prefix 10.10.10.0/24  -", acl["10.10.10.0/24"])
 print("-- 2 longest prefix match for 10.10.10.9   -", acl["10.10.10.9"])
 print("-- 3 longest prefix match for 10.10.10.100 -", acl["10.10.10.100"])
 print("-- 4 exact match for prefix 10.10.10.10/30 -", acl["10.10.10.10/30"])
-print("-- 5 acl number of entries:", #acl))
+print("-- 5 acl number of entries:", #acl)
 
 print(string.rep("-", 35))
 
