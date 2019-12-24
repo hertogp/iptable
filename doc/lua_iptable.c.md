@@ -664,16 +664,25 @@ static int ipt_dnsptr(lua_State *L);
 ```lua
 -- lua
 ptr, mlen, af, err = iptable.dnsptr("10.10.10.10/24")
---> 10.10.10.10.in-addr.arpa
+--> 10.10.10.10.in-addr.arpa.
+ptr, mlen, af, err = iptable.dnsptr("10.10.10.10/24", true)
+--> 10.10.10.in-addr.arpa.
 
-ptr, mlen, af, err = iptable.dnsptr("acdc:1979:/32")
---> 0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.9.7.9.1.c.d.c.a.ip6.arpa
+ptr, mlen, af = iptable.dnsptr("acdc:1979:/32")
+--> 0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.9.7.9.1.c.d.c.a.ip6.arpa.
 --> 32 10 nil
+ptr, mlen, af = iptable.dnsptr("acdc:1979:/32", true)
+--> 9.7.9.1.c.d.c.a.ip6.arpa. 32 10
 ```
 
-Ignores the mask and returns a reverse dns name for the address part of the
-prefix, along with its mask length and address family.
-In case of errors, returns all nils plus an error message.
+Return a reverse dns name for the address part of the prefix, along with its
+mask length and address family.  If the optional 2nd argument is true and
+the prefix has a mask larger than zero bits, skip as many leading labels as
+the mask allows.  Note: this works on a byte resp. nibble boundary since
+as represented by the dns labels for ipv4 resp. ipv6 reverse names.  A
+prefix length of zero would be non-sensical since at least 1 label needs to
+be present left of in-addr.arpa or ip6.arpa.  In case of errors, returns all
+nils plus an error message.
 
 
 ### `iptable.longhand`
