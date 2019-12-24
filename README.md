@@ -181,8 +181,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET     2
 iptable.AF_INET6    10
+iptable.AF_INET     2
 ```
 
 ## module functions
@@ -192,6 +192,15 @@ Requiring `iptable` yields an object with module level functions.
 ``` lua
 iptable = require "iptable"
 ```
+
+Prefix strings are converted to binary format following these rules:
+
+0.  A mask, if present, must be valid
+1.  It’s treated as ipv6 if it has an ‘:’, ipv4 otherwise
+2.  String/binary conversion is done by `inet_pton` & `inet_ntop`
+
+The use of `inet_pton` implies no hexadecimal, octal or shorthand
+notations for ipv4.
 
 ### `iptable.address(prefix)`
 
@@ -209,7 +218,9 @@ print("--", iptable.address(pfx4))
 print("--", iptable.address("10.10.10.10"))
 print("--", iptable.address(pfx6))
 print("--", iptable.address("acdc:1976::"))
-
+print("\n-- with no spaces allowed")
+print("--", iptable.address("10.10.10.10 /32"))
+print("--", iptable.address(" : : /128"))
 print(string.rep("-", 35))
 
 ---------- PRODUCES --------------
@@ -220,6 +231,10 @@ print(string.rep("-", 35))
 --	10.10.10.10	-1	2
 --	2001:db8:85a3::8a2e:370:700	120	10
 --	acdc:1976::	-1	10
+
+-- with no spaces allowed
+--	nil	nil	nil	invalid prefix string
+--	nil	nil	nil	invalid prefix string
 -----------------------------------
 ```
 
@@ -977,11 +992,11 @@ print(string.rep("-", 35))
 
 ``` lua
 -- supernet	10.10.10.0/29
-   --	10.10.10.0/30	6
    --	10.10.10.4/30	7
+   --	10.10.10.0/30	6
 -- supernet	10.10.10.0/24
-   --	10.10.10.0/25	4
    --	10.10.10.128/25	5
+   --	10.10.10.0/25	4
    --	10.10.10.0/24	3
 -- supernet	10.10.10.0/29
    --	10.10.10.4/30	7

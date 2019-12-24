@@ -39,22 +39,6 @@ test_key_tostr_good(void)
     equal = strncmp(buf, sp, IP6_PFXSTRLEN);
     mu_true(equal == 0);
 
-    // octal and/or hexadecimal turns into normal dotted quad
-    snprintf(sp, IP6_PFXSTRLEN, "0xa.0xb.014.015");
-    key_bystr(addr, &mlen, &af, sp);
-    snprintf(sp, IP6_PFXSTRLEN, "10.11.12.13");
-    mu_true(key_tostr(buf, addr));
-    equal = strncmp(buf, sp, IP6_PFXSTRLEN);
-    mu_true(equal == 0);
-
-    // shorthand turns into normal dotted quad
-    snprintf(sp, IP6_PFXSTRLEN, "0xa.0xb");
-    key_bystr(addr, &mlen, &af, sp);
-    snprintf(sp, IP6_PFXSTRLEN, "10.11.0.0");
-    mu_true(key_tostr(buf, addr));
-    equal = strncmp(buf, sp, IP6_PFXSTRLEN);
-    mu_true(equal == 0);
-
     // mask is read, but not part of returned string
     snprintf(sp, IP6_PFXSTRLEN, "1.2.3.4/32");
     key_bystr(addr, &mlen, &af, sp);

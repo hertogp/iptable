@@ -59,32 +59,6 @@ test_key_bystr_good(void)
     mu_true(*(addr+3) == 0x0a);  // 10  3rd digit
     mu_true(*(addr+4) == 0x00);  // 0   4th digit
     free(str);
-
-    // ipv4 hexadecimal notation
-    str = mk_strptr("0xa.0xa.0xa.0");
-    key_bystr(addr, &mlen, &af, str);
-    mu_true(mlen == -1);
-    mu_true(addr != NULL);
-    mu_true(af == AF_INET);
-    mu_true(*(addr+0) == 0x05);  // length byte
-    mu_true(*(addr+1) == 0x0a);  // 10  1st digit
-    mu_true(*(addr+2) == 0x0a);  // 10  2nd digit
-    mu_true(*(addr+3) == 0x0a);  // 10  3rd digit
-    mu_true(*(addr+4) == 0x00);  // 0   4th digit
-    free(str);
-
-    // ipv4 octal notation
-    str = mk_strptr("012.012.012.00");
-    key_bystr(addr, &mlen, &af, str);
-    mu_true(mlen == -1);
-    mu_true(addr != NULL);
-    mu_true(af == AF_INET);
-    mu_true(*(addr+0) == 0x05);  // length byte
-    mu_true(*(addr+1) == 0x0a);  // 10  1st digit
-    mu_true(*(addr+2) == 0x0a);  // 10  2nd digit
-    mu_true(*(addr+3) == 0x0a);  // 10  3rd digit
-    mu_true(*(addr+4) == 0x00);  // 0   4th digit
-    free(str);
 }
 
 void
@@ -131,7 +105,7 @@ test_key_bystr_bad(void)
     mu_true(af == AF_UNSPEC);
     free(str);
 
-    // malformed digits (embedded letter
+    // malformed digits (embedded letter)
     str = mk_strptr("1a.2.3.4/32");
     addr = key_bystr(buf, &mlen, &af, str);
     mu_true(addr == NULL);
@@ -169,8 +143,8 @@ test_key_bystr_bad(void)
 
 }
 
-void
-test_key_bystr_shorthand_good(void)
+// TODO: reimplement shorthand for ipv4?
+/* void test_key_bystr_shorthand_good(void)
 {
     uint8_t addr[MAX_BINKEY];
     char * str;
@@ -249,4 +223,4 @@ test_key_bystr_shorthand_good(void)
     mu_true(*(addr+4) == 0x00);  //  0  4th digit
     free(str);
 }
-
+*/

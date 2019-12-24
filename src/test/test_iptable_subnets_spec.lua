@@ -21,7 +21,7 @@ describe("iptable.subnets(): ", function()
     assert.is_falsy(iptable.error)
 
     cnt = 0
-    for pfx in iptable.subnets("2001:acdc/24", 26) do
+    for pfx in iptable.subnets("2001:acdc::/24", 26) do
       cnt = cnt + 1
     end
     assert.are_equal(4, cnt)

@@ -765,6 +765,25 @@ message  on errors.  Note: the mask is NOT applied before invering the
 address.
 
 
+### `iptable.offset`
+```c
+static int ipt_offset(lua_State *L);
+```
+```lua
+-- lua
+ip, mlen, af, err = iptable.offset("10.10.10.0/24", 1)
+--> 10.10.10.1  24  2
+ip, mlen, af, err = iptable.offset("10.10.10.0/24", -1)
+--> 10.10.9.255 24  2
+```
+
+Return a new ip address, masklen and af_family by adding an offset to a
+prefix.  If no offset is given, increments the key by 1.  Returns nil and an
+error msg on errors such as trying to offset beyond the AF's valid address
+space (i.e. it won't wrap around).  Note: any mask is ignored during
+offsetting.
+
+
 ### `iptable.reverse`
 ```c
 static int ipt_reverse(lua_State *L);

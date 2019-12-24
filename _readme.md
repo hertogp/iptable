@@ -211,6 +211,15 @@ Requiring `iptable` yields an object with module level functions.
 iptable = require "iptable"
 ```
 
+Prefix strings are converted to binary format following these rules:
+
+0. A mask, if present, must be valid
+0. It's treated as ipv6 if it has an ':', ipv4 otherwise
+0. String/binary conversion is done by `inet_pton` & `inet_ntop`
+
+The use of `inet_pton` implies no hexadecimal, octal or shorthand notations for
+ipv4.
+
 ### `iptable.address(prefix)`
 
 Returns the host address, mask length and address family for `prefix`.
@@ -226,7 +235,9 @@ print("--", iptable.address(pfx4))
 print("--", iptable.address("10.10.10.10"))
 print("--", iptable.address(pfx6))
 print("--", iptable.address("acdc:1976::"))
-
+print("\n-- with no spaces allowed")
+print("--", iptable.address("10.10.10.10 /32"))
+print("--", iptable.address(" : : /128"))
 print(string.rep("-", 35))
 
 ---------- PRODUCES --------------

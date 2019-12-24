@@ -94,75 +94,63 @@ key_copy(uint8_t *src)
 /*
  * ### `key_bystr`
  * ```c
- *    uint8_t *key_bystr(uint8_t *dst, int *mlen, int *af, const char *s);
+ * uint8_t *key_bystr(uint8_t *dst, int *mlen, int *af, const char *s);
  * ```
- * Store string s' binary key in dst. Returns NULL on failure.  Also sets mlen
- * and  af. mlen=-1 when no mask was supplied.  Assumes dst size MAX_BINKEY,
- * which fits both ipv4/ipv6.
+ *
+ * Store string `s` binary key in `dst`. Returns NULL on failure.  Also sets
+ * `mlen` and `af`. `mlen`=-1 when no mask was supplied.  Assumes `dst`'s size
+ * MAX_BINKEY, which fits both ipv4/ipv6.
  */
 
 uint8_t *
 key_bystr(uint8_t *dst, int *mlen, int *af, const char *s)
 {
 
-    *mlen = -1;                                   // the mask as length
-    *af = AF_UNSPEC;
-    char buf[MAX_STRKEY];
+    char buf[MAX_STRKEY], *slash;
+    int n;
 
-    int a, b, c, d, n;
-    char *slash;
+    *mlen = -1;                                   /* -1 for no mask seen */
+    *af = AF_UNSPEC;                              /* means conversion failed */
 
-    // sanity checks
     if (dst == NULL) return NULL;
     if (s == NULL) return NULL;
-    if (strlen(s) > MAX_STRKEY) return NULL;      // invalid string
-    if (strlen(s) < 1) return NULL;               // invalid string
+    if (strlen(s) > MAX_STRKEY) return NULL;      /* invalid string */
+    if (strlen(s) < 1) return NULL;               /* invalid string */
 
-    // pick up mask, if present it must be valid
+    /* pick up mask, if present it must be valid */
     slash = strchr(s, '/');
     if (slash) {
         sscanf(slash, "/%i%n", mlen, &n);
-        if (*(slash + n)) return NULL;            // no valid /mask ending
-        if (*mlen < 0) return NULL;               // dito
+        /* no negative masks or trailing garbager*/
+        if (*(slash + n) || *mlen < 0)
+            return NULL;
     }
+    /* copy s to buf & terminate at the slash if seen */
+    strncpy(buf, s, INET6_ADDRSTRLEN);
+    if(slash)
+        buf[slash - s] = '\0';
 
+    /* convert to binary */
     if (STR_IS_IP6(s)) {
-        if (*mlen > IP6_MAXMASK) return NULL;
-        strncpy(buf, s, INET6_ADDRSTRLEN);
-        if(slash) buf[slash - s]='\0';
+        if (*mlen > IP6_MAXMASK)
+            return NULL;
         IPT_KEYLEN(dst) = KEY_LEN_FAM(AF_INET6);
-        inet_pton(AF_INET6, buf, IPT_KEYPTR(dst));
+        if (! inet_pton(AF_INET6, buf, IPT_KEYPTR(dst)))
+            return NULL;
         *af = AF_INET6;
         return dst;
 
     } else {
-        // use scanf to support shorthand notation: 10.10/16 is 10.10.0.0/16
-        // %i scans hex (0x..), octal (0..) or base 10 ([1-9]..)
-        if (strlen(s) > IP4_PFXSTRLEN) return NULL;
-        if (*mlen > IP4_MAXMASK) return NULL;
-        if (!isdigit(*s)) return NULL; // must start with 0x, 0, or [1-9]
-
-        a = b = c = d = n = 0;
-        sscanf(s, "%i%n.%i%n.%i%n.%i%n", &a, &n, &b, &n, &c, &n, &d, &n);
-        if(n > 0 && *(s+n) != '/' && *(s+n) != '\0')
-            return NULL; // malformed digits (or too many)
-
-        // check validity of digits
-        if(a < 0 || a > 255) return NULL;
-        if(b < 0 || b > 255) return NULL;
-        if(c < 0 || c > 255) return NULL;
-        if(d < 0 || d > 255) return NULL;
-
+        if (*mlen > IP4_MAXMASK)
+            return NULL;
         IPT_KEYLEN(dst) = KEY_LEN_FAM(AF_INET);
-        *(dst+1) = a;  // bigendian, so 'a' goes first
-        *(dst+2) = b;
-        *(dst+3) = c;
-        *(dst+4) = d;
+        if (! inet_pton(AF_INET, buf, IPT_KEYPTR(dst)))
+            return NULL;
         *af = AF_INET;
         return dst;
     }
 
-    return NULL;  // failed
+    return NULL;  /* NOT REACHED */
 }
 
 /*

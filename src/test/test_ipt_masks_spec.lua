@@ -37,7 +37,7 @@ describe("t:masks(af): ", function()
       local t = iptable.new()
       local cnt = 0;
 
-      t["0/0"] = 1
+      t["0.0.0.0/0"] = 1
       for mask in t:masks(AF_INET) do cnt = cnt + 1 end
       assert.are_equal(1, cnt);
 
@@ -56,7 +56,7 @@ describe("t:masks(af): ", function()
       local t = iptable.new()
       local cnt = 0;
 
-      t["0/0"] = 1
+      t["0.0.0.0/0"] = 1
       t["::/0"] = 1
       for mask in t:masks(AF_INET) do cnt = cnt + 1 end
       assert.are_equal(1, cnt);
@@ -71,7 +71,7 @@ describe("t:masks(af): ", function()
       local t = iptable.new()
       local cnt = 0;
 
-      t["0/32"] = 1
+      t["0.0.0.0/32"] = 1
       t["::/128"] = 1
       for mask in t:masks(AF_INET) do cnt = cnt + 1 end
       assert.are_equal(1, cnt);
@@ -86,8 +86,8 @@ describe("t:masks(af): ", function()
       local t = iptable.new()
       local cnt = 0;
 
-      t["0/0"] = 1
-      t["0/32"] = 1
+      t["0.0.0.0/0"] = 1
+      t["0.0.0.0/32"] = 1
       t["::/0"] = 1
       t["::/128"] = 1
       for mask in t:masks(AF_INET) do cnt = cnt + 1 end

@@ -101,7 +101,7 @@ describe("ipt:more(pfx): ", function()
 
     it("yields all entries for 0/0", function()
       local sum = 0;
-      local search_pfx = "0/0";
+      local search_pfx = "0.0.0.0/0";
       for pfx, v in ipt:more(search_pfx) do sum = sum + v; end
       assert.are_equal(1+2+4+8+16+32+64+128, sum);
     end)
@@ -113,7 +113,7 @@ describe("ipt:more(pfx): ", function()
 
       -- non-inclusive will not include search term
       sum = 0;
-      local search_pfx = "0/0";
+      local search_pfx = "0.0.0.0/0";
       for pfx, v in ipt:more(search_pfx) do sum = sum + v; end
       assert.are_equal(1+2+4+8+16+32+64+128, sum);
 
@@ -147,7 +147,7 @@ describe("ipt:more(pfx): ", function()
 
     it("finds more specifics, non-inclusive", function()
       local sum = 0;
-      local search_pfx = "1/8";
+      local search_pfx = "1.0.0.0/8";
       for pfx, v in ipt:more(search_pfx) do
         sum = sum + v;
       end
@@ -169,7 +169,7 @@ describe("ipt:more(pfx): ", function()
 
     it("finds more specifics, non-inclusive", function()
       local sum = 0;
-      local search_pfx = "1.1/16";
+      local search_pfx = "1.1.0.0/16";
       for pfx, v in ipt:more(search_pfx) do sum = sum + v; end
       assert.are_equal(1, sum);
     end)
