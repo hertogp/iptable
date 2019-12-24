@@ -260,11 +260,12 @@ $0 <= KEY\_LEN(src) <= MAX\_KEYLEN$.  Returns
 
 ### `key_bystr`
 ```c
-   uint8_t *key_bystr(uint8_t *dst, int *mlen, int *af, const char *s);
+uint8_t *key_bystr(uint8_t *dst, int *mlen, int *af, const char *s);
 ```
-Store string s' binary key in dst. Returns NULL on failure.  Also sets mlen
-and  af. mlen=-1 when no mask was supplied.  Assumes dst size MAX_BINKEY,
-which fits both ipv4/ipv6.
+
+Store string `s` binary key in `dst`. Returns NULL on failure.  Also sets
+`mlen` and `af`. `mlen`=-1 when no mask was supplied.  Assumes `dst`'s size
+MAX_BINKEY, which fits both ipv4/ipv6.
 
 
 ### `key_byfit`

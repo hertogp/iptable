@@ -129,48 +129,48 @@ iptable.AF_INET6 -- 10
 
 -- Module functions
 
-prefix = "10.10.10.0/24"                            -- ipv4/6 address or subnet
+prefix = "10.10.10.0/24"                         -- ipv4/6 address or subnet
 
-addr,  mlen, af, err = iptable.address(prefix)      -- 10.10.10.0      24  2 nil
-netw,  mlen, af, err = iptable.network(prefix)      -- 10.10.10.0      24  2 nil
-bcast, mlen, af, err = iptable.broadcast(prefix)    -- 10.10.10.255    24  2 nil
-neigb, mlen, af, err = iptable.neighbor(prefix)     -- 10.10.11.0      24  2 nil
-invrt, mlen, af, err = iptable.invert(prefix)       -- 245.245.245.255 24  2 nil
-rev,   mlen, af, err = iptable.reverse(prefix)      -- 0.10.10.10      24  2 nil
-expl,  mlen, af, err = iptable.longhand("2001::")   -- 2001:0000:...   -1  10 nil
-p1, p2, mlen,af, err = iptable.split(prefix)        -- 10.10.10.0 10.10.10.128 25 2 nil
+addr,   mlen, af = iptable.address(prefix)       -- 10.10.10.0      24  2
+bcast,  mlen, af = iptable.broadcast(prefix)     -- 10.10.10.255    24  2
+netw,   mlen, af = iptable.network(prefix)       -- 10.10.10.0      24  2
+neigb,  mlen, af = iptable.neighbor(prefix)      -- 10.10.11.0      24  2
+inv,    mlen, af = iptable.invert(prefix)        -- 245.245.245.255 24  2
+rev,    mlen, af = iptable.reverse(prefix)       -- 0.10.10.10      24  2
+addr,   mlen, af = iptable.longhand("2001::")    -- 2001:0000:...   -1  10
+addr,   mlen, af = iptable.offset(prefix, -6)    -- 10.10.9.250     24  2
+p1, p2, mlen, af = iptable.split(prefix)         -- 10.10.10.0 10.10.10.128 25 2
 
-nxt,  mlen, af, err = iptable.incr(prefix, 257)     -- 10.10.11.1      24  2 nil
-prv,  mlen, af, err = iptable.decr(prefix, 257)     -- 10.10.8.255     24  2 nil
+mask = iptable.mask(iptable.AF_INET, 24)         -- 255.255.255.0
+size = iptable.size(prefix)                      -- 256.0
+ptr  = iptable.dnsptr(prefix)                    -- 0.10.10.10.in-addr.arpa.
+ptr  = iptable.dnsptr(prefix, true)              -- 10.10.10.in-addr.arpa.
 
-mask, err = iptable.mask(iptable.AF_INET, 24)       -- 255.255.255.0 nil
-size, err = iptable.size(prefix)                    -- 256 nil
+binkey = iptable.tobin("255.255.255.0")          -- byte string 05:ff:ff:ff:00
+prefix = iptable.tostr(binkey)                   -- 255.255.255.0
+msklen = iptable.masklen(binkey)                 -- 24
 
-binkey, err = iptable.tobin("255.255.255.0")        -- byte string 05:ff:ff:ff:00 nil
-prefix, err = iptable.tostr(binkey)                 -- 255.255.255.0 nil
-msklen, err = iptable.masklen(binkey)               -- 24 nil
+ipt    = iptable.new()                           -- longest prefix match table
 
-ipt    = iptable.new()                              -- longest prefix match table
-
-for host in iptable.hosts(prefix[, true]) do        -- iterate across hosts in prefix
-    print(host)                                     -- optionally include netw/bcast
+for host in iptable.hosts(prefix[, true]) do     -- iterate across hosts in prefix
+    print(host)                                  -- optionally include netw/bcast
 end
 
-for pfx in iptable.subnets(prefix, 26) do           -- iterate prefix's subnets
-    print(pfx)                                      -- new prefix len is optional
-end                                                 -- and defaults to 1 bit longer
+for pfx in iptable.subnets(prefix, 26) do        -- iterate prefix's subnets
+    print(pfx)                                   -- new prefix len is optional
+end                                              -- and defaults to 1 bit longer
 
 -- table functions
 
-#ipt                                                -- 0 (nothing stored yet)
-ipt:counts()                                        -- 0 0 (ipv4_count ipv6_count)
-iptable.error = nil                                 -- last error message seen
-for k,v in pairs(ipt) do ... end                    -- iterate across k,v-pairs
-for k,v in ipt:more(prefix [,true]) ... end         -- iterate across more specifics
-for k,v in ipt:less(prefix [,true]) ... end         -- iterate across less specifics
-for k,v in ipt:masks(af) ... end                    -- iterate across masks used in af
-for k,g in ipt:supernets(af) ... end                -- iterate supernets & constituents
-for rdx in ipt:radixes(af [,true]) ... end          -- dumps all radix nodes in tree
+#ipt                                             -- 0 (nothing stored)
+ipt:counts()                                     -- 0 0 (ipv4_count ipv6_count)
+iptable.error = nil                              -- last error message seen
+for k,v in pairs(ipt) do ... end                 -- iterate across k,v-pairs
+for k,v in ipt:more(prefix [,true]) ... end      -- iterate across more specifics
+for k,v in ipt:less(prefix [,true]) ... end      -- iterate across less specifics
+for k,v in ipt:masks(af) ... end                 -- iterate across masks used in af
+for k,g in ipt:supernets(af) ... end             -- iterate supernets & constituents
+for rdx in ipt:radixes(af [,true]) ... end       -- iterate the radix nodes
 ```
 
 Notes:
@@ -286,23 +286,25 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
-### `iptable.dnsptr(prefix)`
+### `iptable.dnsptr(prefix [,skip])`
 
-Ignores the mask, if present, and returns a reverse dns name for the address
-part of the prefix, along with the prefix length seen and the address family. 
-If there's no mask present, prefix length is -1.  On error, returns nil and an
-error message.
+Return a reverse dns name for the address part of the prefix, along with the
+prefix length seen and the address family.  If `skip` evaluates to true and the
+prefix has a prefix length > 0, skip as many leading labels as the mask allows.
+On error, returns nil and an error message.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
 iptable = require"iptable"
 
-pfx4 = "10.10.10.0/19"
-pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
+pfx4 = "10.10.10.0/16"
+pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/116"
 
 print("--", iptable.dnsptr(pfx4))
+print("--", iptable.dnsptr(pfx4, true))
 print("--", iptable.dnsptr(pfx6))
-print("--", iptable.dnsptr("::"))
+print("--", iptable.dnsptr(pfx6, true))
+print("--", iptable.dnsptr("2001:abcd::/32", true))
 
 print(string.rep("-", 35))
 

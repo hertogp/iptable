@@ -11,14 +11,14 @@
 #include "iptable.h"         // iptable layered on top of radix.c
 
 #include "minunit.h"         // the mu_test macros
-#include "test_c_key_incr.h"      // a generated header file for this test runner
+#include "test_c_key_offset.h"      // a generated header file for this test runner
 
 void
-test_key_incr_ipv4_good(void)
+test_key_incr_ipv4(void)
 {
     uint8_t addr[5] = {IP4_KEYLEN,0,0,0,0};
 
-    // incr 0.0.0.0
+    // offset 0.0.0.0
     *(addr+1) = 0x00;
     *(addr+2) = 0x00;
     *(addr+3) = 0x00;
@@ -30,7 +30,7 @@ test_key_incr_ipv4_good(void)
     mu_eq(0x00, *(addr+3), "%i");
     mu_eq(0x01, *(addr+4), "%i");
 
-    // incr 0.0.0.255 propagates
+    // offset 0.0.0.255 propagates
     *(addr+1) = 0x00;
     *(addr+2) = 0x00;
     *(addr+3) = 0x00;
@@ -42,7 +42,7 @@ test_key_incr_ipv4_good(void)
     mu_eq(0x01, *(addr+3), "%i");
     mu_eq(0x00, *(addr+4), "%i");
 
-    // incr 0.0.255.255 propagates
+    // offset 0.0.255.255 propagates
     *(addr+1) = 0x00;
     *(addr+2) = 0x00;
     *(addr+3) = 0xff;
@@ -54,7 +54,7 @@ test_key_incr_ipv4_good(void)
     mu_eq(0x00, *(addr+3), "%i");
     mu_eq(0x00, *(addr+4), "%i");
 
-    // incr 0.255.255.255 propagates
+    // offset 0.255.255.255 propagates
     *(addr+1) = 0x00;
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
@@ -66,7 +66,7 @@ test_key_incr_ipv4_good(void)
     mu_eq(0x00, *(addr+3), "%i");
     mu_eq(0x00, *(addr+4), "%i");
 
-    // incr 255.255.255.255 -> wraps to 0.0.0.0 but yields NULL
+    // offset 255.255.255.255 -> wraps to 0.0.0.0 but yields NULL
     *(addr+1) = 0xff;
     *(addr+2) = 0xff;
     *(addr+3) = 0xff;
@@ -77,5 +77,60 @@ test_key_incr_ipv4_good(void)
     mu_eq(0x00, *(addr+2), "%i");
     mu_eq(0x00, *(addr+3), "%i");
     mu_eq(0x00, *(addr+4), "%i");
+}
+
+void
+test_key_decr(void)
+{
+    uint8_t addr[5] = {IP4_KEYLEN, 0,0,0,0};
+
+    // offset 0.0.0.0 -> 255.255.255.255
+    *(addr+1) = 0x00;
+    *(addr+2) = 0x00;
+    *(addr+3) = 0x00;
+    *(addr+4) = 0x00;
+    mu_false(key_decr(addr, 1));  /* wrap around detection */
+    /* even though wrap around occurred, key is a known value */
+    mu_eq(IP4_KEYLEN, *(addr+0), "keylength %i");
+    mu_eq(0xff, *(addr+1), "%i");
+    mu_eq(0xff, *(addr+2), "%i");
+    mu_eq(0xff, *(addr+3), "%i");
+    mu_eq(0xff, *(addr+4), "%i");
+
+    // offset 255.0.0.0 -> 254.255.255.255
+    *(addr+1) = 0xff;
+    *(addr+2) = 0x00;
+    *(addr+3) = 0x00;
+    *(addr+4) = 0x00;
+    mu_true(key_decr(addr, 1));
+    mu_eq(IP4_KEYLEN, *(addr+0), "keylength %i");
+    mu_eq(0xfe, *(addr+1), "%i");
+    mu_eq(0xff, *(addr+2), "%i");
+    mu_eq(0xff, *(addr+3), "%i");
+    mu_eq(0xff, *(addr+4), "%i");
+
+    // offset 255.255.0.0 -> 255.254.255.255
+    *(addr+1) = 0xff;
+    *(addr+2) = 0xff;
+    *(addr+3) = 0x00;
+    *(addr+4) = 0x00;
+    mu_true(key_decr(addr, 1));
+    mu_eq(IP4_KEYLEN, *(addr+0), "keylength %i");
+    mu_eq(0xff, *(addr+1), "%i");
+    mu_eq(0xfe, *(addr+2), "%i");
+    mu_eq(0xff, *(addr+3), "%i");
+    mu_eq(0xff, *(addr+4), "%i");
+
+    // offset 255.255.255.0 -> 255.255.254.255
+    *(addr+1) = 0xff;
+    *(addr+2) = 0xff;
+    *(addr+3) = 0xff;
+    *(addr+4) = 0x00;
+    mu_true(key_decr(addr, 1));
+    mu_eq(IP4_KEYLEN, *(addr+0), "keylength %i");
+    mu_eq(0xff, *(addr+1), "%i");
+    mu_eq(0xff, *(addr+2), "%i");
+    mu_eq(0xfe, *(addr+3), "%i");
+    mu_eq(0xff, *(addr+4), "%i");
 
 }

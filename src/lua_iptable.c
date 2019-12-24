@@ -96,9 +96,7 @@ static int iter_radixes(lua_State *);
 
 static int ipt_address(lua_State *);
 static int ipt_broadcast(lua_State *);
-static int ipt_decr(lua_State *);
 static int ipt_dnsptr(lua_State *);
-static int ipt_incr(lua_State *);
 static int ipt_invert(lua_State *);
 static int ipt_longhand(lua_State *);
 static int ipt_mask(lua_State *);
@@ -127,10 +125,8 @@ static int iptm_tostring(lua_State *);
 static const struct luaL_Reg funcs [] = {
     {"address", ipt_address},
     {"broadcast", ipt_broadcast},
-    {"decr", ipt_decr},
     {"dnsptr", ipt_dnsptr},
     {"hosts", iter_hosts},
-    {"incr", ipt_incr},
     {"interval", iter_interval},
     {"invert", ipt_invert},
     {"longhand", ipt_longhand},
@@ -1927,27 +1923,36 @@ ipt_address(lua_State *L)
  * ```lua
  * -- lua
  * ptr, mlen, af, err = iptable.dnsptr("10.10.10.10/24")
- * --> 10.10.10.10.in-addr.arpa
+ * --> 10.10.10.10.in-addr.arpa.
+ * ptr, mlen, af, err = iptable.dnsptr("10.10.10.10/24", true)
+ * --> 10.10.10.in-addr.arpa.
  *
- * ptr, mlen, af, err = iptable.dnsptr("acdc:1979:/32")
- * --> 0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.9.7.9.1.c.d.c.a.ip6.arpa
+ * ptr, mlen, af = iptable.dnsptr("acdc:1979:/32")
+ * --> 0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.9.7.9.1.c.d.c.a.ip6.arpa.
  * --> 32 10 nil
+ * ptr, mlen, af = iptable.dnsptr("acdc:1979:/32", true)
+ * --> 9.7.9.1.c.d.c.a.ip6.arpa. 32 10
  * ```
  *
- * Ignores the mask and returns a reverse dns name for the address part of the
- * prefix, along with its mask length and address family.
- * In case of errors, returns all nils plus an error message.
+ * Return a reverse dns name for the address part of the prefix, along with its
+ * mask length and address family.  If the optional 2nd argument is true and
+ * the prefix has a mask larger than zero bits, skip as many leading labels as
+ * the mask allows.  Note: this works on a byte resp. nibble boundary since
+ * as represented by the dns labels for ipv4 resp. ipv6 reverse names.  A
+ * prefix length of zero would be non-sensical since at least 1 label needs to
+ * be present left of in-addr.arpa or ip6.arpa.  In case of errors, returns all
+ * nils plus an error message.
  */
 
 static int
 ipt_dnsptr(lua_State *L)
 {
-    dbg_stack("inc(.) <--");  // [str]
+    dbg_stack("inc(.) <--");  // [str [skip]]
 
     uint8_t addr[MAX_BINKEY], *kp;
     static const char *hex = "0123456789abcdef";
     size_t len = 0;
-    int af = AF_UNSPEC, mlen = -1, klen;
+    int af = AF_UNSPEC, mlen = -1, klen, skip=0;
     const char *pfx = NULL;
 
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
@@ -1955,27 +1960,35 @@ ipt_dnsptr(lua_State *L)
     if (! key_bystr(addr, &mlen, &af, pfx))
         return lipt_error(L, LIPTE_PFX, 3, "");
     if (AF_UNKNOWN(af))
-        return lipt_error(L, LIPTE_AF, 1, ": %d", af);
+        return lipt_error(L, LIPTE_AF, 3, ": %d", af);
     if (! key_reverse(addr))
         return lipt_error(L, LIPTE_BINOP, 3, "to reverse %s", pfx);
+    skip = lua_toboolean(L, 2);
+    skip = mlen <= 0 ? 0 : skip;
 
     /* clear the stack & push the name labels onto the stack */
     lua_settop(L, 0);
     klen = IPT_KEYLEN(addr);
     kp = addr;
     if (af == AF_INET) {
+        skip = skip ? (IP4_MAXMASK - mlen)/8 : 0;
         while (--klen > 0 && kp++)
-            lua_pushfstring(L, "%d.", (int)*kp);
-        lua_pushstring(L, "in-addr.arpa");
+            if (--skip < 0)
+                lua_pushfstring(L, "%d.", (int)*kp);
+        lua_pushstring(L, "in-addr.arpa.");
 
     } else {
         /* ipv6 address nibbles are labels, they're already reversed */
         /* lua_pushfstring has no %x conversion specifier, so do a lookup */
+        skip = skip ? (IP6_MAXMASK - mlen)/4 : 0;
         while (--klen > 0 && kp++) {
-            lua_pushfstring(L, "%c.", hex[(*kp & 0xf0)>>4]);
-            lua_pushfstring(L, "%c.", hex[*kp & 0x0f]);
+            if (--skip < 0)
+                lua_pushfstring(L, "%c.", hex[(*kp & 0xf0)>>4]);
+            dbg_msg("skip is %d", skip);
+            if (--skip < 0)
+                lua_pushfstring(L, "%c.", hex[*kp & 0x0f]);
         }
-        lua_pushstring(L, "ip6.arpa");
+        lua_pushstring(L, "ip6.arpa.");
     }
 
     lua_concat(L, lua_gettop(L));
@@ -2129,109 +2142,6 @@ ipt_neighbor(lua_State *L)
     return 3;
 }
 
-/*
- * ### `iptable.incr`
- * ```c
- * static int ipt_incr(lua_State *L);
- * ```
- * ```lua
- * -- lua
- * ip, mlen, af, err = iptable.incr("10.10.10.0/24")
- * --> 10.10.10.1  24  2
- * ```
- *
- * Return address, masklen and af_family by adding an offset to a pfx; If no
- * offset is given, increments the key by 1.  Returns nil and an error msg on
- * errors such as trying to increment the all-broadcast address.  Note: any
- * mask is ignored with regards to adding the offset.
- */
-
-static int
-ipt_incr(lua_State *L)
-{
-    dbg_stack("inc(.) <--");  // [pfx]
-
-    char buf[MAX_STRKEY];
-    uint8_t addr[MAX_BINKEY];
-    size_t len = 0, offset = 1;
-    int af = AF_UNSPEC, mlen = -1;
-    const char *pfx = NULL;
-
-    /* offset is optional, defaults to 1 */
-    if (lua_isnumber(L, 2))
-        offset = lua_tonumber(L, 2);
-    if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_error(L, LIPTE_ARG, 3, "");
-
-    if (! key_bystr(addr, &mlen, &af, pfx))
-        return lipt_error(L, LIPTE_PFX, 3, "");
-
-    if (! key_incr(addr, offset))
-        return lipt_error(L, LIPTE_BINOP, 3, "could %s increment", "not");
-
-    if (! key_tostr(buf, addr))
-        return lipt_error(L, LIPTE_TOSTR, 3, "");
-
-    lua_pushstring(L, buf);
-    lua_pushinteger(L, mlen);
-    lua_pushinteger(L, af);
-
-    dbg_stack("out(3) ==>");
-
-    return 3;
-}
-
-/*
- * ### `iptable.decr`
- * ```c
- * static int ipt_decr(lua_State *L);
- * ```
- * ```lua
- * -- lua
- * ip, mlen, af, err = iptable.decr("10.10.10.0/24")
- * --> 10.10.9.255  24  2
- * ```
- *
- * Return address, masklen and af_family by adding an offset to a pfx; If no
- * offset is given, decrements the key by 1.  Returns nil's and an error
- * message on errors, such as trying to decrement `0.0.0.0` or `::`.
- * Note: any mask is ignored with regards to adding the offset.
- */
-
-static int
-ipt_decr(lua_State *L)
-{
-    dbg_stack("inc(.) <--");  // [pfx]
-
-    char buf[MAX_STRKEY];
-    uint8_t addr[MAX_BINKEY];
-    size_t len = 0, offset = 1;
-    int af = AF_UNSPEC, mlen = -1;
-    const char *pfx = NULL;
-
-    /* offset is optional, defaults to 1 */
-    if (lua_isnumber(L, 2))
-        offset = lua_tonumber(L, 2);
-    if (! iptL_getpfxstr(L, 1, &pfx, &len))
-        return lipt_error(L, LIPTE_ARG, 3, "");
-
-    if (! key_bystr(addr, &mlen, &af, pfx))
-        return lipt_error(L, LIPTE_PFX, 3, "");
-
-    if (! key_decr(addr, offset))
-        return lipt_error(L, LIPTE_BINOP, 3, "");
-
-    if (! key_tostr(buf, addr))
-        return lipt_error(L, LIPTE_TOSTR, 3, "");
-
-    lua_pushstring(L, buf);
-    lua_pushinteger(L, mlen);
-    lua_pushinteger(L, af);
-
-    dbg_stack("out(3) ==>");
-
-    return 3;
-}
 
 /*
  * ### `iptable.invert`

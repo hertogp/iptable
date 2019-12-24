@@ -719,38 +719,6 @@ Note that a /0 will not have a neighbor prefix whith which it could be
 combined.  Returns nil's and an error msg on errors.
 
 
-### `iptable.incr`
-```c
-static int ipt_incr(lua_State *L);
-```
-```lua
--- lua
-ip, mlen, af, err = iptable.incr("10.10.10.0/24")
---> 10.10.10.1  24  2
-```
-
-Return address, masklen and af_family by adding an offset to a pfx; If no
-offset is given, increments the key by 1.  Returns nil and an error msg on
-errors such as trying to increment the all-broadcast address.  Note: any
-mask is ignored with regards to adding the offset.
-
-
-### `iptable.decr`
-```c
-static int ipt_decr(lua_State *L);
-```
-```lua
--- lua
-ip, mlen, af, err = iptable.decr("10.10.10.0/24")
---> 10.10.9.255  24  2
-```
-
-Return address, masklen and af_family by adding an offset to a pfx; If no
-offset is given, decrements the key by 1.  Returns nil's and an error
-message on errors, such as trying to decrement `0.0.0.0` or `::`.
-Note: any mask is ignored with regards to adding the offset.
-
-
 ### `iptable.invert`
 ```c
 static int ipt_invert(lua_State *L);
