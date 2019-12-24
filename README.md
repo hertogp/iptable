@@ -34,7 +34,7 @@ Additionally for testing and documentation, the following is used:
 
 ## Installation
 
-### Install the Lua `iptable` library using make.
+### Make.
 
     cd ~/installs
     git clone https://github.com/hertogp/iptable.git
@@ -44,22 +44,16 @@ Additionally for testing and documentation, the following is used:
     # or
     make local_install    # simply copies to ~/.luarocks/lib/lua/5.3
 
-### Install using luarocks
+### luarocks
 
   - todo.
 
-### Install only the C `iptable` library using make
+### C-only
 
-Well, sort of:
-
-    cd ~/installs
-    git clone https://github.com/hertogp/iptable.git
-    cd iptable
-    make c_test
-    make c_lib
-
-There’s no `c_install` target to install the c-library, so from here it
-boils down to manual labor.
+Just copy the files `iptable.{h,c}` and `radix.{h.c}` to your project.
+See additional documentation in the doc directory. Alternatively, the
+Makefile has a `c_test` and a `c_lib` target to test and to build
+`build/libiptable.so`.
 
 ## Usage
 
@@ -179,8 +173,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET6    10
 iptable.AF_INET     2
+iptable.AF_INET6    10
 ```
 
 ## module functions
@@ -980,16 +974,16 @@ print(string.rep("-", 35))
    --	10.10.10.4/30	7
    --	10.10.10.0/30	6
 -- supernet	10.10.10.0/24
-   --	10.10.10.0/25	4
-   --	10.10.10.128/25	5
    --	10.10.10.0/24	3
+   --	10.10.10.128/25	5
+   --	10.10.10.0/25	4
 -- supernet	10.10.10.0/29
-   --	10.10.10.4/30	7
    --	10.10.10.0/30	6
+   --	10.10.10.4/30	7
 -- supernet	10.10.10.0/24
+   --	10.10.10.0/24	3
    --	10.10.10.0/25	4
    --	10.10.10.128/25	5
-   --	10.10.10.0/24	3
 -----------------------------------
 ```
 
