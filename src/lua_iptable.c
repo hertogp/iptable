@@ -106,6 +106,7 @@ static int ipt_masklen(lua_State *);
 static int ipt_neighbor(lua_State *L);
 static int ipt_network(lua_State *);
 static int ipt_new(lua_State *);
+static int ipt_offset(lua_State *);
 static int ipt_reverse(lua_State *);
 static int ipt_size(lua_State *);
 static int ipt_split(lua_State *);
@@ -138,6 +139,7 @@ static const struct luaL_Reg funcs [] = {
     {"neighbor", ipt_neighbor},
     {"network", ipt_network},
     {"new", ipt_new},
+    {"offset", ipt_offset},
     {"reverse", ipt_reverse},
     {"size", ipt_size},
     {"split", ipt_split},
@@ -2278,6 +2280,72 @@ ipt_invert(lua_State *L)
     return 3;
 }
 
+/*
+ * ### `iptable.offset`
+ * ```c
+ * static int ipt_offset(lua_State *L);
+ * ```
+ * ```lua
+ * -- lua
+ * ip, mlen, af, err = iptable.offset("10.10.10.0/24", 1)
+ * --> 10.10.10.1  24  2
+ * ip, mlen, af, err = iptable.offset("10.10.10.0/24", -1)
+ * --> 10.10.9.255 24  2
+ * ```
+ *
+ * Return a new ip address, masklen and af_family by adding an offset to a
+ * prefix.  If no offset is given, increments the key by 1.  Returns nil and an
+ * error msg on errors such as trying to offset beyond the AF's valid address
+ * space (i.e. it won't wrap around).  Note: any mask is ignored during
+ * offsetting.
+ */
+
+static int
+ipt_offset(lua_State *L)
+{
+    dbg_stack("inc(.) <--");  // [pfx] or [pfx n]
+
+    char buf[MAX_STRKEY];
+    uint8_t addr[MAX_BINKEY];
+    size_t len = 0;
+    lua_Number numb;
+    long offset = 1;
+    int af = AF_UNSPEC, mlen = -1;
+    const char *pfx = NULL;
+
+    /* offset is optional, defaults to 1 */
+    if (lua_gettop(L) == 2) {
+        /* long route so 2^x's are supported as well, despite being a float */
+        numb = lua_tonumber(L, 2);
+        if (! lua_numbertointeger(numb, &offset))
+            return lipt_error(L, LIPTE_ARG, 3, "");
+    }
+
+    if (! iptL_getpfxstr(L, 1, &pfx, &len))
+        return lipt_error(L, LIPTE_ARG, 3, "");
+
+    if (! key_bystr(addr, &mlen, &af, pfx))
+        return lipt_error(L, LIPTE_PFX, 3, "");
+
+    if (offset > 0) {
+        if (! key_incr(addr, offset))
+            return lipt_error(L, LIPTE_BINOP, 3, "could %s increment", "not");
+    } else {
+        if (! key_decr(addr, -offset))
+            return lipt_error(L, LIPTE_BINOP, 3, "could %s decrement", "not");
+    }
+
+    if (! key_tostr(buf, addr))
+        return lipt_error(L, LIPTE_TOSTR, 3, "");
+
+    lua_pushstring(L, buf);
+    lua_pushinteger(L, mlen);
+    lua_pushinteger(L, af);
+
+    dbg_stack("out(3) ==>");
+
+    return 3;
+}
 /*
  * ### `iptable.reverse`
  * ```c

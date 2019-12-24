@@ -370,8 +370,8 @@ print(string.rep("-", 35))
 
 ### `iptable.invert(prefix)`
 
-Invert the address of given `prefix` and return reversed address, mask length
-and address family.  Note: the mask is NOT applied.  If that's required,
+Invert the address of given `prefix` and return the inverted address, mask
+length and address family.  Note: the mask is NOT applied.  If that's required,
 convert the prefix first using ` iptable.network(prefix)`.
 
 ```{.shebang .lua}
@@ -464,8 +464,8 @@ print(string.rep("-", 35))
 
 Get the adjacent subnet that, together with `prefix`, occupies their immediate
 parental supernet whose prefix length is 1 bit shorter.  Returns the adjacent
-prefix, mask length and address family.  Note that a prefix with no length has
-no parental supernet.
+prefix, mask length and address family.  Note that a prefix with a length of
+zero has no parental supernet.
 
 ```{.shebang .lua}
 #!/usr/bin/env lua
@@ -487,7 +487,7 @@ print(string.rep("-", 35))
 
 Applies the mask to the address and returns the network address, mask length
 and address family for `prefix`.
-If `prefix` has no masklength, `mlen` will be `-1` to indicate the absence and
+If `prefix` has no mask length, `mlen` will be `-1` to indicate the absence and
 the network address is the host address itself.
 
 ```{.shebang .lua}
