@@ -63,9 +63,10 @@ make local_install    # simply copies to ~/.luarocks/lib/lua/5.3
 
 ### C-only
 
-Just copy the files `iptable.{h,c}` and `radix.{h.c}` to your project.  See
-additional documentation in the doc directory.  Alternatively, the Makefile has
-a `c_test` and a `c_lib` target to test and to build `build/libiptable.so`.
+Just copy the files `src/iptable.{h,c}`, `src/radix.{h.c}` and `src/debug.h`
+to your project.  additional documentation in the doc directory.
+Alternatively, the Makefile has a `c_test` and a `c_lib` target to test and to
+build `build/libiptable.so`.
 
 ## Usage
 
