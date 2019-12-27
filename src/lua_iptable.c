@@ -59,6 +59,7 @@ static int iter_fail_f(lua_State *);
 
 static int _str2idx(const char *, const char *const []);
 static void iptL_pushitrgc(lua_State *, table_t *);
+static void iptT_setbool(lua_State *, const char *, int);
 static void iptT_setfstr(lua_State *, const char *, const char *, const void *);
 static void iptT_setint(lua_State *, const char *, int);
 static void iptT_setkv(lua_State *, struct radix_node *);
@@ -68,7 +69,7 @@ static int iptL_pushrh(lua_State *, struct radix_head *);
 static int iptL_pushrmh(lua_State *, struct radix_mask_head *);
 static int iptL_pushrm(lua_State *, struct radix_mask *);
 
-// module level iterators
+// iptable module iterators
 
 static int iter_hosts(lua_State *);
 static int iter_hosts_f(lua_State *);
@@ -77,7 +78,28 @@ static int iter_interval_f(lua_State *);
 static int iter_subnets(lua_State *);
 static int iter_subnets_f(lua_State *);
 
-// instance level iterators
+// iptable module functions
+
+static int ipt_address(lua_State *);
+static int ipt_broadcast(lua_State *);
+static int ipt_dnsptr(lua_State *);
+static int ipt_invert(lua_State *);
+static int ipt_properties(lua_State *);
+static int ipt_longhand(lua_State *);
+static int ipt_mask(lua_State *);
+static int ipt_masklen(lua_State *);
+static int ipt_neighbor(lua_State *L);
+static int ipt_network(lua_State *);
+static int ipt_new(lua_State *);
+static int ipt_offset(lua_State *);
+static int ipt_reverse(lua_State *);
+static int ipt_size(lua_State *);
+static int ipt_split(lua_State *);
+static int ipt_tobin(lua_State *);
+static int ipt_toredo(lua_State *);
+static int ipt_tostr(lua_State *);
+
+// iptable instance iterators
 
 static int iter_kv(lua_State *);
 static int iter_kv_f(lua_State *);
@@ -91,25 +113,6 @@ static int iter_more(lua_State *);
 static int iter_more_f(lua_State *);
 static int iter_radix(lua_State *);
 static int iter_radixes(lua_State *);
-
-// iptable module functions
-
-static int ipt_address(lua_State *);
-static int ipt_broadcast(lua_State *);
-static int ipt_dnsptr(lua_State *);
-static int ipt_invert(lua_State *);
-static int ipt_longhand(lua_State *);
-static int ipt_mask(lua_State *);
-static int ipt_masklen(lua_State *);
-static int ipt_neighbor(lua_State *L);
-static int ipt_network(lua_State *);
-static int ipt_new(lua_State *);
-static int ipt_offset(lua_State *);
-static int ipt_reverse(lua_State *);
-static int ipt_size(lua_State *);
-static int ipt_split(lua_State *);
-static int ipt_tobin(lua_State *);
-static int ipt_tostr(lua_State *);
 
 // iptable instance methods
 
@@ -129,6 +132,7 @@ static const struct luaL_Reg funcs [] = {
     {"hosts", iter_hosts},
     {"interval", iter_interval},
     {"invert", ipt_invert},
+    {"properties", ipt_properties},
     {"longhand", ipt_longhand},
     {"mask", ipt_mask},
     {"masklen", ipt_masklen},
@@ -141,6 +145,7 @@ static const struct luaL_Reg funcs [] = {
     {"split", ipt_split},
     {"subnets", iter_subnets},
     {"tobin", ipt_tobin},
+    {"toredo", ipt_toredo},
     {"tostr", ipt_tostr},
     {NULL, NULL}
 };
@@ -163,6 +168,26 @@ static const struct luaL_Reg meths [] = {
     {NULL, NULL}
 };
 
+/*
+ Special addresses used to check for properties, plus required masks
+ See
+ - https://tools.ietf.org/html/rfc6890 - special purpose ip addresses
+ - https://tools.ietf.org/html/rfc8190 - update to the above
+ - https://www.iana.org/assignments/iana-ipv4-special-registry
+ - https://www.iana.org/assignments/iana-ipv6-special-registry
+
+ 6to4 -> ip4 = a.b.c.d => ip6to4 = 2002:ab:cd::/48
+ teredo
+ */
+
+uint8_t IP4_MC_UNSPEC[]   = { 5, 224,   0, 0, 0}; /* rfc1112 */
+uint8_t IP4_MC_HOSTS[]    = { 5, 224,   0, 0, 1};
+uint8_t IP4_MC_ROUTERS[]  = { 5, 224,   0, 0, 2};
+uint8_t IP4_MC_MAXLOCAL[] = { 5, 224,   0, 0, 255};
+
+/* uint8_t IP4_MASK8[]       = { 5, 255,   0, 0, 0}; */
+/* uint8_t IP4_MASK12[]      = { 5, 255, 240, 0, 0}; */
+/* uint8_t IP4_MASK16[]      = { 5, 255, 255, 0, 0}; */
 
 /*
  * ## Helper functions
@@ -228,13 +253,18 @@ luaopen_iptable (lua_State *L)
     luaL_newlibtable(L, funcs);
     luaL_setfuncs(L, funcs, 0);             // [{F}]
 
-    // lib AF constants
-    lua_pushinteger(L, AF_INET);            // [{F,C}]
+    // lib AF constants                     // [{F,C}]
+    lua_pushstring(L, LUA_IPTABLE_VERSION);
+    lua_setfield(L, -2, "VERSION");
+    lua_pushinteger(L, AF_INET);
     lua_setfield(L, -2, "AF_INET");
     lua_pushinteger(L, AF_INET6);
     lua_setfield(L, -2, "AF_INET6");
 
-    // for ipt.error: stash reference to library table in registry
+    /* Store a reference to the iptable library table for this lua_State in the
+     * LUA_REGISTRY so lipt_vferror can retrieve it later to set
+     * `iptable.error` to some error message.
+     */
     lua_pushvalue(L, -1);
     lua_rawsetp(L, LUA_REGISTRYINDEX, (void *)L);
 
@@ -543,6 +573,28 @@ iptL_refpdelete(void *L, void **r)
 }
 
 // k,v-setters for Table on top of L (iter_radix/iter_supernets_f) helpers
+
+/*
+ * ### `iptT_setbool`
+ * ```c
+ * static void iptT_setbool(lua_State *L, const char *k, int v);
+ * ```
+ *
+ * Needs a Lua table on top of the stack and sets key `k` to boolean for `v`.
+ */
+
+static void
+iptT_setbool(lua_State *L, const char *k, int v)
+{
+    if (! lua_istable(L, -1)) {
+        dbg_msg("need stack top to be a %s", "table");
+        dbg_stack("not a table ? ->");
+        return;
+    }
+    lua_pushstring(L, k);
+    lua_pushboolean(L, v);
+    lua_settable(L, -3);
+}
 
 /*
  * ### `iptT_setfstr`
@@ -1708,10 +1760,12 @@ ipt_new(lua_State *L)
     luaL_getmetatable(L, LUA_IPTABLE_ID); // [t M]
     lua_setmetatable(L, 1);               // [t]
 
-    lua_pushlightuserdata(L, (void *)L);
-    lua_gettable(L, LUA_REGISTRYINDEX);
-    dbg_stack("42?");
-    lua_pop(L, 1);
+    /* for debug: */
+    /* lua_pushlightuserdata(L, (void *)L); */
+    /* lua_gettable(L, LUA_REGISTRYINDEX); */
+    /* dbg_stack("42?"); */
+    /* lua_pop(L, 1); */
+    /* end for debug: */
 
     dbg_stack("out(1) ==>");
 
@@ -1790,6 +1844,101 @@ ipt_tostr(lua_State *L)
         return lipt_error(L, LIPTE_TOSTR, 1, "");
 
     lua_pushstring(L, str);
+
+    dbg_stack("out(1) ==>");
+
+    return 1;
+}
+
+/*
+ * ### `iptable.toredo`
+ * ```c
+ * static int ipt_tostr(lua_state *L);
+ * ```
+ * ```lua
+ * -- lua
+ * t, err = iptable.toredo(ipv6)
+ * t, err = iptable.toredo(tserver, tclient, udp, flags)
+ * ```
+ * Either compose an ipv6 address using 4 arguments or decompose an ipv6 string
+ * into a table with fields:
+ * `ipv6`, the toredo ip6 address
+ * `server`, toredo server's ipv4 address
+ * `client`, toredo client's ipv4 address
+ * `flags`, flags
+ * `udp`, udp port
+ *
+ */
+
+static int
+ipt_toredo(lua_State *L)
+{
+    dbg_stack("inc(.) <--");  // [ip6] or [server, client, udp, flags]
+
+    uint8_t ip6[MAX_BINKEY], server[MAX_BINKEY], client[MAX_BINKEY];
+    int flags, udp, af = AF_UNSPEC, mlen = -1, ok = 0;
+    char buf[MAX_STRKEY];
+    const char *pfx = NULL;
+    size_t len = 0;
+
+    if (lua_gettop(L) == 1) {
+        /* decompose ipv6 */
+        if (! iptL_getpfxstr(L, 1, &pfx, &len))
+            return lipt_error(L, LIPTE_ARG, 1, "");
+        if (! key_bystr(ip6, &mlen, &af, pfx))
+            return lipt_error(L, LIPTE_PFX, 1, "");
+        if (af != AF_INET6)
+            return lipt_error(L, LIPTE_AF, 1, "%s not ipv6", "toredo");
+        if (! key_toredo(1, ip6, server, client, &udp, &flags))
+            return lipt_error(L, LIPTE_ARG, 1, "");
+    } else {
+        /* compose an ipv6 */
+        /* get server ipv4 */
+        if (! iptL_getpfxstr(L, 1, &pfx, &len))
+            return lipt_error(L, LIPTE_ARG, 1, "");
+        if (! key_bystr(server, &mlen, &af, pfx))
+            return lipt_error(L, LIPTE_PFX, 1, "%s ?", pfx);
+        if (af != AF_INET)
+            return lipt_error(L, LIPTE_AF, 1, "%s not ipv4", "server");
+
+        /* get client ipv4 */
+        if (! iptL_getpfxstr(L, 2, &pfx, &len))
+            return lipt_error(L, LIPTE_ARG, 1, "");
+        if (! key_bystr(client, &mlen, &af, pfx))
+            return lipt_error(L, LIPTE_PFX, 1, "%s ?", pfx);
+        if (af != AF_INET)
+            return lipt_error(L, LIPTE_AF, 1, "%s not ipv4", "client");
+
+        /* get udp and flags */
+        udp = lua_tointegerx(L, 3, &ok);
+        if (! ok)
+            return lipt_error(L, LIPTE_ARG, 1, "%s udp", "illegal");
+        if (udp < 0 || udp > 65535)
+            return lipt_error(L, LIPTE_ARG, 1, "%s udp", "illegal");
+        flags = lua_tointegerx(L, 4, &ok);
+        if (! ok)
+            return lipt_error(L, LIPTE_ARG, 1, "%s flags", "illegal");
+        if (flags < 0 || flags > 65535)
+            return lipt_error(L, LIPTE_ARG, 1, "%s flags", "illegal");
+
+        /* compose the ipv6 toredo key */
+        if (! key_toredo(0, ip6, server, client, &udp, &flags))
+            return lipt_error(L, LIPTE_ARG, 1, "");
+    }
+
+    lua_settop(L, 0);
+    lua_newtable(L);
+    if (! key_tostr(buf, ip6))
+        return lipt_error(L, LIPTE_TOSTR, 1, "");
+    iptT_setfstr(L, "ipv6", "%s", buf);
+    if (! key_tostr(buf, server))
+        return lipt_error(L, LIPTE_TOSTR, 1, "");
+    iptT_setfstr(L, "server", "%s", buf);
+    if (! key_tostr(buf, client))
+        return lipt_error(L, LIPTE_TOSTR, 1, "");
+    iptT_setfstr(L, "client", "%s", buf);
+    iptT_setint(L, "udp", udp);
+    iptT_setint(L, "flags", flags);
 
     dbg_stack("out(1) ==>");
 
@@ -2171,13 +2320,11 @@ ipt_invert(lua_State *L)
 
     if (! iptL_getpfxstr(L, 1, &pfx, &len))
         return lipt_error(L, LIPTE_ARG, 3, "");
-
     if (! key_bystr(addr, &mlen, &af, pfx))
         return lipt_error(L, LIPTE_PFX, 3, "");
 
     if (! key_invert(addr))
         return lipt_error(L, LIPTE_BINOP, 3, "");
-
     if (! key_tostr(buf, addr))
         return lipt_error(L, LIPTE_TOSTR, 3, "");
 
@@ -2188,6 +2335,167 @@ ipt_invert(lua_State *L)
     dbg_stack("out(3) ==>");
 
     return 3;
+}
+
+/*
+ * ### `iptable.properties`
+ * ```c
+ * static int ipt_properties(lua_State *L);
+ * ```
+ * ```lua
+ * -- lua
+ * props, err = iptable.properties("192.168.1.1/24")
+ * --> { address="192.168.1.1",
+ *       masklength = 24,
+ *       private = true,
+ *       size = 256
+ *       class = C
+ *     }
+ * ```
+ * Returns a table with (some) properties for given prefix.  Returns nil's and
+ * an error message  on errors.
+ */
+
+static int
+ipt_properties(lua_State *L)
+{
+    dbg_stack("inc(.) <--");  // [pfx]
+
+    char buf[MAX_STRKEY];
+    uint8_t addr[MAX_BINKEY], mask[MAX_BINKEY], ip6[MAX_BINKEY], *kp;
+    size_t len = 0;
+    int af = AF_UNSPEC, mlen = -1;
+    const char *pfx = NULL;
+
+    if (! iptL_getpfxstr(L, 1, &pfx, &len))
+        return lipt_error(L, LIPTE_ARG, 1, "");
+    if (! key_bystr(addr, &mlen, &af, pfx))
+        return lipt_error(L, LIPTE_PFX, 1, "");
+    if (AF_UNKNOWN(af))
+        return lipt_error(L, LIPTE_AF, 1, "af %d ?", af);
+
+    /* clear the stack and push a table */
+    lua_settop(L, 0);
+    lua_newtable(L);
+    kp = IPT_KEYPTR(addr);
+
+    /* address, mlen & af */
+    if (! key_tostr(buf, addr))
+        return lipt_error(L, LIPTE_TOSTR, 1, "pfx %s ?", pfx);
+    iptT_setfstr(L, "address", "%s", buf);
+    iptT_setint(L, "pfxlen", mlen);
+    iptT_setint(L, "af", af);
+
+    /* mask and inverted mask */
+    if (! key_bylen(mask, mlen, af))
+        return lipt_error(L, LIPTE_MLEN, 1, "");
+    if (! key_tostr(buf, mask))
+        return lipt_error(L, LIPTE_TOSTR, 1, "");
+    iptT_setfstr(L, "mask", "%s", buf);
+    if (! key_invert(mask))
+        return lipt_error(L, LIPTE_BINOP, 1, "");
+    if (! key_tostr(buf, mask))
+        return lipt_error(L, LIPTE_TOSTR, 1, "");
+    iptT_setfstr(L, "imask", "%s", buf);
+
+
+    if (af == AF_INET ) {
+        /* class & multicast */
+        if((kp[0] & 0x80) == 0x00)                     /* A 0... */
+            iptT_setfstr(L, "class", "%s", "A");
+        else if((kp[0] & 0xc0) == 0x80)                /* B 10.. */
+            iptT_setfstr(L, "class", "%s", "B");
+        else if((kp[0] & 0xe0) == 0xc0)                /* C 110. */
+            iptT_setfstr(L, "class", "%s", "C");
+        else if((kp[0] & 0xf0) == 0xe0) {              /* D 111. */
+            iptT_setfstr(L, "class", "%s", "D");
+            iptT_setbool(L, "multicast", 1); 
+            /* make bool flag more specific if we can */
+            if (key_cmp(addr, IP4_MC_UNSPEC) == 0)
+                iptT_setfstr(L, "multicast", "%s", "unspecified");
+            else if (key_cmp(addr, IP4_MC_HOSTS) == 0)
+                iptT_setfstr(L, "multicast", "%s", "allhosts");
+            else if (key_cmp(addr, IP4_MC_ROUTERS) == 0)
+                iptT_setfstr(L, "multicast", "%s", "allrouters");
+            else if (key_cmp(addr, IP4_MC_MAXLOCAL) == 0)
+                iptT_setfstr(L, "multicast", "%s", "max-local");
+        } else {
+            iptT_setfstr(L, "class", "%s", "E");       /* E 1111 */
+        }
+
+        /* v4 compat, last since we'll muck about with addr */
+        if (! key6_by4(ip6, addr, 0))
+            return lipt_error(L, LIPTE_BINOP, 1, "");
+        if (! key_tostr(buf, ip6))
+            return lipt_error(L, LIPTE_TOSTR, 1, "");
+        iptT_setfstr(L, "v4mapped", "%s", buf);
+        if (! key6_by4(ip6, addr, 1))
+            return lipt_error(L, LIPTE_BINOP, 1, "");
+        if (! key_tostr(buf, ip6))
+            return lipt_error(L, LIPTE_TOSTR, 1, "");
+        iptT_setfstr(L, "v4compat", "%s", buf);
+        if (! key6_6to4(ip6, addr))
+            return lipt_error(L, LIPTE_BINOP, 1, "");
+        if (! key_tostr(buf, ip6))
+            return lipt_error(L, LIPTE_TOSTR, 1, "");
+        iptT_setfstr(L, "ip6to4", "%s", buf);
+
+
+    } else {
+        /* some additional ipv6 properties; macros from <netinet/in.h> */
+
+        /* in case we need ip6's last bytes as an ipv4 address string */
+        if (! key4_by6(ip6, addr))
+            return lipt_error(L, LIPTE_BINOP, 1, "");
+        if (! key_tostr(buf, ip6))
+            return lipt_error(L, LIPTE_TOSTR, 1, "");
+
+        if(IN6_IS_ADDR_V4MAPPED(kp))
+            iptT_setfstr(L, "v4mapped", "%s", buf);
+        else if(IN6_IS_ADDR_V4COMPAT(kp))
+            iptT_setfstr(L, "v4compat", "%s", buf);
+        else if(IN6_IS_ADDR_UNSPECIFIED(kp))
+            iptT_setbool(L, "unspecified", 1);
+        else if(IN6_IS_ADDR_LOOPBACK(kp))
+            iptT_setbool(L, "loopback", 1);
+        else if(IN6_IS_ADDR_LINKLOCAL(kp))
+            iptT_setbool(L, "linklocal", 1);
+        else if(IN6_IS_ADDR_SITELOCAL(kp))
+            iptT_setbool(L, "sitelocal", 1);
+        else if(IN6_IS_ADDR_MULTICAST(kp)) {
+            if(IN6_IS_ADDR_MC_NODELOCAL(kp))
+                iptT_setfstr(L, "multicast", "%s", "nodelocal");
+            else if(IN6_IS_ADDR_MC_LINKLOCAL(kp))
+                iptT_setfstr(L, "multicast", "%s", "linklocal");
+            else if(IN6_IS_ADDR_MC_SITELOCAL(kp))
+                iptT_setfstr(L, "multicast", "%s", "sitelocal");
+            else if(IN6_IS_ADDR_MC_ORGLOCAL(kp))
+                iptT_setfstr(L, "multicast", "%s", "orglocal");
+            else if(IN6_IS_ADDR_MC_GLOBAL(kp))
+                iptT_setfstr(L, "multicast", "%s", "global");
+            else
+                iptT_setbool(L, "multicast", 1);
+
+        } else {
+        /* try toredo key extract */
+            int flags, udp, get=1;
+            uint8_t ts[MAX_BINKEY], tc[MAX_BINKEY];
+            if (key_toredo(get, addr, ts, tc, &udp, &flags)) {
+                if (! key_tostr(buf, ts))
+                    return lipt_error(L, LIPTE_TOSTR, 1, "");
+                iptT_setfstr(L, "toredo_server", "%s", buf);
+                if (! key_tostr(buf, tc))
+                    return lipt_error(L, LIPTE_TOSTR, 1, "");
+                iptT_setfstr(L, "toredo_client", "%s", buf);
+                iptT_setint(L, "toredo_udp", udp);
+                iptT_setint(L, "toredo_flags", flags);
+            }
+        }
+    }
+
+    dbg_stack("out(1) ==>");
+
+    return 1;
 }
 
 /*

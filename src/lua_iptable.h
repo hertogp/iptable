@@ -21,6 +21,7 @@
  * Identity for the `itr_gc_t`-userdata.
  */
 
+#define LUA_IPTABLE_VERSION "0.0.1rc0"
 #define LUA_IPTABLE_ID "iptable"
 #define LUA_IPT_ITR_GC "itr_gc"
 

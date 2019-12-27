@@ -34,6 +34,7 @@ uint8_t  max_mask[RDX_MAX_KEYLEN] = {
     -1, -1, -1, -1, -1, -1, -1, -1,
 };
 
+
 /*
  * ## Key functions
  *
@@ -666,6 +667,212 @@ key_isin(void *a, void *b, void *m)
     aa++; bb++;
     for (; --matchlen > 0; aa++, bb++, mm++)
         if ((*aa ^ *bb) & *mm) return 0;
+
+    return 1;
+}
+
+/*
+ * ### `key_ynp`
+ * ```c
+ * uint8_t * key_ynp(uint8_t *d, uint8_t *s, int n, int off)
+ *
+ * Yank `n` bytes from source key `s` and paste into destination `d` starting
+ * at offset `off`.  Returns the resulting destination pointer (for subsequent
+ * pasting) or NULL on failure.  Source key `s` should point to the LEN-byte of
+ * the sourcing key.  If reading `n` bytes starting at `off` would read past
+ * the end of the source key `s` LENgth, this function returns NULL.  It is
+ * the caller's responsiblity to ensure `d` points into a buffer where it has
+ * enough room left to receive `n`-bytes.  Note that offset `off` is
+ * zero-based, starting at the LEN byte of `s`.  So to copy an entire key, call
+ * `key_ynp(d, s, 0, (int)(*s));` which would copy the entire key.
+ *
+ */
+
+uint8_t *
+key_ynp(uint8_t *d, uint8_t *s, int off, int n)
+{
+    if (d == NULL || s == NULL) return NULL;
+    if (off < 0 || n < 0) return NULL;
+
+    if (n == 0) return d;
+    if ((n+off) > IPT_KEYLEN(s)) return NULL;
+    s += off;
+    while(n-- > 0)
+        *d++ = *s++;
+    return d;
+}
+
+/*
+ * ### `key6_by4`
+ * ```c
+ *   uint8_t *key6_by4(uint8_t *v6, uint8_t *v4, int compat)
+ * ```
+ * Derive an ipv6-key from an ipv4 key:
+ *
+ * - `::ffff:V4ADDR` if compat is 0, or
+ * - `::V4ADDR`      if compat is true
+ *
+ * Returns 1 on success, 0 on failure (such as when v4 is not an IP4-key).
+ * Both v6 and v4 are assumed to be uint_8 buffers of at least MAX_BINKEY.
+ */
+
+int
+key6_by4(uint8_t *v6, uint8_t *v4, int compatible)
+{
+   static uint8_t compat[] = {17, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0};
+   static uint8_t mapped[] = {17, 0,0,0,0, 0,0,0,0, 0,0,-1,-1, 0,0,0,0};
+   uint8_t *vp, *vs = compatible ? compat : mapped;
+
+   if (v6 == NULL || v4 == NULL) return 0;
+   if (! KEY_IS_IP4(v4)) return 0;
+   vp = key_ynp(v6, vs, 0, 13);
+   if (vp == NULL) return 0;
+   vp = key_ynp(vp, v4, 1, 4);
+   return 1;
+}
+
+/*
+ * ### `key6_6to4`
+ * ```c
+ *   uint_8t *key6_6to4(uint8_t *v6, uint8_t *v4)
+ * ```
+ * Derive an ipv6-key from an ipv4 key:
+ *
+ * - `2002:V4ADDR::`
+ *
+ * Returns 1 on success, 0 on failure (such as when v4 is not an IP4-key).
+ * Both v6 and v4 are assumed to be uint_8 buffers of at least MAX_BINKEY.
+ */
+
+int
+key6_6to4(uint8_t *v6, uint8_t *v4)
+{
+    static uint8_t v6to4[] = {IP6_KEYLEN, 32,2,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0};
+    uint8_t *vp = v6;
+
+    if (v6 == NULL || v4 == NULL) return 0;
+    if (! KEY_IS_IP4(v4)) return 0;
+    vp = key_ynp(vp, v6to4, 0, IP6_KEYLEN);
+    if (vp == NULL) return 0;
+    vp = v6 + 3;
+    if ( key_ynp(vp, v4, 1, IP4_KEYLEN-1) == NULL)
+        return 0;
+    return 1;
+}
+
+/*
+ * ### `key4_by6`
+ * ```c
+ *   uint_8t *key4_by6(uint8_t *v4, uint8_t *v6)
+ * ```
+ * Derive an ipv4-key from the last 4 bytes of an ipv6 key:
+ * Returns 1 on success, 0 on failure (such as when v6 is not an IP6-key).
+ * Both v6 and v4 are assumed to be uint_8 buffers of at least MAX_BINKEY.
+ * Note: this does NOT check if the ipv6 key is `v4mapped` or `v4compat`, it
+ * just copies the last 4 bytes into the v4 buffer.
+ */
+
+int
+key4_by6(uint8_t *v4, uint8_t *v6)
+{
+    uint8_t *vp = IPT_KEYPTR(v4);
+    int off = IP6_KEYLEN - 4;
+
+    if (v4 == NULL || v6 == NULL) return 0;
+    if (! KEY_IS_IP6(v6)) return 0;
+
+    if (key_ynp(vp, v6, off, 4) == NULL)
+        return 0;
+    *v4 = IP4_KEYLEN;
+    return 1;
+}
+
+/*
+ * ### `key_toredo`
+ * ```c
+ * int key_toredo(int get, uint8_t *v6, uint8_t *ts, uint8_t *tc, int *udp,
+ *                int *flags);
+ * ```
+ *
+ * Toredo prefix is 2001:0000:/32, where the bits & byte lengths are:
+ *  - 32b:  0 - 31 = 2001:0000 the toredo prefix
+ *  - 32b: 32 - 63 = V4ADDR of toredo server
+ *  - 16b: 64 - 79 = flags CRAAAAUG AAAAAAAA (*)
+ *  - 16b: 80 - 95 = udp port (inverted)
+ *  - 32b: 96 -127 = V4ADDR of toredo clien (inverted)
+ *  flags:
+ *  C = 0 since rfc5991 (used to a client behind cone NAT)
+ *  R = 0 (unassigned)
+ *  U/G = 0/0 to emulate "Universal/local" / "Group/Individual" bits in MAC's?
+ *  A = 0 or random since rfc5991.
+ *
+ *  If get is true, gets the details from the v6 key, otherwise it creates a
+ *  new v6 key based on the toredo details provided.  Returns 1 on success, 0
+ *  on failure.
+ *
+ */
+int
+key_toredo(int get, uint8_t *v6, uint8_t *ts, uint8_t *tc, int *udp,
+        int *flags)
+{
+    static uint8_t toredo[] = {IP6_KEYLEN,32,1,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0};
+
+    uint8_t ip4[MAX_BINKEY];
+    uint8_t *vp;
+    int tsoff=5, tcoff=IP6_KEYLEN-4, flagsoff=9; /* 0-bsaed offsets */
+
+
+    if (v6 == NULL || ts == NULL || tc == NULL || udp == NULL || flags == NULL)
+        return 0;
+
+
+    if (get) {
+        /* fill args with toredo details from v6 key */
+        if (! KEY_IS_IP6(v6)) return 0; /* must be valid ipv6 key */
+        for (int i = 0; i < tsoff; i++)
+            if (*(v6+i) != *(toredo+i))
+                return 0; /* not a toredo v6 key */
+        /* yank toredo server ipv4 address */
+        if (key_ynp(ts+1, v6, tsoff, IP4_KEYLEN-1) == NULL) return 0;
+        *ts = IP4_KEYLEN;
+        /* yank toredo client ipv4 address & invert */
+        if (key_ynp(tc+1, v6, tcoff, IP4_KEYLEN-1) == NULL) return 0;
+        *tc = IP4_KEYLEN;
+        if (! key_invert(tc)) return 0;
+        /* get flags */
+        vp = v6 + flagsoff;
+        *flags = *vp++ << 8;
+        *flags = (*flags | *vp++) & 0xffff;
+        /* get udp port & invert */
+        *udp = *vp++ << 8;
+        *udp = *udp | *vp;
+        *udp = ~*udp & 0xffff;
+
+    } else {
+        /* fill v6 with toredo details using args provided */
+        if (! KEY_IS_IP4(ts)) return 0;  /* must be valid IP4 keys */
+        if (! KEY_IS_IP4(tc)) return 0;
+
+        vp = key_ynp(v6, toredo, 0, IP6_KEYLEN);
+        if (vp == NULL) return 0;
+        /* paste in toredo server ip4 address bytes */
+        vp = v6 + 5;
+        if (key_ynp(vp, ts, 1, IP4_KEYLEN-1) == NULL) return 0;
+
+        /* paste in toredo client ip4 address bytes, inverted */
+        if (key_ynp(ip4, tc, 0, IP4_KEYLEN) == NULL) return 0;
+        if (! key_invert(ip4)) return 0;
+        vp = v6 + IP6_KEYLEN - 4;
+        if (key_ynp(vp, ip4, 1, 4) == NULL) return 0;
+
+        /* set flag bytes */
+        vp = v6 + 9;
+        *vp++ = (*flags >> 8) & 0xff;
+        *vp++ = *flags &0xff;
+        /* set obfuscated udp port */
+        *vp++ = ~((*udp >> 8) & 0xff);
+        *vp++ = ~(*udp & 0xff);
+    }
 
     return 1;
 }

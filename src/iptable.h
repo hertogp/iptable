@@ -26,6 +26,7 @@
  * : pointer to the location of the key in the byte array `k`
  */
 
+// TODO: typecast k to *(uint8_1 *)k and ((uint8_1 *)k)+1
 #define IPT_KEYOFFSET 8             // 8 bit offset to 1st byte of key
 #define IPT_KEYLEN(k) (*k)          // 1st byte is 5 or 17 (includes itself)
 #define IPT_KEYPTR(k) (k+1)         // 2nd byte starts actual key
@@ -337,6 +338,11 @@ uint8_t *key_bypair(uint8_t *, const void *, const void *);
 uint8_t *key_bystr(uint8_t *, int *, int *, const char *);
 uint8_t *key_decr(uint8_t *, size_t);
 uint8_t *key_incr(uint8_t *, size_t);
+uint8_t *key_ynp(uint8_t *, uint8_t *, int, int);
+int key6_by4(uint8_t *, uint8_t *, int);
+int key6_6to4(uint8_t *, uint8_t *);
+int key4_by6(uint8_t *, uint8_t *);
+int key_toredo(int, uint8_t *, uint8_t *, uint8_t *, int *, int *);
 
 uint8_t *key_alloc(int);
 uint8_t *key_copy(uint8_t *);

@@ -50,10 +50,10 @@ Additionally for testing and documentation, the following is used:
 
 ### C-only
 
-Just copy the files `iptable.{h,c}` and `radix.{h.c}` to your project.
-See additional documentation in the doc directory. Alternatively, the
-Makefile has a `c_test` and a `c_lib` target to test and to build
-`build/libiptable.so`.
+Just copy the files `src/iptable.{h,c}`, `src/radix.{h.c}` and
+`src/debug.h` to your project. additional documentation in the doc
+directory. Alternatively, the Makefile has a `c_test` and a `c_lib`
+target to test and to build `build/libiptable.so`.
 
 ## Usage
 
@@ -173,8 +173,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET     2
 iptable.AF_INET6    10
+iptable.AF_INET     2
 ```
 
 ## module functions
@@ -593,6 +593,83 @@ a regular table with modified indexing:
     masklength
   - *longest prefix match* if indexed with a bare host address
 
+### `iptable.properties(prefix)`
+
+Create a table with some of the properties for a given prefix. These are
+generally properties that require calculations, not mere lookups
+(multicast being an exception to this rule).
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+t, err = iptable.properties("192.168.1.1/24")
+print("-- 192.168.1.1/24:")
+for k,v in pairs(t) do print("   --", k, v) end
+print()
+
+t, err = iptable.properties("224.0.0.2")
+print("-- 224.0.0.2:")
+for k,v in pairs(t) do print("   --", k, v) end
+print()
+
+t, err = iptable.properties("::ffff:192.168.1.1/120")
+print("-- ::ffff:192.168.1.1/120:")
+for k,v in pairs(t) do print("   --", k, v) end
+print()
+t, err = iptable.properties("2001:0:4036:e378:8000:62fb:3fff:fdd2")
+print("--", "2001:0:4036:e378:8000:62fb:3fff:fdd2")
+for k,v in pairs(t) do print("   --", k, v) end
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+-- 192.168.1.1/24:
+   --	pfxlen	24
+   --	address	192.168.1.1
+   --	v4compat	::192.168.1.1
+   --	af	2
+   --	class	C
+   --	ip6to4	2002:c0a8:101::
+   --	mask	255.255.255.0
+   --	v4mapped	::ffff:192.168.1.1
+   --	imask	0.0.0.255
+
+-- 224.0.0.2:
+   --	multicast	allrouters
+   --	pfxlen	-1
+   --	v4mapped	::ffff:224.0.0.2
+   --	v4compat	::224.0.0.2
+   --	af	2
+   --	class	D
+   --	ip6to4	2002:e000:2::
+   --	mask	255.255.255.255
+   --	imask	0.0.0.0
+   --	address	224.0.0.2
+
+-- ::ffff:192.168.1.1/120:
+   --	pfxlen	120
+   --	imask	::ff
+   --	address	::ffff:192.168.1.1
+   --	mask	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ff00
+   --	v4mapped	192.168.1.1
+   --	af	10
+
+--	2001:0:4036:e378:8000:62fb:3fff:fdd2
+   --	toredo_flags	32768
+   --	pfxlen	-1
+   --	toredo_client	192.0.2.45
+   --	toredo_server	64.54.227.120
+   --	af	10
+   --	imask	::
+   --	mask	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+   --	address	2001:0:4036:e378:8000:62fb:3fff:fdd2
+   --	toredo_udp	40196
+-----------------------------------
+```
+
 ### `iptable.reverse(prefix)`
 
 Reverse the address byte of given `prefix` and return reversed address,
@@ -721,6 +798,42 @@ print(string.rep("-", 35))
 --	05:0a:0a:00:00
 --	11:20:01:0d:b8:85:a3:00:00:00:00:8a:2e:03:70:07:00
 --	30
+-----------------------------------
+```
+
+### `iptable.toredo(...)`
+
+Create a table with toredo details from either a single ipv6 address or
+a list of arguments that include the server, client, udp port and flags.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+t, err = iptable.toredo("64.54.227.120", "192.0.2.45", 40196, 2^15)
+for k,v in pairs(t) do print("--   compose", k, v) end
+print()
+
+t, err = iptable.toredo(t.ipv6)
+for k,v in pairs(t) do print("-- decompose", k, v) end
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+--   compose	server	64.54.227.120
+--   compose	client	192.0.2.45
+--   compose	udp	40196
+--   compose	flags	32768
+--   compose	ipv6	2001:0:4036:e378:8000:62fb:3fff:fdd2
+
+-- decompose	server	64.54.227.120
+-- decompose	client	192.0.2.45
+-- decompose	udp	40196
+-- decompose	flags	32768
+-- decompose	ipv6	2001:0:4036:e378:8000:62fb:3fff:fdd2
 -----------------------------------
 ```
 
@@ -974,16 +1087,16 @@ print(string.rep("-", 35))
    --	10.10.10.4/30	7
    --	10.10.10.0/30	6
 -- supernet	10.10.10.0/24
-   --	10.10.10.0/24	3
    --	10.10.10.128/25	5
+   --	10.10.10.0/24	3
    --	10.10.10.0/25	4
 -- supernet	10.10.10.0/29
-   --	10.10.10.0/30	6
    --	10.10.10.4/30	7
+   --	10.10.10.0/30	6
 -- supernet	10.10.10.0/24
+   --	10.10.10.128/25	5
    --	10.10.10.0/24	3
    --	10.10.10.0/25	4
-   --	10.10.10.128/25	5
 -----------------------------------
 ```
 

@@ -515,6 +515,38 @@ regular table with modified indexing:
 - *exact*  indexing is used for assignments or when the index has a masklength
 - *longest prefix match* if indexed with a bare host address
 
+### `iptable.properties(prefix)`
+
+Create a table with some of the properties for a given prefix.  These are
+generally properties that require calculations, not mere lookups (multicast
+being an exception to this rule).
+
+```{.shebang .lua}
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+t, err = iptable.properties("192.168.1.1/24")
+print("-- 192.168.1.1/24:")
+for k,v in pairs(t) do print("   --", k, v) end
+print()
+
+t, err = iptable.properties("224.0.0.2")
+print("-- 224.0.0.2:")
+for k,v in pairs(t) do print("   --", k, v) end
+print()
+
+t, err = iptable.properties("::ffff:192.168.1.1/120")
+print("-- ::ffff:192.168.1.1/120:")
+for k,v in pairs(t) do print("   --", k, v) end
+print()
+t, err = iptable.properties("2001:0:4036:e378:8000:62fb:3fff:fdd2")
+print("--", "2001:0:4036:e378:8000:62fb:3fff:fdd2")
+for k,v in pairs(t) do print("   --", k, v) end
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
 
 ### `iptable.reverse(prefix)`
 
@@ -617,6 +649,27 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
+### `iptable.toredo(...)`
+
+Create a table with toredo details from either a single ipv6 address or a
+list of arguments that include the server, client, udp port and flags.
+
+```{.shebang .lua}
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+t, err = iptable.toredo("64.54.227.120", "192.0.2.45", 40196, 2^15)
+for k,v in pairs(t) do print("--   compose", k, v) end
+print()
+
+t, err = iptable.toredo(t.ipv6)
+for k,v in pairs(t) do print("-- decompose", k, v) end
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+
+```
 
 ### `iptable.tostr(binary_key)`
 

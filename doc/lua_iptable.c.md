@@ -51,6 +51,11 @@ which will remove radix nodes in `t` that are (still) flagged for deletion
 only when it is safe to do so (i.e. `t->itr_lock` has reached zero).
 
 
+
+uint8_t IP4_MASK8[]       = { 5, 255,   0, 0, 0}; */
+uint8_t IP4_MASK12[]      = { 5, 255, 240, 0, 0}; */
+uint8_t IP4_MASK16[]      = { 5, 255, 255, 0, 0}; */
+
 ## Helper functions
 
 ### `_stridx`
@@ -205,6 +210,14 @@ static void iptL_refpdelete(void *L, void **r);
 Delete a value from `LUA_REGISTRYINDEX` indexed by **r (which is treated as
 an **int).  Function signature is as per `purge_f_t` (see iptable.h) and
 acts as the table's purge function to release user data.
+
+
+### `iptT_setbool`
+```c
+static void iptT_setbool(lua_State *L, const char *k, int v);
+```
+
+Needs a Lua table on top of the stack and sets key `k` to boolean for `v`.
 
 
 ### `iptT_setfstr`
@@ -617,6 +630,25 @@ Returns a string representation for given binary key or nil & an error msg.
 
 
 
+### `iptable.toredo`
+```c
+static int ipt_tostr(lua_state *L);
+```
+```lua
+-- lua
+t, err = iptable.toredo(ipv6)
+t, err = iptable.toredo(tserver, tclient, udp, flags)
+```
+Either compose an ipv6 address using 4 arguments or decompose an ipv6 string
+into a table with fields:
+`ipv6`, the toredo ip6 address
+`server`, toredo server's ipv4 address
+`client`, toredo client's ipv4 address
+`flags`, flags
+`udp`, udp port
+
+
+
 ### `iptable.masklen`
 ```c
 static int ipt_masklen(lua_State *L);
@@ -740,6 +772,24 @@ inv, mlen, af, err = iptable.invert("255.255.255.0")
 Return inverted address, masklen and af_family.  Returns nil's and an error
 message  on errors.  Note: the mask is NOT applied before invering the
 address.
+
+
+### `iptable.properties`
+```c
+static int ipt_properties(lua_State *L);
+```
+```lua
+-- lua
+props, err = iptable.properties("192.168.1.1/24")
+--> { address="192.168.1.1",
+      masklength = 24,
+      private = true,
+      size = 256
+      class = C
+    }
+```
+Returns a table with (some) properties for given prefix.  Returns nil's and
+an error message  on errors.
 
 
 ### `iptable.offset`
