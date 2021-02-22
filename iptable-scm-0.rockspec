@@ -24,7 +24,7 @@ description = {
 }
 
 dependencies={
-  "lua>=5.3"
+  "lua=5.3"
 }
 
 supported_platforms={
@@ -39,7 +39,7 @@ source = {
 build = {
   type = "builtin",
   dependencies = {
-    "lua >= 5.3",
+    "lua=5.3",
   },
 
   copy_directories = {

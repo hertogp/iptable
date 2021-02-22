@@ -54,7 +54,7 @@ cd iptable
 make test
 sudo -H make install
 # or
-make local_install    # simply copies to ~/.luarocks/lib/lua/5.3
+make local_install    # simply copies to ~/.luarocks/lib/lua/5.4
 ```
 
 ### luarocks

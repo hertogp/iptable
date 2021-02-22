@@ -14,18 +14,18 @@
 #include "test_c_key_alloc.h"
 
 // helpers
-char *mk_strptr(const char *);
-char *mk_strptr(const char *s)
-{
-    char *sp = NULL;
-    if (s==NULL) return NULL;
+/* char *mk_strptr(const char *); */
+/* char *mk_strptr(const char *s) */
+/* { */
+/*     char *sp = NULL; */
+/*     if (s==NULL) return NULL; */
 
-    int max = strlen(s);
-    sp = malloc(1 + max * sizeof(char));
-    strncpy(sp, s, max);
-    sp[max] = '\0';
-    return sp;  // caller must free(sp)
-}
+/*     int max = strlen(s); */
+/*     sp = malloc(1 + max * sizeof(char)); */
+/*     strncpy(sp, s, max); */
+/*     sp[max] = '\0'; */
+/*     return sp;  // caller must free(sp) */
+/* } */
 
 void
 test_key_alloc_good(void)

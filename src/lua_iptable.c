@@ -1083,7 +1083,7 @@ iptL_pushitrgc(lua_State *L, table_t *t)
 {
   dbg_stack("inc(.) <--");
 
-  itr_gc_t *g = (itr_gc_t *)lua_newuserdata(L, sizeof(itr_gc_t *));
+  itr_gc_t *g = (itr_gc_t *)lua_newuserdatauv(L, sizeof(itr_gc_t *), 1);
 
   if (g == NULL) {
     lua_pushliteral(L, "error creating iterator _gc guard");
@@ -1752,7 +1752,7 @@ ipt_new(lua_State *L)
 {
     dbg_stack("inc(.) <--");
 
-    table_t **t = lua_newuserdata(L, sizeof(void **));
+    table_t **t = lua_newuserdatauv(L, sizeof(void **), 1);
     *t = tbl_create(iptL_refpdelete);      // usr_delete func to free values
 
     if (*t == NULL) luaL_error(L, "error creating table");

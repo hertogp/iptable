@@ -35,7 +35,7 @@ test_key_bystr_good(void)
     int mlen = -2, af=0;
 
     // ipv4 with mask
-    str = mk_strptr("10.10.10.0/24");
+    str = mk_strptr("10.10.10.0/24\0");
     key_bystr(addr, &mlen, &af, str);
     mu_true(mlen == 24);
     mu_true(addr != NULL);

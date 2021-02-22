@@ -28,8 +28,8 @@ BSDDIR=bsd
 # - install dirs
 INST_PREFIX=/usr/local
 INST_BINDIR=$(INST_PREFIX)/bin
-INST_LIBDIR=$(INST_PREFIX)/lib/lua/5.3
-INST_LUADIR=$(INST_PREFIX)/share/lua/5.3
+INST_LIBDIR=$(INST_PREFIX)/lib/lua/5.4
+INST_LUADIR=$(INST_PREFIX)/share/lua/5.4
 INST_CONFDIR=$(INST_PREFIX)/etc
 
 # versioning
@@ -58,14 +58,15 @@ DOCS=$(DOCSRC:$(SRCDIR)/%.c=$(DOCDIR)/%.md)
 # Flags
 CFLAGS=  -std=gnu99
 CFLAGS+= -O2 -g -fPIC
-CFLAGS+= -Wall -Wextra -Werror -pedantic
+# CFLAGS+= -Wall -Wextra -Werror -pedantic
+CFLAGS+= -Wall -Wextra -pedantic
 
 # add more warnings
 CFLAGS+= -Wno-unknown-warning-option -Wold-style-definition
 CFLAGS+= -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 CFLAGS+= -Wmissing-declarations -Wredundant-decls -Wnested-externs
 CFLAGS+= -Wshadow -Wcast-qual -Wcast-align -Wwrite-strings
-CFLAGS+= -Wsuggest-attribute=noreturn -Wjump-misses-init
+CFLAGS+= -Wsuggest-attribute=noreturn -Wjump-misses-init -Wno-stringop-truncation
 
 LIBFLAG= -shared
 LFLAGS=  -fPIC
@@ -122,7 +123,7 @@ install: $(TARGET)
 	$(INSTALL) $(TARGET) $(INST_LIBDIR)
 
 local_install: $(TARGET)
-	cp $(TARGET) ~/.luarocks/lib/lua/5.3/
+	cp $(TARGET) ~/.luarocks/lib/lua/5.4/
 
 uninstall: $(TARGET)
 	$(RM) $(INST_LIBDIR)/$(TARGET)
