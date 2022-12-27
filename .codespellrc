@@ -1,0 +1,4 @@
+[codespell]
+quiet-level = 7
+disable-colors=true
+skip = build,pd-images,scr,tmp,.git
