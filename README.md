@@ -19,18 +19,18 @@ either an ipv4 or ipv6 address or network in CIDR notation.
 non-existent at this point. The following is currently used to build
 iptable:
 
-    - Lua 5.3.5  Copyright (C) 1994-2018 Lua.org, PUC-Rio
-    - Ubuntu 18.04 bionic 
-    - gcc (Ubuntu 7.4.0-1ubuntu1~18.04.1) 7.4.0
-    - GNU Make 4.1
+    - Lua 5.4.6  Copyright (C) 1994-2023 Lua.org, PUC-Rio
+    - Ubuntu 24.04 noble 
+    - gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0
+    - GNU Make 4.3
 
 `lua_iptable.c` uses Lua 5.3’s C-API, so Lua \>= 5.3 is required.
 Additionally for testing and documentation, the following is used:
 
-    - valgrind-3.13.0
-    - busted 2.0.rc13-0
-    - pandoc 2.7.3
-    - pandoc-imagine 0.1.6
+    - valgrind-3.22.0
+    - busted 2.2.0
+    - pandoc 3.1.3
+    - pandoc-imagine 0.1.7
 
 ## Installation
 
@@ -42,11 +42,11 @@ Additionally for testing and documentation, the following is used:
     make test
     sudo -H make install
     # or
-    make local_install    # simply copies to ~/.luarocks/lib/lua/5.3
+    make local_install    # simply copies to ~/.luarocks/lib/lua/5.4
 
 ### luarocks
 
-  - todo.
+- todo.
 
 ### C-only
 
@@ -59,23 +59,21 @@ target to test and to build `build/libiptable.so`.
 
 An iptable.new() yields a Lua table with modified indexing behaviour:
 
-  - the table utilizes 2 separate radix trees for ipv4 and ipv6
-    respectively
-  - the table handles both ipv4 or ipv6 keys transparently
-  - if a key is not an ipv4 or ipv6 subnet/address *string* it is
-    *ignored*
-  - ipv4 and ipv6 subnets are always in CIDR notation: address/len
-  - storing data always uses a subnet-key (address/mlen)
-  - when storing data, missing masks default to the AF’s maximum mask
-  - when storing data, masks are always applied first to the key
-  - storing data is always based on an exact match which includes the
-    mask
-  - retrieving data with a subnet-key, uses an exact match
-  - retrieving data with an address-key, uses a longest prefix match
-  - the `iptable.size(pfx)` function uses Lua arithmatic, hence the
-    float
-  - `mlen == -1` signals the absence of a max
-  - it is safe to delete entries while iterating across the table
+- the table utilizes 2 separate radix trees for ipv4 and ipv6
+  respectively
+- the table handles both ipv4 or ipv6 keys transparently
+- if a key is not an ipv4 or ipv6 subnet/address *string* it is
+  *ignored*
+- ipv4 and ipv6 subnets are always in CIDR notation: address/len
+- storing data always uses a subnet-key (address/mlen)
+- when storing data, missing masks default to the AF’s maximum mask
+- when storing data, masks are always applied first to the key
+- storing data is always based on an exact match which includes the mask
+- retrieving data with a subnet-key, uses an exact match
+- retrieving data with an address-key, uses a longest prefix match
+- the `iptable.size(pfx)` function uses Lua arithmatic, hence the float
+- `mlen == -1` signals the absence of a max
+- it is safe to delete entries while iterating across the table
 
 Example usage:
 
@@ -156,14 +154,13 @@ for rdx in ipt:radixes(af [,true]) ... end       -- iterate the radix nodes
 
 Notes:
 
-  - `more/less` exclude `prefix` from search results, unless 2nd arg is
-    true
-  - `radixes` excludes mask nodes from iteration, unless 2nd arg is true
-  - `incr/decr`’s offset parameter is optional and defaults to 1
-  - functions return all nils on errors plus an error message
-  - if iterators won’t iterate, check `iptable.error` for an error
-    message
-  - iptable never clears the iptable.error itself
+- `more/less` exclude `prefix` from search results, unless 2nd arg is
+  true
+- `radixes` excludes mask nodes from iteration, unless 2nd arg is true
+- `incr/decr`’s offset parameter is optional and defaults to 1
+- functions return all nils on errors plus an error message
+- if iterators won’t iterate, check `iptable.error` for an error message
+- iptable never clears the iptable.error itself
 
 # Documentation
 
@@ -173,8 +170,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET6    10
 iptable.AF_INET     2
+iptable.AF_INET6    10
 ```
 
 ## module functions
@@ -267,7 +264,7 @@ Decrement the ip address of the prefix (no mask is applied) and return
 the new ip address, mask length and address family. `offset` is optional
 and defaults to 1. Decrementing beyond valid address space yields `nil`.
 
-``` shebang lua
+``` shebang
 #!/usr/bin/env lua
 iptable = require"iptable"
 pfx4 = "10.10.10.0/19"
@@ -352,29 +349,6 @@ print(string.rep("-", 35))
 --	10.10.10.2
 --	10.10.10.3
 -----------------------------------
-```
-
-### `iptable.incr(prefix [,offset])`
-
-Increment the ip address of the prefix (no mask is applied) and return
-the new ip address, mask length and address family. `offset` is optional
-and defaults to 1. Incrementing beyond valid address space yields `nil`.
-
-``` shebang lua
-#!/usr/bin/env lua
-iptable = require"iptable"
-pfx4 = "10.10.10.0/19"
-pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
-
-print("--", iptable.incr(pfx4))
-print("--", iptable.incr(pfx4, 10))
-print("--", iptable.incr("255.255.255.255"))
-print("--", iptable.incr(pfx6, 5))
-print("--", iptable.incr("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"))
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
 ```
 
 ### `iptable.interval(start, stop)`
@@ -589,9 +563,41 @@ print(string.rep("-", 35))
 Constructor method that returns a new ipv4,ipv6 lookup table. Use it as
 a regular table with modified indexing:
 
-  - *exact* indexing is used for assignments or when the index has a
-    masklength
-  - *longest prefix match* if indexed with a bare host address
+- *exact* indexing is used for assignments or when the index has a
+  masklength
+- *longest prefix match* if indexed with a bare host address
+
+### `iptable.offset(prefix [,offset])`
+
+Returns a new ip `address`, `masklen` and `af_family` by adding an
+offset to the address part of given `prefix`. The optional `offset`
+defaults to `1`. Returns three `nil`’s and an `error msg` on errors,
+such as trying to offset beyond the address family’s valid address space
+(i.e. it won’t wrap around).
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+print("--", iptable.offset("10.10.10.0/16", 10))
+print("--", iptable.offset("10.10.10.0/16", -10))
+print("--", iptable.offset("10.10.255.255/16"))   -- default offset 1
+print("--", iptable.offset("255.255.255.255", 1)) -- yields error
+print("--", iptable.offset("acdc::1976", -1))
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+--	10.10.10.10	16	2
+--	10.10.9.246	16	2
+--	10.11.0.0	16	2
+--	nil	nil	nil	binary operation failed
+--	acdc::1975	-1	10
+-----------------------------------
+```
 
 ### `iptable.properties(prefix)`
 
@@ -627,46 +633,46 @@ print(string.rep("-", 35))
 
 ``` lua
 -- 192.168.1.1/24:
-   --	pfxlen	24
-   --	address	192.168.1.1
-   --	v4compat	::192.168.1.1
-   --	af	2
    --	class	C
    --	ip6to4	2002:c0a8:101::
    --	mask	255.255.255.0
-   --	v4mapped	::ffff:192.168.1.1
+   --	v4compat	::192.168.1.1
+   --	address	192.168.1.1
    --	imask	0.0.0.255
+   --	v4mapped	::ffff:192.168.1.1
+   --	pfxlen	24
+   --	af	2
 
 -- 224.0.0.2:
-   --	multicast	allrouters
-   --	pfxlen	-1
-   --	v4mapped	::ffff:224.0.0.2
-   --	v4compat	::224.0.0.2
-   --	af	2
    --	class	D
    --	ip6to4	2002:e000:2::
    --	mask	255.255.255.255
-   --	imask	0.0.0.0
+   --	v4compat	::224.0.0.2
+   --	multicast	allrouters
    --	address	224.0.0.2
+   --	imask	0.0.0.0
+   --	v4mapped	::ffff:224.0.0.2
+   --	pfxlen	-1
+   --	af	2
 
 -- ::ffff:192.168.1.1/120:
-   --	pfxlen	120
-   --	imask	::ff
    --	address	::ffff:192.168.1.1
-   --	mask	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ff00
+   --	imask	::ff
    --	v4mapped	192.168.1.1
+   --	mask	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ff00
+   --	pfxlen	120
    --	af	10
 
 --	2001:0:4036:e378:8000:62fb:3fff:fdd2
-   --	toredo_flags	32768
-   --	pfxlen	-1
-   --	toredo_client	192.0.2.45
-   --	toredo_server	64.54.227.120
-   --	af	10
-   --	imask	::
    --	mask	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+   --	toredo_flags	32768
    --	address	2001:0:4036:e378:8000:62fb:3fff:fdd2
+   --	toredo_server	64.54.227.120
+   --	imask	::
+   --	toredo_client	192.0.2.45
    --	toredo_udp	40196
+   --	pfxlen	-1
+   --	af	10
 -----------------------------------
 ```
 
@@ -758,6 +764,48 @@ print(string.rep("-", 35))
 -----------------------------------
 ```
 
+### `iptable.subnets(prefix [, mlen])`
+
+Iterate across the subnets in a given prefix. The optional new mask
+length defaults to being 1 longer than the mask in given prefix. Returns
+each subnet as a prefix. In case of errors, iptable.error provides some
+information.
+
+``` lua
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+prefix = "10.10.10.0/28"
+print("-- /30 subnets in " .. prefix)
+for pfx in iptable.subnets(prefix, 30) do
+    print("-- +", pfx)
+end
+
+prefix = "acdc:1976::/30"
+print("-- /32 subnets in " .. prefix)
+for pfx in iptable.subnets(prefix, 32) do
+    print("-- +",  pfx)
+end
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+``` lua
+-- /30 subnets in 10.10.10.0/28
+-- +	10.10.10.0/30
+-- +	10.10.10.4/30
+-- +	10.10.10.8/30
+-- +	10.10.10.12/30
+-- /32 subnets in acdc:1976::/30
+-- +	acdc:1974::/32
+-- +	acdc:1975::/32
+-- +	acdc:1976::/32
+-- +	acdc:1977::/32
+-----------------------------------
+```
+
 ### `iptable.tobin(prefix)`
 
 Returns the binary key used internally by the radix tree for a string
@@ -823,17 +871,17 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
---   compose	server	64.54.227.120
 --   compose	client	192.0.2.45
 --   compose	udp	40196
 --   compose	flags	32768
 --   compose	ipv6	2001:0:4036:e378:8000:62fb:3fff:fdd2
+--   compose	server	64.54.227.120
 
--- decompose	server	64.54.227.120
 -- decompose	client	192.0.2.45
 -- decompose	udp	40196
 -- decompose	flags	32768
 -- decompose	ipv6	2001:0:4036:e378:8000:62fb:3fff:fdd2
+-- decompose	server	64.54.227.120
 -----------------------------------
 ```
 
@@ -874,48 +922,6 @@ print(string.rep("-", 35))
 -----------------------------------
 ```
 
-### `iptable.subnets(prefix [, mlen])`
-
-Iterate across the subnets in a given prefix. The optional new mask
-length defaults to being 1 longer than the mask in given prefix. Returns
-each subnet as a prefix. In case of errors, iptable.error provides some
-information.
-
-``` lua
-#!/usr/bin/env lua
-iptable = require"iptable"
-
-prefix = "10.10.10.0/28"
-print("-- /30 subnets in " .. prefix)
-for pfx in iptable.subnets(prefix, 30) do
-    print("-- +", pfx)
-end
-
-prefix = "acdc:1976::/30"
-print("-- /32 subnets in " .. prefix)
-for pfx in iptable.subnets(prefix, 32) do
-    print("-- +",  pfx)
-end
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
-```
-
-``` lua
--- /30 subnets in 10.10.10.0/28
--- +	10.10.10.0/30
--- +	10.10.10.4/30
--- +	10.10.10.8/30
--- +	10.10.10.12/30
--- /32 subnets in acdc:1976::/30
--- +	acdc:1974::/32
--- +	acdc:1975::/32
--- +	acdc:1976::/32
--- +	acdc:1977::/32
------------------------------------
-```
-
 ## table functions
 
 ### Basic operations
@@ -933,8 +939,8 @@ actual subnets with a mask, in CIDR notation.
 ``` lua
 #!/usr/bin/env lua
 acl = require"iptable".new()
-acl["10.10.10.0/24"] = true
-acl["10.10.10.8/30"] = false
+acl["10.10.10.0/24"] = true   -- match the /24
+acl["10.10.10.8/30"] = false  -- except this /30
 
 print("-- 1 exact match for prefix 10.10.10.0/24  -", acl["10.10.10.0/24"])
 print("-- 2 longest prefix match for 10.10.10.9   -", acl["10.10.10.9"])
@@ -1084,18 +1090,18 @@ print(string.rep("-", 35))
 
 ``` lua
 -- supernet	10.10.10.0/29
-   --	10.10.10.4/30	7
    --	10.10.10.0/30	6
+   --	10.10.10.4/30	7
 -- supernet	10.10.10.0/24
-   --	10.10.10.128/25	5
    --	10.10.10.0/24	3
    --	10.10.10.0/25	4
--- supernet	10.10.10.0/29
-   --	10.10.10.4/30	7
-   --	10.10.10.0/30	6
--- supernet	10.10.10.0/24
    --	10.10.10.128/25	5
+-- supernet	10.10.10.0/29
+   --	10.10.10.0/30	6
+   --	10.10.10.4/30	7
+-- supernet	10.10.10.0/24
    --	10.10.10.0/24	3
+   --	10.10.10.128/25	5
    --	10.10.10.0/25	4
 -----------------------------------
 ```
@@ -1181,9 +1187,9 @@ print(string.rep("-", 35))
 Iterate across the radix nodes of the radix tree for the given address
 family `af`. Only really useful to graph the radix trees while debugging
 or for educational purposes. The radix nodes are returned by the
-iterator encoded as Lua tables. More information in the *`Lua stack
-functions`* section in `lua_iptable.c.md` (or its pdf) in the
-doc-folder. For example code, check `ipt2dot.lua` on github in the
+iterator encoded as Lua tables. More information in the
+*`Lua stack functions`* section in `lua_iptable.c.md` (or its pdf) in
+the doc-folder. For example code, check `ipt2dot.lua` on github in the
 `src/lua` folder.
 
 ``` lua
@@ -1230,8 +1236,8 @@ print(string.rep("-", 35))
 github repo has two additional, small lua modules that can be used to
 dump a radix tree to a dot-file for conversion by graphviz:
 
-  - `ipt2dot`, dumps the tree with full radix node details
-  - `ipt2smalldot`, dumps only the key-tree with less node details
+- `ipt2dot`, dumps the tree with full radix node details
+- `ipt2smalldot`, dumps only the key-tree with less node details
 
 An iptable has two radix trees, one for ipv4 and one for ipv6. Each
 radix tree actually consists of both a radix tree for the keys being
@@ -1272,7 +1278,8 @@ print(string.rep("-",35))
 ---------- PRODUCES --------------
 ```
 
-![](pd-images/82776dfa4d24ea0ca269a5b0a01e6a29529dbd91.png)
+<img src="pd-images/82776dfa4d24ea0ca269a5b0a01e6a29529dbd91.png"
+class="lua" />
 
 ## IPv6 tree
 
@@ -1301,7 +1308,8 @@ print(string.rep("-",35))
 ---------- PRODUCES --------------
 ```
 
-![](pd-images/7f945085e02b6f03e50ea81b7ed3e7ca0fd5ee5f.png)
+<img src="pd-images/7f945085e02b6f03e50ea81b7ed3e7ca0fd5ee5f.png"
+class="lua" />
 
 ## Alternate IPv4 tree
 
@@ -1331,7 +1339,8 @@ print(string.rep("-",35))
 ---------- PRODUCES --------------
 ```
 
-![](pd-images/f8415c5ad651041b1e00f986b0108f7724b28f5c.png)
+<img src="pd-images/f8415c5ad651041b1e00f986b0108f7724b28f5c.png"
+class="lua" />
 
 ## Alternate IPv6 tree
 
@@ -1360,7 +1369,8 @@ print(string.rep("-",35))
 ---------- PRODUCES --------------
 ```
 
-![](pd-images/9586aae66918ae6216a185161ca6802f405926f7.png)
+<img src="pd-images/9586aae66918ae6216a185161ca6802f405926f7.png"
+class="lua" />
 
 # Example code
 

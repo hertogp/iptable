@@ -327,29 +327,6 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
-### `iptable.incr(prefix [,offset])`
-
-Increment the ip address of the prefix (no mask is applied) and return the new
-ip address, mask length and address family.  `offset` is optional and defaults
-to 1.  Incrementing beyond valid address space yields `nil`.
-
-```{.shebang .lua}
-#!/usr/bin/env lua
-iptable = require"iptable"
-pfx4 = "10.10.10.0/19"
-pfx6 = "2001:0db8:85a3:0000:0000:8a2e:0370:700/120"
-
-print("--", iptable.incr(pfx4))
-print("--", iptable.incr(pfx4, 10))
-print("--", iptable.incr("255.255.255.255"))
-print("--", iptable.incr(pfx6, 5))
-print("--", iptable.incr("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"))
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
-```
-
 ### `iptable.interval(start, stop)`
 
 Iterate across the subnets that cover, exactly, the ip address space bounded by
@@ -515,6 +492,28 @@ regular table with modified indexing:
 - *exact*  indexing is used for assignments or when the index has a masklength
 - *longest prefix match* if indexed with a bare host address
 
+### `iptable.offset(prefix [,offset])`
+
+Returns a new ip `address`, `masklen` and `af_family` by adding an offset to
+the address part of given `prefix`.  The optional `offset` defaults to `1`.
+Returns three `nil`'s and an `error msg` on errors, such as trying to offset
+beyond the address family's valid address space (i.e. it won't wrap around).
+
+```{.shebang .lua}
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+print("--", iptable.offset("10.10.10.0/16", 10))
+print("--", iptable.offset("10.10.10.0/16", -10))
+print("--", iptable.offset("10.10.255.255/16"))   -- default offset 1
+print("--", iptable.offset("255.255.255.255", 1)) -- yields error
+print("--", iptable.offset("acdc::1976", -1))
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
 ### `iptable.properties(prefix)`
 
 Create a table with some of the properties for a given prefix.  These are
@@ -613,6 +612,34 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
+### `iptable.subnets(prefix [, mlen])`
+
+Iterate across the subnets in a given prefix.  The optional new mask length
+defaults to being 1 longer than the mask in given prefix.  Returns each subnet
+as a prefix.  In case of errors, iptable.error provides some information.
+
+```{.shebang .lua}
+#!/usr/bin/env lua
+iptable = require"iptable"
+
+prefix = "10.10.10.0/28"
+print("-- /30 subnets in " .. prefix)
+for pfx in iptable.subnets(prefix, 30) do
+    print("-- +", pfx)
+end
+
+prefix = "acdc:1976::/30"
+print("-- /32 subnets in " .. prefix)
+for pfx in iptable.subnets(prefix, 32) do
+    print("-- +",  pfx)
+end
+
+print(string.rep("-", 35))
+
+---------- PRODUCES --------------
+```
+
+
 ### `iptable.tobin(prefix)`
 
 Returns the binary key used internally by the radix tree for a string key like
@@ -702,33 +729,6 @@ print(string.rep("-", 35))
 ---------- PRODUCES --------------
 ```
 
-### `iptable.subnets(prefix [, mlen])`
-
-Iterate across the subnets in a given prefix.  The optional new mask length
-defaults to being 1 longer than the mask in given prefix.  Returns each subnet
-as a prefix.  In case of errors, iptable.error provides some information.
-
-```{.shebang .lua}
-#!/usr/bin/env lua
-iptable = require"iptable"
-
-prefix = "10.10.10.0/28"
-print("-- /30 subnets in " .. prefix)
-for pfx in iptable.subnets(prefix, 30) do
-    print("-- +", pfx)
-end
-
-prefix = "acdc:1976::/30"
-print("-- /32 subnets in " .. prefix)
-for pfx in iptable.subnets(prefix, 32) do
-    print("-- +",  pfx)
-end
-
-print(string.rep("-", 35))
-
----------- PRODUCES --------------
-```
-
 ## table functions
 
 ### Basic operations
@@ -745,8 +745,8 @@ keys to be actual subnets with a mask, in CIDR notation.
 ```{.shebang .lua}
 #!/usr/bin/env lua
 acl = require"iptable".new()
-acl["10.10.10.0/24"] = true
-acl["10.10.10.8/30"] = false
+acl["10.10.10.0/24"] = true   -- match the /24
+acl["10.10.10.8/30"] = false  -- except this /30
 
 print("-- 1 exact match for prefix 10.10.10.0/24  -", acl["10.10.10.0/24"])
 print("-- 2 longest prefix match for 10.10.10.9   -", acl["10.10.10.9"])

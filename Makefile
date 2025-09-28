@@ -8,7 +8,11 @@ VOPTS=--leak-check=full --show-leak-kinds=all
 BOPTS=
 MKDIR= mkdir
 INSTALL= cp
-IMAGINE=/home/pdh/dev/imagine/pandoc_imagine.py
+# imagine
+ifndef PYTHONPATH
+	override PYTHONPATH = ${HOME}/.local/share/python
+endif
+IMAGINE=$(PYTHONPATH)/pandoc_imagine.py
 
 # project directories
 SRCDIR=src
@@ -113,7 +117,7 @@ $(BLDDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(CFLAGS) -I$(SRCDIR) -c $< -o $@
 
 # dependency files .d
-# - built first before others, hence the only one made dependent on 
+# - built first before others, hence the only one made dependent on
 #   the existence of $BLDDIR
 $(BLDDIR)/%.d: $(SRCDIR)/%.c | $(BLDDIR)
 	$(CC) -I$(SRCDIR) -MM -MQ$(BLDDIR)/$*.o -MF $@ $<
@@ -197,6 +201,8 @@ echo:
 	@echo "RM          = $(RM)"
 	@echo "BUSTED      = $(BUSTED)"
 	@echo "BOPTS       = $(BOPTS)"
+	@echo "PYTHONPATH  = $(PYTHONPATH)"
+	@echo "IMAGINE     = $(IMAGINE)"
 	@echo
 	@echo "LIB         = $(LIB)"
 	@echo "TARGET      = $(TARGET)"
