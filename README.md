@@ -32,11 +32,13 @@ Additionally for testing and documentation, the following is used:
     - pandoc 3.1.3
     - pandoc-imagine 
 
-If you have trouble getting pandoc_imagine to work, just: \* copy
-[file](https://github.com/hertogp/imagine/blob/master/pandoc_imagine.py)
-to `~/bin` (or any other directory on your `$PATH`). \* make it
-executable (`chmod u+x ~/bin/pandoc_imagine.py`) \* and the run
-`make readme`
+If you have trouble getting pandoc_imagine to work, just:
+
+- copy
+  [file](https://github.com/hertogp/imagine/blob/master/pandoc_imagine.py)
+  to `~/bin` (or any other directory on your `$PATH`).
+- make it executable (`chmod u+x ~/bin/pandoc_imagine.py`)
+- and the run `make readme`
 
 Pandoc expects its filters to be executable and searches `$PATH`.
 
@@ -178,8 +180,8 @@ See also the `doc` directory on
 ## module constants
 
 ``` lua
-iptable.AF_INET6    10
 iptable.AF_INET     2
+iptable.AF_INET6    10
 ```
 
 ## module functions
@@ -641,46 +643,46 @@ print(string.rep("-", 35))
 
 ``` lua
 -- 192.168.1.1/24:
-   --	ip6to4	2002:c0a8:101::
-   --	v4mapped	::ffff:192.168.1.1
-   --	mask	255.255.255.0
-   --	address	192.168.1.1
-   --	pfxlen	24
-   --	af	2
-   --	v4compat	::192.168.1.1
-   --	class	C
    --	imask	0.0.0.255
+   --	class	C
+   --	af	2
+   --	v4mapped	::ffff:192.168.1.1
+   --	pfxlen	24
+   --	v4compat	::192.168.1.1
+   --	address	192.168.1.1
+   --	mask	255.255.255.0
+   --	ip6to4	2002:c0a8:101::
 
 -- 224.0.0.2:
-   --	ip6to4	2002:e000:2::
-   --	v4mapped	::ffff:224.0.0.2
-   --	mask	255.255.255.255
-   --	address	224.0.0.2
-   --	pfxlen	-1
-   --	af	2
-   --	v4compat	::224.0.0.2
    --	imask	0.0.0.0
-   --	multicast	allrouters
    --	class	D
+   --	af	2
+   --	v4mapped	::ffff:224.0.0.2
+   --	pfxlen	-1
+   --	v4compat	::224.0.0.2
+   --	address	224.0.0.2
+   --	mask	255.255.255.255
+   --	ip6to4	2002:e000:2::
+   --	multicast	allrouters
 
 -- ::ffff:192.168.1.1/120:
-   --	pfxlen	120
-   --	af	10
-   --	mask	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ff00
-   --	v4mapped	192.168.1.1
-   --	address	::ffff:192.168.1.1
    --	imask	::ff
+   --	pfxlen	120
+   --	address	::ffff:192.168.1.1
+   --	mask	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ff00
+   --	af	10
+   --	v4mapped	192.168.1.1
 
 --	2001:0:4036:e378:8000:62fb:3fff:fdd2
-   --	mask	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
    --	imask	::
-   --	toredo_client	192.0.2.45
-   --	pfxlen	-1
    --	toredo_udp	40196
+   --	toredo_client	192.0.2.45
    --	af	10
-   --	toredo_flags	32768
+   --	pfxlen	-1
    --	toredo_server	64.54.227.120
    --	address	2001:0:4036:e378:8000:62fb:3fff:fdd2
+   --	mask	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+   --	toredo_flags	32768
 -----------------------------------
 ```
 
@@ -879,17 +881,17 @@ print(string.rep("-", 35))
 ```
 
 ``` lua
---   compose	server	64.54.227.120
---   compose	ipv6	2001:0:4036:e378:8000:62fb:3fff:fdd2
---   compose	flags	32768
 --   compose	udp	40196
+--   compose	server	64.54.227.120
+--   compose	flags	32768
 --   compose	client	192.0.2.45
+--   compose	ipv6	2001:0:4036:e378:8000:62fb:3fff:fdd2
 
--- decompose	server	64.54.227.120
--- decompose	ipv6	2001:0:4036:e378:8000:62fb:3fff:fdd2
--- decompose	flags	32768
 -- decompose	udp	40196
+-- decompose	server	64.54.227.120
+-- decompose	flags	32768
 -- decompose	client	192.0.2.45
+-- decompose	ipv6	2001:0:4036:e378:8000:62fb:3fff:fdd2
 -----------------------------------
 ```
 
@@ -1101,16 +1103,16 @@ print(string.rep("-", 35))
    --	10.10.10.4/30	7
    --	10.10.10.0/30	6
 -- supernet	10.10.10.0/24
+   --	10.10.10.128/25	5
    --	10.10.10.0/25	4
    --	10.10.10.0/24	3
-   --	10.10.10.128/25	5
 -- supernet	10.10.10.0/29
    --	10.10.10.0/30	6
    --	10.10.10.4/30	7
 -- supernet	10.10.10.0/24
+   --	10.10.10.128/25	5
    --	10.10.10.0/25	4
    --	10.10.10.0/24	3
-   --	10.10.10.128/25	5
 -----------------------------------
 ```
 
