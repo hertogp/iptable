@@ -8,11 +8,10 @@ VOPTS=--leak-check=full --show-leak-kinds=all
 BOPTS=
 MKDIR= mkdir
 INSTALL= cp
-# imagine
-ifndef PYTHONPATH
-	override PYTHONPATH = ${HOME}/.local/share/python
-endif
-IMAGINE=$(PYTHONPATH)/pandoc_imagine.py
+# pandoc_imagine.py should be:
+# * executable, and
+# * reside somewhere on $PATH
+IMAGINE=pandoc_imagine.py
 
 # project directories
 SRCDIR=src

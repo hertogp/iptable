@@ -43,6 +43,14 @@ echo -n "- pandoc-imagine "
 echo `python -c 'import pandoc_imagine as x; print(x.__version__)'`
 ```
 
+If you have trouble getting pandoc_imagine to work, just:
+* copy [file](https://github.com/hertogp/imagine/blob/master/pandoc_imagine.py) to
+`~/bin` (or any other directory on your `$PATH`).
+* make it executable (`chmod u+x ~/bin/pandoc_imagine.py`)
+* and the run `make readme`
+
+Pandoc expects its filters to be executable and searches `$PATH`.
+
 ## Installation
 
 ### Make.
